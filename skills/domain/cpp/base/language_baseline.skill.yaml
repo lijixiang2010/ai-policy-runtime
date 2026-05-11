@@ -1,0 +1,157 @@
+# C++ Core Baseline Skill
+#
+# File:
+#   skills/domain/cpp/base/language_baseline.skill.yaml
+#
+# Purpose:
+#   Provide the baseline C++ policy that other C++ skills may depend on.
+
+skill:
+  id: cpp.core.baseline
+  name: C++ Core Baseline
+  version: 1.0.0
+  status: stable
+
+  description: >
+    Baseline activation and style policy for modern C++ coding tasks.
+    This skill keeps the general C++ context explicit and provides defaults
+    that more specific safety, standard, and performance skills can refine.
+
+  level: domain
+  domain: cpp
+  category: base
+  priority: 60
+
+  tags:
+    - cpp
+    - baseline
+    - modern-cpp
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor
+
+  activation:
+    when:
+      language: cpp
+      standard: ">=17"
+
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+
+task_analysis:
+  domain_aliases:
+    - c++
+    - cpp
+    - cxx
+    - modern c++
+    - 现代 c++
+    - 现代cpp
+  domain_semantics:
+    - modern C++ systems programming task
+    - C++ source code or header implementation
+    - native code using the C++ language
+
+  trigger_aliases:
+    write_code:
+      - write
+      - implement
+      - generate
+      - 实现
+      - 写
+      - 生成
+      - 帮我写
+    review_code:
+      - review
+      - inspect
+      - 审查
+      - 检查
+      - 评审
+    refactor_code:
+      - refactor
+      - 重构
+      - 整理代码
+  trigger_semantics:
+    write_code:
+      - create an implementation
+      - generate source code for the requested component
+      - build a working code example
+    review_code:
+      - inspect existing code for issues
+      - evaluate code quality and correctness
+    refactor_code:
+      - restructure existing code while preserving behavior
+      - improve implementation organization
+
+  trigger_capabilities:
+    write_code:
+      - code_generation
+    review_code:
+      - code_review
+    refactor_code:
+      - refactor
+      - code_generation
+
+  context_rules:
+    - field: context.standard
+      value: 17
+      match:
+        - modern c++
+        - 现代 c++
+        - 现代cpp
+      set:
+        standard: 17
+        selected_standard_is_known: false
+      tags:
+        - cpp17
+      confidence: 0.62
+
+    - field: context.data_structure
+      value: queue
+      match:
+        - queue
+        - 队列
+        - ring buffer
+        - 环形缓冲
+      set:
+        data_structure: queue
+      tags:
+        - data_structure
+      semantic_match:
+        - FIFO data structure
+        - producer consumer data channel
+        - message passing buffer
+      confidence: 0.78
+
+  dependencies: []
+  incompatibilities: []
+
+rules:
+  hard:
+    - id: cpp.core.require_modern_cpp_context
+      when: language == "cpp"
+      must: modern_cpp_context
+      target: language.standard
+      reason: Use modern C++ conventions for C++17 and later tasks.
+
+  soft:
+    - id: cpp.core.prefer_standard_library
+      should: standard_library
+      target: dependency.selection
+      reason: Prefer the standard library before custom utilities unless task context requires otherwise.
+
+  preference:
+    - id: cpp.core.preference.clarity_over_cleverness
+      prefer: clarity
+      over: cleverness
+      target: decision.implementation_style
+
+exceptions: []
+
+verification: []
+
+authoring_notes:
+  - Keep this skill small; put standard-version rules under domain/cpp/standard.

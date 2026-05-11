@@ -1,0 +1,79 @@
+skill:
+  id: cpp.safety.ownership
+  name: C++ Ownership Safety
+  version: 1.0.0
+  status: stable
+
+  description: >
+    Ensures C++ resource ownership is explicit and reviewable.
+
+  level: domain
+  domain: cpp
+  category: safety
+  priority: 90
+  owner: core-policy
+
+  tags:
+    - cpp
+    - safety
+    - ownership
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: cpp
+
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+
+  dependencies:
+    - cpp.core.baseline
+    - cpp.safety.lifetime
+
+  incompatibilities: []
+
+rules:
+  hard:
+    - id: ownership_must_be_explicit
+      must: explicit_ownership
+      target: ownership.model
+      reason: Resource ownership must be explicit.
+  soft:
+    - id: prefer_raii
+      should: raii
+      target: resource_management
+      reason: Prefer RAII-managed ownership and deterministic cleanup.
+    - id: avoid_raw_pointers_default
+      should_not: raw_pointers
+      target: pointer.raw
+      reason: Avoid raw pointers by default.
+  preference:
+    - id: prefer_value_or_raii
+      prefer:
+        higher: value_semantics_or_raii
+        lower: manual_lifetime_control
+      target: ownership.strategy
+
+exceptions:
+  - id: raw_pointer_hot_path_exception
+    when: hot_path == true
+    applies_to:
+      - cpp.safety.ownership.avoid_raw_pointers_default
+    allow:
+      - id: allow_raw_pointers_hot_path
+        target: pointer.raw
+        action: ALLOW
+        value: raw_pointers
+        description: Raw pointers are allowed in hot paths when ownership is explicit.
+    require:
+      - justification
+      - explicit_ownership_explanation
+    reason: Hot paths may use raw pointers only when ownership and lifetime are explained.
+
+verification: []

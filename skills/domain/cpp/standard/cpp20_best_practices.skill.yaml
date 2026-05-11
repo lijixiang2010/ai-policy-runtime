@@ -1,0 +1,404 @@
+# C++20 Standard-Aware Best Practices Skill
+#
+# File:
+#   skills/domain/cpp/standard/cpp20_best_practices.skill.yaml
+#
+# Purpose:
+#   Provide C++20-specific best-practice guidance for AI coding agents.
+#   This skill should be activated when the current task context uses C++20 or
+#   a newer standard. It complements C++17 best-practice skills and may provide
+#   more precise recommendations where C++20 introduced better facilities.
+
+skill:
+  id: cpp.standard.cpp20.best_practices
+  name: C++20 Best Practices
+  version: 1.0.0
+  status: stable
+
+  description: >
+    Provides C++20 best-practice rules for contiguous range parameters,
+    template constraints, thread ownership, string prefix/suffix checks, and
+    compile-time evaluation. The rules are mostly SOFT recommendations because
+    valid exceptions exist for ABI compatibility, C API boundaries, legacy
+    interfaces, platform constraints, and performance-sensitive code.
+
+  level: domain
+  domain: cpp
+  category: standard
+  priority: 85
+
+  tags:
+    - cpp
+    - cpp20
+    - best-practices
+    - api-design
+    - modernization
+    - standard-library
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor
+    - api_design
+    - modernization
+
+  activation:
+    when:
+      language: cpp
+      standard: ">=20"
+
+    triggers:
+      - write_code
+      - refactor_code
+      - review_code
+      - design_api
+      - modernize_code
+
+task_analysis:
+  context_rules:
+    - field: context.standard
+      value: 20
+      match:
+        - c++20
+        - cpp20
+        - cxx20
+      set:
+        standard: 20
+        selected_standard_is_known: true
+      tags:
+        - cpp20
+      confidence: 0.95
+
+    - field: context.parameter_kind
+      value: contiguous_range
+      match:
+        - span
+        - std::span
+        - 连续范围
+        - contiguous range
+        - 数组视图
+      set:
+        parameter_kind: contiguous_range
+        ownership_required: false
+      semantic_match:
+        - non-owning view over contiguous elements
+        - pass an array-like range without transferring ownership
+        - API accepts a buffer view
+        - 连续内存范围的非拥有视图
+      confidence: 0.82
+
+  dependencies:
+    - cpp.core.baseline
+    - cpp.safety.ownership
+    - cpp.safety.lifetime
+    - cpp.standard.cpp17.best_practices
+
+  incompatibilities: []
+
+  rule_defaults:
+    strength: soft
+    failure_behavior: warn
+    require_justification_on_violation: true
+
+rules:
+  soft:
+    - id: cpp20.prefer_span_for_contiguous_ranges
+      title: Prefer std::span for contiguous range parameters
+      when: >
+        language == "cpp"
+        and standard >= 20
+        and parameter_kind == "contiguous_range"
+        and ownership_required == false
+      should: >
+        Prefer std::span<T> over raw pointer and size pairs, C arrays, or
+        ad-hoc range structs when passing a non-owning view of contiguous
+        elements.
+      target: contiguous_range_parameter
+      action: prefer
+      prefer: std::span
+      over:
+        - pointer_and_size
+        - raw_array
+        - ad_hoc_range_struct
+      unless: >
+        abi_boundary == true
+        or c_api_boundary == true
+        or fixed_extent_required_by_existing_api == true
+        or platform_standard_library_lacks_span == true
+      require:
+        - If pointer and size are used, justify ABI, C API, or performance constraints.
+        - If std::span is used for output, make mutability explicit with span<T> vs span<const T>.
+      rationale: >
+        std::span is a bounds-aware non-owning view over contiguous sequences.
+        It is the appropriate C++20 replacement for pointer-and-size APIs when
+        ownership is not transferred.
+
+    - id: cpp20.prefer_concepts_for_template_constraints
+      title: Prefer concepts for template constraints
+      when: >
+        language == "cpp"
+        and standard >= 20
+        and template_constraints_required == true
+      should: >
+        Prefer C++20 concepts and requires-clauses over SFINAE,
+        std::enable_if, or undocumented template substitution constraints.
+      target: template_constraints
+      action: prefer
+      prefer: concepts
+      over:
+        - std::enable_if
+        - ad_hoc_sfinae
+        - unconstrained_templates
+      unless: >
+        compatibility_with_cpp17_required == true
+        or public_api_must_support_pre_cpp20 == true
+      require:
+        - If SFINAE is used in C++20 code, justify compatibility requirements.
+      rationale: >
+        Concepts make template requirements explicit, improve diagnostics, and
+        reduce accidental overload participation.
+
+    - id: cpp20.prefer_jthread_for_owned_threads
+      title: Prefer std::jthread for owned threads
+      when: >
+        language == "cpp"
+        and standard >= 20
+        and creates_owned_thread == true
+        and cooperative_cancellation_useful == true
+      should: >
+        Prefer std::jthread over std::thread when the thread lifetime is owned
+        by the current object or scope.
+      target: thread_lifetime
+      action: prefer
+      prefer: std::jthread
+      over:
+        - std::thread
+      unless: >
+        custom_thread_abstraction_required == true
+        or platform_thread_api_required == true
+        or detached_thread_required == true
+      require:
+        - If std::thread is used, ensure join or detach is explicit and exception-safe.
+      rationale: >
+        std::jthread joins automatically and supports cooperative cancellation,
+        reducing thread lifetime errors.
+
+    - id: cpp20.prefer_starts_with_ends_with_for_string_prefix_suffix
+      title: Prefer starts_with and ends_with for string prefix or suffix checks
+      when: >
+        language == "cpp"
+        and standard >= 20
+        and operation == "string_prefix_or_suffix_check"
+      should: >
+        Prefer starts_with and ends_with over manual substring comparison for
+        prefix and suffix checks.
+      target: string_check
+      action: prefer
+      prefer:
+        - starts_with
+        - ends_with
+      over:
+        - manual_substr_compare
+        - manual_find_compare
+      unless: >
+        compatibility_with_cpp17_required == true
+      rationale: >
+        starts_with and ends_with express intent directly and reduce indexing
+        mistakes.
+
+    - id: cpp20.prefer_constexpr_algorithms_when_useful
+      title: Prefer constexpr-capable standard facilities when compile-time evaluation is intended
+      when: >
+        language == "cpp"
+        and standard >= 20
+        and compile_time_evaluation_intended == true
+      should: >
+        Prefer constexpr-capable standard-library algorithms and containers
+        where they make the compile-time intent clearer and remain readable.
+      target: compile_time_evaluation
+      action: prefer
+      prefer: constexpr_standard_facilities
+      over:
+        - manual_template_metaprogramming
+        - macro_metaprogramming
+      unless: >
+        compiler_support_limited == true
+        or compile_time_cost_too_high == true
+        or simpler_runtime_solution_preferred == true
+      rationale: >
+        C++20 expands constexpr support and can reduce the need for complex
+        template or macro techniques when compile-time evaluation is genuinely
+        required.
+
+    - id: cpp20.do_not_use_newer_facility_when_standard_too_old
+      title: Do not recommend unavailable standard facilities
+      when: >
+        language == "cpp"
+        and selected_standard_is_known == true
+      should: >
+        Only recommend facilities available in the selected C++ standard, unless
+        the project explicitly allows polyfills, backports, or third-party
+        equivalents.
+      target: standard_availability
+      action: constrain_recommendation
+      unless: >
+        polyfill_allowed == true
+        or third_party_backport_allowed == true
+      require:
+        - If a newer facility is recommended for an older standard, provide the required fallback or polyfill.
+      rationale: >
+        Version-aware guidance must not suggest APIs that are unavailable under
+        the selected standard without explicitly handling compatibility.
+
+    - id: cpp20.prefer_most_precise_available_facility
+      title: Prefer the most precise facility available in the selected standard
+      when: >
+        language == "cpp"
+        and standard >= 20
+        and multiple_facilities_can_represent_intent == true
+      should: >
+        Prefer the most precise standard-library facility available in C++20,
+        while respecting ABI, compatibility, and performance constraints.
+      target: idiom_selection
+      action: prefer
+      examples:
+        - "Read-only string input: prefer std::string_view."
+        - "Contiguous range input: prefer std::span."
+        - "Template constraints: prefer concepts."
+        - "Owned thread lifetime: prefer std::jthread."
+      unless: >
+        legacy_interface_required == true
+        or abi_boundary == true
+        or c_api_boundary == true
+        or project_style_forbids_facility == true
+      rationale: >
+        The same design intent may be represented by different idioms in
+        different C++ standards. The agent should select the most accurate
+        available idiom for the current standard.
+
+  preference:
+    - id: cpp20.preference.modern_facility_over_legacy_idiom
+      when: language == "cpp" and standard >= 20
+      prefer: modern_standard_facility
+      over: legacy_idiom
+      target: idiom_selection
+      condition: modern facility is available, readable, and compatible with project constraints
+
+    - id: cpp20.preference.explicit_interface_intent
+      when: language == "cpp" and designing_api == true
+      prefer: explicit_interface_intent
+      over: implicit_convention
+      target: api_design
+      examples:
+        - Use std::string_view to express non-owning string input.
+        - Use std::span to express non-owning contiguous range input.
+        - Use concepts to express template requirements.
+        - Use std::jthread to express owned thread lifetime.
+
+exceptions:
+  - id: cpp20.exception.abi_boundary
+    when: abi_boundary == true
+    allow:
+      - legacy_parameter_types
+      - raw_pointer_and_size
+      - const_char_pointer
+    require:
+      - Explicitly state that the API is constrained by ABI compatibility.
+      - Avoid leaking ABI-driven implementation choices into internal interfaces.
+
+  - id: cpp20.exception.c_api_boundary
+    when: c_api_boundary == true
+    allow:
+      - const_char_pointer
+      - raw_pointer
+      - pointer_and_size
+    require:
+      - Keep C-compatible types at the boundary.
+      - Convert to modern C++ view/value types internally when practical.
+
+  - id: cpp20.exception.cpp17_compatibility
+    when: compatibility_with_cpp17_required == true
+    allow:
+      - std::string_view
+      - std::optional
+      - std::variant
+    disallow:
+      - std::span
+      - concepts
+      - std::jthread
+    require:
+      - Do not use C++20-only facilities unless a project-approved polyfill exists.
+
+  - id: cpp20.exception.performance_hot_path
+    when: hot_path == true
+    allow:
+      - lower_level_idiom_with_justification
+    require:
+      - Explain the measured or expected performance reason.
+      - Preserve lifetime and ownership clarity.
+      - Do not introduce undefined behavior.
+
+verification:
+  static_checks:
+    - id: cpp20.check.unavailable_facility
+      description: Detect use of standard-library facilities unavailable in the selected C++ standard.
+      applies_to:
+        - standard_availability
+      tool: compiler_configuration
+      severity: error
+
+  llm_self_check:
+    - id: cpp20.self_check.version_aware_guidance
+      prompt: >
+        Check whether the proposed code uses the most appropriate C++20
+        standard facility for the selected design intent. Verify that C++20-only
+        facilities are not used when the task requires C++17 compatibility.
+
+    - id: cpp20.self_check.exception_justification
+      prompt: >
+        If the code uses legacy idioms such as raw pointer plus size,
+        std::thread, or SFINAE where a C++20 facility is available, list the
+        reason and confirm whether the exception is valid.
+
+normalization_examples:
+  - source_rule: cpp20.prefer_span_for_contiguous_ranges
+    rule_ir:
+      strength: SOFT
+      target: contiguous_range_parameter
+      action: PREFER
+      value: std::span
+      over:
+        - pointer_and_size
+        - raw_array
+      condition:
+        language: cpp
+        standard: ">=20"
+        parameter_kind: contiguous_range
+        ownership_required: false
+      exceptions:
+        - abi_boundary
+        - c_api_boundary
+        - fixed_extent_required_by_existing_api
+
+effective_rule_examples:
+  cpp20_contiguous_range_api:
+    task_context:
+      language: cpp
+      standard: 20
+      operation: design_api
+      parameter_kind: contiguous_range
+      ownership_required: false
+    effective_rules:
+      soft:
+        - Prefer std::span over pointer-and-size parameters for non-owning contiguous ranges.
+      preference:
+        - Prefer the most precise standard-library facility available in C++20.
+      exceptions:
+        - Use pointer and size at ABI or C API boundaries, with justification.
+
+authoring_notes:
+  - Do not model C++20 modernization recommendations as HARD rules unless the project explicitly forbids alternatives.
+  - C++20 rules may depend on C++17 rules and should only supersede them when they provide a more precise facility.
+  - Separate string views from contiguous range views: std::string_view is for string-like input; std::span is for contiguous element ranges.
+  - Keep ABI and C API boundaries as first-class exceptions.
+  - The Policy Runtime should reduce overlapping C++17 and C++20 rules into concise Effective Rules before injection.

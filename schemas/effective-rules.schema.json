@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-policy-runtime.local/schemas/effective-rules.schema.json",
+  "title": "AI Policy Runtime Effective Rules",
+  "type": "object",
+  "required": ["effective_rules"],
+  "properties": {
+    "effective_rules": {
+      "type": "object",
+      "required": ["schema_version", "task", "hard", "soft", "preference"],
+      "properties": {
+        "schema_version": {"type": "integer", "const": 1},
+        "task": {
+          "type": "object",
+          "required": ["id", "summary", "context"],
+          "properties": {
+            "id": {"type": "string"},
+            "summary": {"type": "string"},
+            "context": {"type": "object"}
+          },
+          "additionalProperties": true
+        },
+        "hard": {"type": "array", "items": {"$ref": "#/$defs/rule"}},
+        "soft": {"type": "array", "items": {"$ref": "#/$defs/rule"}},
+        "preference": {"type": "array", "items": {"$ref": "#/$defs/rule"}},
+        "exceptions": {"type": "array"},
+        "verification": {"type": "object"},
+        "trace": {"type": "object"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "required": ["id", "target", "action", "statement", "source"],
+      "properties": {
+        "id": {"type": "string"},
+        "target": {"type": "string"},
+        "action": {"type": "string"},
+        "statement": {"type": "string"},
+        "source": {
+          "type": "object",
+          "required": ["skill", "rule"],
+          "properties": {
+            "skill": {"type": "string"},
+            "rule": {"type": "string"}
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

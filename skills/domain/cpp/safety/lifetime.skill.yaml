@@ -1,0 +1,94 @@
+# C++ Lifetime Safety Skill
+#
+# File:
+#   skills/domain/cpp/safety/lifetime.skill.yaml
+#
+# Purpose:
+#   Provide lifetime-oriented safety guidance used by ownership and standard
+#   best-practice skills.
+
+skill:
+  id: cpp.safety.lifetime
+  name: C++ Lifetime Safety
+  version: 1.0.0
+  status: stable
+
+  description: >
+    Provides lifetime-related constraints for C++ code generation, review, and
+    refactoring. The rules emphasize avoiding dangling references and making
+    non-owning views explicit.
+
+  level: domain
+  domain: cpp
+  category: safety
+  priority: 92
+  owner: core-policy
+
+  tags:
+    - cpp
+    - safety
+    - lifetime
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor
+
+  activation:
+    when:
+      language: cpp
+
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+
+  dependencies:
+    - cpp.core.baseline
+
+  incompatibilities: []
+
+rules:
+  hard:
+    - id: cpp.lifetime.no_dangling_reference
+      must_not: dangling_reference
+      target: lifetime.dangling
+      reason: Do not create dangling references, pointers, iterators, or views.
+
+  soft:
+    - id: cpp.lifetime.prefer_value_or_raii
+      should: value_semantics_or_raii
+      target: lifetime.strategy
+      reason: Prefer value semantics or RAII-managed ownership when lifetime is otherwise ambiguous.
+
+    - id: cpp.lifetime.document_non_owning_views
+      should: explicit_non_owning_lifetime
+      target: lifetime.view
+      reason: Make lifetime expectations explicit for non-owning views such as string_view and span.
+
+  preference:
+    - id: cpp.lifetime.preference_local_lifetime_over_shared_state
+      prefer: local_lifetime
+      over: shared_mutable_state
+      target: lifetime.design
+
+exceptions:
+  - id: cpp.lifetime.exception.hot_path_manual_lifetime
+    when: hot_path == true
+    allow:
+      - manual_lifetime_control
+    require:
+      - Explain why the hot path needs manual lifetime control.
+      - Preserve ownership and lifetime clarity.
+
+verification:
+  static_checks:
+    - id: cpp.lifetime.check.clang_analyzer
+      description: Use static analysis to detect lifetime and dangling-reference risks.
+      applies_to:
+        - lifetime.dangling
+      tool: clang_tidy
+      severity: error
+
+authoring_notes:
+  - Keep hard lifetime rules focused on concrete dangling-lifetime risks.

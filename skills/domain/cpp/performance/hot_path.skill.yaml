@@ -1,0 +1,95 @@
+skill:
+  id: cpp.performance.hot_path
+  name: C++ Hot Path Performance
+  version: 1.0.0
+  status: stable
+
+  description: >
+    Low-latency constraints for performance-critical C++ hot paths.
+
+  level: domain
+  domain: cpp
+  category: performance
+  priority: 85
+  owner: core-policy
+
+  tags:
+    - cpp
+    - performance
+    - hot-path
+    - low-latency
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: cpp
+      hot_path: true
+
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+
+task_analysis:
+  context_rules:
+    - field: context.hot_path
+      value: true
+      match:
+        - 低延迟
+        - low latency
+        - low-latency
+        - hot path
+        - hot_path
+        - 性能关键
+        - performance critical
+        - performance-critical
+      set:
+        performance_critical: true
+        hot_path: true
+      tags:
+        - low_latency
+        - hot_path
+        - performance
+      semantic_match:
+        - latency-sensitive hot path
+        - tail latency must remain stable
+        - avoid allocation blocking or unbounded work in the critical path
+        - code runs in a main processing loop with strict latency constraints
+        - 延迟敏感的关键路径
+        - 尾延迟需要稳定
+        - 主循环里不能分配内存或阻塞
+      confidence: 0.9
+
+  dependencies:
+    - cpp.core.baseline
+    - cpp.safety.ownership
+
+  incompatibilities: []
+
+rules:
+  hard: []
+  soft:
+    - id: avoid_heap_allocation_hot_path
+      when: hot_path == true
+      should_not: heap_allocation
+      target: allocation.heap
+      reason: Avoid heap allocation in hot paths.
+    - id: avoid_hidden_work_hot_path
+      when: hot_path == true
+      should_not: hidden_complexity
+      target: performance.hidden_work
+      reason: Avoid hidden allocations, locks, exceptions, or unbounded work in hot paths.
+  preference:
+    - id: prefer_performance_hot_path
+      when: hot_path == true
+      prefer:
+        higher: performance
+        lower: readability
+      target: decision.optimization
+
+exceptions: []
+verification: []

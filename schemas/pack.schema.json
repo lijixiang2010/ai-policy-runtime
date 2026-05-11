@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-policy-runtime.local/schemas/pack.schema.json",
+  "title": "AI Policy Runtime Skill Pack",
+  "type": "object",
+  "required": ["pack", "includes"],
+  "properties": {
+    "pack": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "description": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "includes": {"type": "array", "items": {"type": "string"}},
+    "excludes": {"type": "array", "items": {"type": "string"}},
+    "extends": {"type": "array", "items": {"type": "string"}},
+    "overrides": {"type": "array"}
+  },
+  "additionalProperties": true
+}

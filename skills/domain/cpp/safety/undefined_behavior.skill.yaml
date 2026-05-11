@@ -1,0 +1,67 @@
+skill:
+  id: cpp.safety.undefined_behavior
+  name: C++ Undefined Behavior Safety
+  version: 1.0.0
+  status: stable
+
+  description: >
+    Prevents generated or reviewed C++ code from relying on undefined behavior.
+
+  level: domain
+  domain: cpp
+  category: safety
+  priority: 95
+  owner: core-policy
+
+  tags:
+    - cpp
+    - safety
+    - undefined-behavior
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: cpp
+
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+
+  dependencies:
+    - cpp.core.baseline
+
+  incompatibilities: []
+
+rules:
+  hard:
+    - id: no_undefined_behavior
+      must_not: undefined_behavior
+      target: behavior.undefined
+      reason: Undefined behavior is not acceptable in generated or modified C++ code.
+  soft:
+    - id: prefer_defined_edge_cases
+      should: define_edge_case_behavior
+      target: behavior.edge_cases
+      reason: Prefer explicit behavior for overflow, bounds, lifetime, and nullability edge cases.
+  preference:
+    - id: prefer_safety_default
+      prefer:
+        higher: safety
+        lower: performance
+      target: decision.optimization
+
+exceptions: []
+
+verification:
+  - rule: cpp.safety.undefined_behavior.no_undefined_behavior
+    validator: clang_tidy
+    severity: error
+    config:
+      checks:
+        - cppcoreguidelines-*
+        - clang-analyzer-*

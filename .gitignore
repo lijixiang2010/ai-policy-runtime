@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Runtime state
+.policy/
+AGENTS.md
+CLAUDE.md
+
+# Local model assets can be installed separately.
+models/
+
+# Build and packaging outputs
+build/
+dist/
+*.egg-info/

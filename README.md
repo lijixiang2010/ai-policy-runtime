@@ -1,0 +1,315 @@
+# AI Policy Runtime
+
+Working implementation of the Skill DSL / Policy Runtime described in
+`docs/skill_policy_runtime.md`.
+
+The current runtime focuses on the deterministic policy core plus embedding
+based task analysis:
+
+```text
+User task -> TaskAnalysis -> TaskContext -> SkillRegistry -> PolicyEngine -> EffectiveRules
+```
+
+The implementation is grouped into explicit source layers:
+
+```text
+domain/          -> TaskContext, Skill, Rule, SkillPack, diagnostics, config
+infrastructure/  -> YAML/JSON loading, condition evaluation, schema loading
+services/        -> registry, engine, validation, rendering, verification, state writing
+application/     -> PolicyRuntime orchestration
+interfaces/      -> CLI adapter
+task_analysis/   -> exact + embedding semantic task analysis
+```
+
+For programmatic use, prefer the service facade:
+
+```python
+from ai_policy_runtime import PolicyRuntime, RuntimeConfig
+
+runtime = PolicyRuntime(RuntimeConfig.from_values(root="."))
+result = runtime.resolve("帮我写一个 C++20 低延迟队列", ("cpp.low_latency",))
+```
+
+When the runtime is used to enhance another repository, keep the target project
+root separate from the policy asset root:
+
+```python
+runtime = PolicyRuntime(
+    RuntimeConfig.from_values(
+        root=r"D:\work\target-project",
+        policy_root=r"D:\MilesLi\ai-policy-runtime",
+    )
+)
+result = runtime.resolve("帮我写一个低延迟队列", ("cpp.low_latency",))
+```
+
+In this mode the target project is scanned and receives `.policy/current/`,
+`AGENTS.md`, or `CLAUDE.md`, while Skills and Packs are loaded from
+`policy_root`.
+
+## Skill Library
+
+Skills now follow the documented DSL shape and directory layout:
+
+```text
+skills/
+├── domain/
+│   └── cpp/
+│       ├── base/
+│       │   └── language_baseline.skill.yaml
+│       ├── safety/
+│       │   ├── undefined_behavior.skill.yaml
+│       │   ├── lifetime.skill.yaml
+│       │   └── ownership.skill.yaml
+│       ├── standard/
+│       │   ├── cpp17_best_practices.skill.yaml
+│       │   └── cpp20_best_practices.skill.yaml
+│       └── performance/
+│           └── hot_path.skill.yaml
+└── project/
+    └── low_latency_trading.skill.yaml
+
+packs/
+├── cpp.safe_generation.pack.yaml
+└── cpp.low_latency.pack.yaml
+```
+
+The runtime recursively loads `*.skill.yaml`, `*.yaml`, `*.yml`, and `*.json`
+files from the configured skill directory. Skill files use the documented
+Object Form with top-level `skill`, `rules`, `exceptions`, and `verification`
+sections.
+
+## Run the Example
+
+```powershell
+python examples/cpp_low_latency.py
+```
+
+## Run Tests
+
+```powershell
+python -m unittest discover -s tests
+```
+
+## Task Analysis
+
+Task analysis uses:
+
+```text
+exact matching for precise facts
+embedding semantic recall for rephrased intent
+deterministic project-context scanning for omitted repository facts
+deterministic evidence resolution for final TaskContext
+```
+
+By default the runtime uses the local model directory when present:
+
+```text
+models/paraphrase-multilingual-MiniLM-L12-v2
+```
+
+You can override it:
+
+```powershell
+$env:AI_POLICY_EMBEDDING_MODEL="D:\path\to\model"
+```
+
+Semantic index vectors are cached under:
+
+```text
+.policy/cache/semantic-index/
+```
+
+Explain Task Analysis without resolving rules:
+
+```powershell
+python -m ai_policy_runtime.cli explain "写一个 C++20 数据通道，主循环里不能有分配和阻塞，尾延迟要稳"
+```
+
+The runtime scans project files before resolving a task. High-confidence facts
+from build metadata can fill in details the user did not repeat in the prompt,
+such as C++ standard, build system, and primary language. Supported sources
+include:
+
+```text
+.policy/project.yaml
+compile_commands.json
+CMakeLists.txt
+CMakePresets.json-compatible CMake files through CMakeLists scanning
+pyproject.toml, Cargo.toml, package.json, go.mod
+vcpkg.json, conanfile.txt, conanfile.py
+source/header file layout
+README.md weak tags
+```
+
+Facts are written with provenance to:
+
+```text
+.policy/current/project-context.json
+.policy/current/trace.json
+```
+
+Manual project overrides can be declared in `.policy/project.yaml`:
+
+```yaml
+domain: cpp
+build_system: cmake
+context:
+  standard: 20
+  selected_standard_is_known: true
+  hot_path: true
+tags:
+  - low_latency
+```
+
+Inspect the current resolved state:
+
+```powershell
+python -m ai_policy_runtime.cli inspect
+```
+
+Print bundled schemas:
+
+```powershell
+python -m ai_policy_runtime.cli schema skill
+python -m ai_policy_runtime.cli schema pack
+python -m ai_policy_runtime.cli schema effective-rules
+```
+
+List or clear semantic-index cache entries:
+
+```powershell
+python -m ai_policy_runtime.cli cache list
+python -m ai_policy_runtime.cli cache clear
+```
+
+## Resolve a Task
+
+```powershell
+python -m ai_policy_runtime.cli resolve "帮我写一个 C++20 低延迟队列"
+python -m ai_policy_runtime.cli resolve --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+```
+
+This writes the current task state to `.policy/current/`:
+
+- `task-context.json`
+- `effective-rules.json`
+- `effective-rules.yaml`
+- `effective-prompt.md`
+- `trace.json`
+
+## Validate Skills
+
+```powershell
+python -m ai_policy_runtime.cli validate
+```
+
+Validation combines bundled JSON Schema checks from `schemas/` with semantic
+runtime checks such as dependency and pack-reference validation.
+
+## Inject Effective Rules
+
+```powershell
+python -m ai_policy_runtime.cli inject --target custom
+python -m ai_policy_runtime.cli inject --target codex
+python -m ai_policy_runtime.cli inject --target claude
+```
+
+`codex` updates the generated block in `AGENTS.md`; `claude` updates
+`CLAUDE.md`; `custom` writes `.policy/current/injected-prompt.md`.
+
+## Run Codex with Effective Rules
+
+Use `policy-codex` when installed as a package:
+
+```powershell
+policy-codex --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+```
+
+The wrapper performs:
+
+```text
+resolve -> inject AGENTS.md -> codex "<task>"
+```
+
+For dry runs that only refresh `AGENTS.md`:
+
+```powershell
+policy-codex --pack cpp.low_latency --no-exec "帮我写一个 C++20 低延迟队列"
+```
+
+To enhance a different project with this policy repository:
+
+```powershell
+policy-codex --root D:\work\target-project --policy-root D:\MilesLi\ai-policy-runtime --pack cpp.low_latency "帮我写一个低延迟队列"
+```
+
+Pass Codex CLI options before the task with repeated `--codex-arg`:
+
+```powershell
+policy-codex --pack cpp.low_latency --codex-arg "--approval-mode" --codex-arg "never" "帮我写一个 C++20 低延迟队列"
+```
+
+## Run Claude Code with Effective Rules
+
+Use `policy-claude` when installed as a package:
+
+```powershell
+policy-claude --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+```
+
+The wrapper performs:
+
+```text
+resolve -> inject CLAUDE.md -> claude "<task>"
+```
+
+For dry runs that only refresh `CLAUDE.md`:
+
+```powershell
+policy-claude --pack cpp.low_latency --no-exec "帮我写一个 C++20 低延迟队列"
+```
+
+To enhance a different project with this policy repository:
+
+```powershell
+policy-claude --root D:\work\target-project --policy-root D:\MilesLi\ai-policy-runtime --pack cpp.low_latency "帮我写一个低延迟队列"
+```
+
+Pass Claude Code CLI options before the task with repeated `--claude-arg`:
+
+```powershell
+policy-claude --pack cpp.low_latency --claude-arg "--dangerously-skip-permissions" "帮我写一个 C++20 低延迟队列"
+```
+
+## Verify Outputs
+
+```powershell
+python -m ai_policy_runtime.cli verify --target path\to\output.cpp
+```
+
+The verifier writes `.policy/current/violations.json` and exits non-zero when
+violations are found.
+
+Verification is pluggable. The default verifier checks text-searchable
+`forbid` rules, and additional deterministic verifiers can implement the
+`RuleVerifier` protocol.
+
+## Run the MVP Workflow
+
+```powershell
+python -m ai_policy_runtime.cli run --pack cpp.low_latency --agent custom "帮我写一个 C++20 低延迟队列"
+```
+
+This performs:
+
+```text
+resolve -> inject -> optional verify
+```
+
+## Notes
+
+- JSON skill files work with the Python standard library.
+- YAML skill files are supported when `PyYAML` is installed.
+- This version does not call an LLM. It produces Effective Rules that can be
+  injected into an LLM/Agent runtime later.
