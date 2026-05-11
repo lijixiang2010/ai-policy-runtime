@@ -28,10 +28,12 @@ from ai_policy_runtime.services.verification import (
     write_violations,
 )
 from ai_policy_runtime.task_analysis import (
+    EmbeddingProvider,
     SentenceTransformerEmbeddingProvider,
     TaskAnalyzer,
     TaskSignals,
 )
+from ai_policy_runtime.task_analysis.analyzer import optional_sentence_transformer_provider
 
 
 @dataclass(frozen=True)
@@ -185,7 +187,7 @@ class PolicyRuntime:
         analysis = TaskAnalyzer.from_skills_dir(
             paths.skills,
             embeddings=embeddings,
-            semantic=embeddings is not None,
+            semantic=True,
             cache_dir=paths.root / ".policy" / "cache" / "semantic-index",
         ).analyze(
             task_text,
@@ -207,7 +209,7 @@ class PolicyRuntime:
             return set()
         return {domain for skill in registry.all() for domain in skill.domains}
 
-    def _embedding_provider(self) -> SentenceTransformerEmbeddingProvider | None:
+    def _embedding_provider(self) -> EmbeddingProvider | None:
         model_root = self.config.policy_root or self.config.paths.root
         local_model = (
             model_root
@@ -216,4 +218,4 @@ class PolicyRuntime:
         )
         if local_model.exists():
             return SentenceTransformerEmbeddingProvider(str(local_model))
-        return None
+        return optional_sentence_transformer_provider()

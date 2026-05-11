@@ -3,8 +3,8 @@
 Working implementation of the Skill DSL / Policy Runtime described in
 `docs/skill_policy_runtime.md`.
 
-The current runtime focuses on the deterministic policy core plus embedding
-based task analysis:
+The current runtime focuses on the deterministic policy core plus optional
+embedding based task analysis:
 
 ```text
 User task -> TaskAnalysis -> TaskContext -> SkillRegistry -> PolicyEngine -> EffectiveRules
@@ -18,7 +18,7 @@ infrastructure/  -> YAML/JSON loading, condition evaluation, schema loading
 services/        -> registry, engine, validation, rendering, verification, state writing
 application/     -> PolicyRuntime orchestration
 interfaces/      -> CLI adapter
-task_analysis/   -> exact + embedding semantic task analysis
+task_analysis/   -> exact task analysis plus optional embedding semantic recall
 ```
 
 For programmatic use, prefer the service facade:
@@ -97,22 +97,38 @@ Task analysis uses:
 
 ```text
 exact matching for precise facts
-embedding semantic recall for rephrased intent
 deterministic project-context scanning for omitted repository facts
 deterministic evidence resolution for final TaskContext
+optional embedding semantic recall for rephrased intent
 ```
 
-By default the runtime uses the local model directory when present:
+The default installation has no model dependency and does not download models.
+It uses deterministic task analysis, project-context scanning, and a lightweight
+hashing n-gram semantic matcher. This dependency-free matcher is less powerful
+than transformer embeddings, but works well for task-intent recall when Skills
+provide representative semantic phrases.
+
+Transformer-based semantic recall is optional. Install the optional extra when
+you want it:
+
+```powershell
+pip install "ai-policy-runtime[semantic]"
+```
+
+Then point the runtime at a local sentence-transformers model:
 
 ```text
 models/paraphrase-multilingual-MiniLM-L12-v2
 ```
 
-You can override it:
-
 ```powershell
 $env:AI_POLICY_EMBEDDING_MODEL="D:\path\to\model"
 ```
+
+When `policy_root/models/paraphrase-multilingual-MiniLM-L12-v2` exists, the
+high-level runtime uses it automatically. If no local transformer model is
+configured, the runtime falls back to the built-in hashing n-gram matcher rather
+than downloading anything.
 
 Semantic index vectors are cached under:
 

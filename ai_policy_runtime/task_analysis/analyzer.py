@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from .deterministic_extractor import DeterministicTaskExtractor
-from .embeddings import EmbeddingProvider, SentenceTransformerEmbeddingProvider
+from .embeddings import (
+    EmbeddingProvider,
+    HashingTextEmbeddingProvider,
+    SentenceTransformerEmbeddingProvider,
+)
 from .lexicon import TaskLexicon
 from .schema import TaskAnalysis, TaskSignals
 from .semantic_index import SemanticTaskIndex
@@ -57,8 +61,23 @@ def build_extractor(
     lexicon = TaskLexicon.from_skills_dir(skills_dir)
     if not semantic:
         return DeterministicTaskExtractor(lexicon)
-    provider = embeddings or SentenceTransformerEmbeddingProvider()
+    provider = embeddings or _default_embedding_provider()
     return DeterministicTaskExtractor(
         lexicon,
         SemanticTaskIndex(lexicon, provider, cache_dir=cache_dir),
     )
+
+
+def _default_embedding_provider() -> EmbeddingProvider:
+    """Return the default dependency-free semantic provider."""
+
+    return HashingTextEmbeddingProvider()
+
+
+def optional_sentence_transformer_provider() -> EmbeddingProvider | None:
+    """Return a configured transformer provider, or None when unavailable."""
+
+    try:
+        return SentenceTransformerEmbeddingProvider()
+    except RuntimeError:
+        return None

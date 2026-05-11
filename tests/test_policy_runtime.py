@@ -11,6 +11,7 @@ from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.domain.pack import PackRegistry, SkillPack
 from ai_policy_runtime.domain.rule import RuleAction
 from ai_policy_runtime.task_analysis import TaskAnalyzer
+from ai_policy_runtime.task_analysis.embeddings import HashingTextEmbeddingProvider, cosine_similarity
 from ai_policy_runtime.task_analysis.lexicon import LexiconRule, TaskLexicon
 from ai_policy_runtime.task_analysis.semantic_index import SemanticTaskIndex
 from ai_policy_runtime.adapters.codex.wrapper import _build_codex_command
@@ -161,6 +162,21 @@ class PolicyRuntimeTests(unittest.TestCase):
             SemanticTaskIndex(lexicon, provider, cache_dir=tmp)
 
         self.assertEqual(provider.calls, 1)
+
+    def test_hashing_embedding_provider_supports_lightweight_semantic_similarity(self) -> None:
+        provider = HashingTextEmbeddingProvider()
+        stable_tail_latency, unrelated = provider.encode(
+            (
+                "尾延迟保持稳定",
+                "write a formal markdown document",
+            )
+        )
+        query = provider.encode(("尾延迟要稳定",))[0]
+
+        self.assertGreater(
+            cosine_similarity(query, stable_tail_latency),
+            cosine_similarity(query, unrelated),
+        )
 
     def test_runtime_explain_returns_task_analysis_without_current_state(self) -> None:
         runtime = PolicyRuntime(RuntimeConfig.from_values(root="."))
