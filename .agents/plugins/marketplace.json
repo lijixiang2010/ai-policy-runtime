@@ -1,0 +1,20 @@
+{
+  "name": "ai-policy-runtime-marketplace",
+  "interface": {
+    "displayName": "AI Policy Runtime"
+  },
+  "plugins": [
+    {
+      "name": "ai-policy-runtime",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

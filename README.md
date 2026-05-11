@@ -266,6 +266,60 @@ Pass Codex CLI options before the task with repeated `--codex-arg`:
 policy-codex --pack cpp.low_latency --codex-arg "--approval-mode" --codex-arg "never" "帮我写一个 C++20 低延迟队列"
 ```
 
+## Use as a Codex Plugin
+
+This repository is also shaped as a Codex plugin. The plugin registers a
+`UserPromptSubmit` hook that resolves the current user prompt into Effective
+Rules and injects the rendered rules as Codex `additionalContext`.
+
+Plugin files:
+
+```text
+.codex-plugin/plugin.json
+hooks/hooks.json
+hooks/user_prompt_submit.py
+```
+
+The hook bootstraps the Python package from this repository on first use:
+
+```text
+python -m pip install -e <plugin-root>
+```
+
+That installs the runtime dependencies declared in `pyproject.toml`, including
+`PyYAML` and `jsonschema`. Set `AI_POLICY_AUTO_INSTALL=0` to disable this
+automatic bootstrap and manage dependencies yourself.
+
+Useful environment variables:
+
+```text
+AI_POLICY_ROOT=<path-to-policy-runtime>
+AI_POLICY_PACKS=cpp.low_latency,cpp.safe_generation
+AI_POLICY_AUTO_INSTALL=0
+```
+
+For local development in this repository, `.codex/config.toml` points Codex at
+the same hook implementation used by the plugin.
+
+After publishing this repository to GitHub, users can add it as a Codex plugin
+marketplace:
+
+```powershell
+codex plugin marketplace add <owner>/<repo>
+```
+
+Then install **AI Policy Runtime** from Codex:
+
+```text
+/plugins
+```
+
+The marketplace entry is declared in:
+
+```text
+.agents/plugins/marketplace.json
+```
+
 ## Run Claude Code with Effective Rules
 
 Use `policy-claude` when installed as a package:

@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-import yaml
+try:
+    import yaml
+except ImportError:  # pragma: no cover - exercised when optional dependency is absent.
+    yaml = None
 
 from ai_policy_runtime.domain.task import TaskContext
 from ai_policy_runtime.task_analysis.schema import ExtractionEvidence, TaskAnalysis
@@ -113,6 +116,8 @@ class ProjectContextAnalyzer:
                 self._compile_commands_facts,
                 self._cmake_facts,
                 self._manifest_facts,
+                self._language_version_facts,
+                self._tooling_facts,
                 self._file_layout_facts,
                 self._weak_text_facts,
             )
@@ -125,6 +130,8 @@ class ProjectContextAnalyzer:
         if not path.exists():
             path = self.root / ".policy" / "project.yml"
         if not path.exists():
+            return []
+        if yaml is None:
             return []
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -218,6 +225,92 @@ class ProjectContextAnalyzer:
             facts.append(
                 ProjectFact("context.build_system", probe.build_system, source, probe.confidence)
             )
+        return facts
+
+    def _language_version_facts(self) -> list[ProjectFact]:
+        facts: list[ProjectFact] = []
+
+        pyproject = self.root / "pyproject.toml"
+        if pyproject.exists():
+            text = pyproject.read_text(encoding="utf-8", errors="ignore")
+            if requires := _extract_toml_string(text, "requires-python"):
+                facts.append(
+                    ProjectFact(
+                        "context.python_requires",
+                        requires,
+                        f"{_relative(pyproject, self.root)}: requires-python",
+                        0.94,
+                    )
+                )
+
+        package_json = self.root / "package.json"
+        if package_json.exists():
+            try:
+                data = json.loads(package_json.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                data = {}
+            if isinstance(data, dict):
+                engines = data.get("engines")
+                if isinstance(engines, dict) and isinstance(engines.get("node"), str):
+                    facts.append(
+                        ProjectFact(
+                            "context.node_requires",
+                            engines["node"],
+                            f"{_relative(package_json, self.root)}: engines.node",
+                            0.92,
+                        )
+                    )
+
+        cargo = self.root / "Cargo.toml"
+        if cargo.exists():
+            text = cargo.read_text(encoding="utf-8", errors="ignore")
+            if edition := _extract_toml_string(text, "edition"):
+                facts.append(
+                    ProjectFact(
+                        "context.rust_edition",
+                        edition,
+                        f"{_relative(cargo, self.root)}: edition",
+                        0.92,
+                    )
+                )
+
+        return facts
+
+    def _tooling_facts(self) -> list[ProjectFact]:
+        facts: list[ProjectFact] = []
+        for filename, field, value in (
+            (".clang-format", "context.has_clang_format", True),
+            (".clang-tidy", "context.has_clang_tidy", True),
+            ("ruff.toml", "context.has_ruff", True),
+            (".ruff.toml", "context.has_ruff", True),
+            ("mypy.ini", "context.has_mypy", True),
+            ("pyrightconfig.json", "context.has_pyright", True),
+            (".prettierrc", "context.has_prettier", True),
+            (".eslintrc.json", "context.has_eslint", True),
+        ):
+            path = _find_named_file(self.root, filename)
+            if path is None:
+                continue
+            facts.append(ProjectFact(field, value, _relative(path, self.root), 0.9))
+
+        pyproject = self.root / "pyproject.toml"
+        if pyproject.exists():
+            text = pyproject.read_text(encoding="utf-8", errors="ignore")
+            for table, field in (
+                ("tool.ruff", "context.has_ruff"),
+                ("tool.mypy", "context.has_mypy"),
+                ("tool.pytest", "context.has_pytest"),
+            ):
+                if _has_toml_table(text, table):
+                    facts.append(
+                        ProjectFact(
+                            field,
+                            True,
+                            f"{_relative(pyproject, self.root)}: [{table}]",
+                            0.88,
+                        )
+                    )
+
         return facts
 
     def _file_layout_facts(self) -> list[ProjectFact]:
@@ -479,6 +572,28 @@ def _language_facts(language: str, source: str, confidence: float) -> list[Proje
         ProjectFact("domain", language, source, confidence),
         ProjectFact("context.language", language, source, confidence),
     ]
+
+
+def _find_named_file(root: Path, filename: str) -> Path | None:
+    direct = root / filename
+    if direct.exists():
+        return direct
+    for path in root.rglob(filename):
+        if any(part in IGNORED_LAYOUT_DIRS for part in path.relative_to(root).parts):
+            continue
+        if path.is_file():
+            return path
+    return None
+
+
+def _extract_toml_string(text: str, key: str) -> str | None:
+    pattern = rf"(?m)^\s*{re.escape(key)}\s*=\s*['\"]([^'\"]+)['\"]"
+    match = re.search(pattern, text)
+    return match.group(1) if match else None
+
+
+def _has_toml_table(text: str, table: str) -> bool:
+    return re.search(rf"(?m)^\s*\[{re.escape(table)}(?:\.[^\]]+)?\]\s*$", text) is not None
 
 
 def _relative(path: Path, root: Path) -> str:

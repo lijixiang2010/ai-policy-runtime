@@ -230,6 +230,27 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(analysis.context()["standard"], 20)
         self.assertIn("compile_commands.json", analysis.fact("context.standard").source)
 
+    def test_project_context_detects_generic_project_tooling(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".clang-format").write_text("BasedOnStyle: LLVM\n", encoding="utf-8")
+            (root / "pyproject.toml").write_text(
+                '[project]\n'
+                'requires-python = ">=3.10"\n'
+                "\n"
+                "[tool.ruff]\n"
+                "line-length = 100\n",
+                encoding="utf-8",
+            )
+
+            analysis = ProjectContextAnalyzer(root).analyze()
+            context = analysis.context()
+
+        self.assertEqual(analysis.primary_language, "python")
+        self.assertTrue(context["has_clang_format"])
+        self.assertTrue(context["has_ruff"])
+        self.assertEqual(context["python_requires"], ">=3.10")
+
     def test_project_context_yaml_overrides_detected_facts(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
