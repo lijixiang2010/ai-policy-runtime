@@ -103,10 +103,82 @@ optional embedding semantic recall for rephrased intent
 ```
 
 The default installation has no model dependency and does not download models.
-It uses deterministic task analysis, project-context scanning, and a lightweight
-hashing n-gram semantic matcher. This dependency-free matcher is less powerful
-than transformer embeddings, but works well for task-intent recall when Skills
-provide representative semantic phrases.
+It uses deterministic task analysis, project-context scanning, and the best
+configured semantic provider:
+
+```text
+OpenAI-compatible /v1/embeddings endpoint
+local sentence-transformers model
+dependency-free hashing n-gram matcher
+```
+
+Use an OpenAI-compatible embedding endpoint when you want strong multilingual
+semantic matching without asking users to download a local model:
+
+```powershell
+$env:AI_POLICY_EMBEDDING_API_KEY="<key>"
+$env:AI_POLICY_EMBEDDING_MODEL="text-embedding-3-small"
+```
+
+`AI_POLICY_EMBEDDING_PROVIDER` is optional for the common case. The runtime
+automatically uses the OpenAI-compatible provider when
+`AI_POLICY_EMBEDDING_API_KEY`, `OPENAI_API_KEY`, or
+`AI_POLICY_EMBEDDING_BASE_URL` is set. Keep the provider variable for explicit
+advanced overrides:
+
+```powershell
+$env:AI_POLICY_EMBEDDING_PROVIDER="openai-compatible" # force remote embeddings
+$env:AI_POLICY_EMBEDDING_PROVIDER="local"             # force sentence-transformers
+$env:AI_POLICY_EMBEDDING_PROVIDER="hashing"           # force lightweight local matcher
+$env:AI_POLICY_EMBEDDING_PROVIDER="disabled"          # disable semantic matching
+```
+
+For OpenAI-compatible gateways, set the endpoint explicitly:
+
+```powershell
+$env:AI_POLICY_EMBEDDING_BASE_URL="https://gateway.example.com/v1"
+```
+
+If `AI_POLICY_EMBEDDING_MODEL` is omitted for a remote endpoint, the runtime
+uses `text-embedding-3-small`.
+
+If no remote provider is configured, the runtime tries the bundled local model
+path shown below, then falls back to the lightweight hashing matcher. The
+dependency-free matcher is less powerful than real embedding models, but works
+well for task-intent recall when Skills provide representative semantic
+phrases.
+
+To verify which semantic path works in your environment, run:
+
+```powershell
+python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+```
+
+The output should include structured context such as `hot_path: true`,
+`scenario: low_latency_queue`, and semantic evidence whose source contains an
+English skill phrase such as `semantic:low latency queue implementation`.
+
+You can force each provider while testing:
+
+```powershell
+$env:AI_POLICY_EMBEDDING_PROVIDER="openai-compatible"
+python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+
+$env:AI_POLICY_EMBEDDING_PROVIDER="local"
+python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+
+$env:AI_POLICY_EMBEDDING_PROVIDER="hashing"
+python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+
+$env:AI_POLICY_EMBEDDING_PROVIDER="disabled"
+python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+```
+
+In automatic mode, leave `AI_POLICY_EMBEDDING_PROVIDER` unset. Automatic mode
+uses the remote OpenAI-compatible endpoint when endpoint credentials are
+configured, otherwise the local model, otherwise the hashing matcher. When a
+provider is forced explicitly, configuration or endpoint errors are reported
+instead of silently falling back to a weaker provider.
 
 Transformer-based semantic recall is optional. Install the optional extra when
 you want it:
@@ -115,11 +187,25 @@ you want it:
 pip install "ai-policy-runtime[semantic]"
 ```
 
-Then point the runtime at a local sentence-transformers model:
+Then install the recommended local model into the policy asset root:
+
+```powershell
+python -m ai_policy_runtime.cli model install
+```
+
+Inspect local model status with:
+
+```powershell
+python -m ai_policy_runtime.cli model list
+```
+
+The default local model path is:
 
 ```text
 models/paraphrase-multilingual-MiniLM-L12-v2
 ```
+
+You can also point the runtime at another local sentence-transformers model:
 
 ```powershell
 $env:AI_POLICY_EMBEDDING_MODEL="D:\path\to\model"

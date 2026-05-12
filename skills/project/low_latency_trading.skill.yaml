@@ -38,15 +38,17 @@ task_analysis:
     - field: context.scenario
       value: matching_engine
       match:
-        - 撮合
         - matching
         - match engine
       set:
         scenario: matching_engine
+        performance_critical: true
+        hot_path: true
       tags:
         - systems_programming
         - trading
       semantic_match:
+        - low latency matching engine
         - order matching engine
         - trading engine matching loop
         - exchange core matching path
@@ -55,16 +57,19 @@ task_analysis:
     - field: context.scenario
       value: low_latency_queue
       match:
-        - 低延迟队列
         - low latency queue
         - low-latency queue
       set:
         scenario: low_latency_queue
         data_structure: queue
+        performance_critical: true
+        hot_path: true
       tags:
         - data_structure
         - low_latency
       semantic_match:
+        - low latency queue
+        - low latency queue implementation
         - latency-sensitive producer consumer queue
         - queue for passing events in a trading hot path
         - data channel with strict tail latency requirements

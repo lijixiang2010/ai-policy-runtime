@@ -74,9 +74,7 @@ task_analysis:
       match:
         - span
         - std::span
-        - 连续范围
         - contiguous range
-        - 数组视图
       set:
         parameter_kind: contiguous_range
         ownership_required: false
@@ -84,7 +82,6 @@ task_analysis:
         - non-owning view over contiguous elements
         - pass an array-like range without transferring ownership
         - API accepts a buffer view
-        - 连续内存范围的非拥有视图
       confidence: 0.82
 
   dependencies:

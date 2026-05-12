@@ -11,6 +11,7 @@ from ai_policy_runtime.infrastructure.loader import PolicyLoader
 class LexiconRule:
     """Data-driven text match rule loaded from Skill metadata."""
 
+    skill_id: str
     field: str
     value: Any
     phrases: tuple[str, ...]
@@ -30,9 +31,32 @@ class TriggerProfile:
 
 
 @dataclass(frozen=True)
+class SkillProfile:
+    """Skill-level metadata used to gate semantic recall."""
+
+    skill_id: str
+    domain: str | None = None
+    triggers: tuple[str, ...] = ()
+    standard_min: int | None = None
+
+    def matches(self, gate: "TaskGate") -> bool:
+        """Return whether this skill may participate in semantic recall."""
+
+        if gate.domain and self.domain and gate.domain != self.domain:
+            return False
+        if gate.task_type and self.triggers and gate.task_type not in self.triggers:
+            return False
+        if gate.standard is not None and self.standard_min is not None:
+            return gate.standard >= self.standard_min
+        return True
+
+
+@dataclass(frozen=True)
 class TaskLexicon:
     """Runtime task-analysis lexicon assembled from installed Skills."""
 
+    skill_profiles: tuple[SkillProfile, ...] = ()
+    skill_rules: tuple[LexiconRule, ...] = ()
     domain_rules: tuple[LexiconRule, ...] = ()
     trigger_rules: tuple[LexiconRule, ...] = ()
     context_rules: tuple[LexiconRule, ...] = ()
@@ -41,6 +65,8 @@ class TaskLexicon:
     @classmethod
     def from_skills_dir(cls, path: str | Path) -> "TaskLexicon":
         loader = PolicyLoader()
+        skill_profiles: list[SkillProfile] = []
+        skill_rules: list[LexiconRule] = []
         domain_rules: list[LexiconRule] = []
         trigger_rules: list[LexiconRule] = []
         context_rules: list[LexiconRule] = []
@@ -48,6 +74,9 @@ class TaskLexicon:
 
         for file_path in _iter_skill_files(path):
             document = SkillAnalysisDocument(loader.load_mapping(file_path), file_path)
+            skill_profiles.append(document.skill_profile())
+            if skill_rule := document.skill_rule():
+                skill_rules.append(skill_rule)
             if domain_rule := document.domain_rule():
                 domain_rules.append(domain_rule)
             for trigger, values in document.trigger_capabilities().items():
@@ -57,6 +86,8 @@ class TaskLexicon:
             context_rules.extend(document.context_rules())
 
         return cls(
+            skill_profiles=tuple(skill_profiles),
+            skill_rules=tuple(skill_rules),
             domain_rules=tuple(domain_rules),
             trigger_rules=tuple(trigger_rules),
             context_rules=tuple(context_rules),
@@ -75,6 +106,15 @@ class TaskLexicon:
         }
         return tuple(sorted(values))
 
+    def semantic_scope(self, gate: "TaskGate") -> frozenset[str]:
+        """Return skill ids eligible for second-stage semantic recall."""
+
+        return frozenset(
+            profile.skill_id
+            for profile in self.skill_profiles
+            if profile.matches(gate)
+        )
+
 
 class SkillAnalysisDocument:
     """Task-analysis view over a raw Skill DSL mapping."""
@@ -86,6 +126,39 @@ class SkillAnalysisDocument:
         self._analysis = data.get("task_analysis", self._meta.get("task_analysis", {}))
         self.skill_id = str(self._meta.get("id", data.get("skill_id", path.stem)))
 
+    def skill_profile(self) -> SkillProfile:
+        """Return gate metadata for this Skill."""
+
+        activation = self._activation()
+        domain = self._meta.get("domain") or _first(self._data.get("domains"))
+        return SkillProfile(
+            skill_id=self.skill_id,
+            domain=str(domain) if domain else None,
+            triggers=tuple(_strings(activation.get("triggers", ()))),
+            standard_min=_standard_min(activation.get("when")),
+        )
+
+    def skill_rule(self) -> LexiconRule | None:
+        """Return a skill-level semantic recall rule derived from Skill metadata."""
+
+        texts = (
+            str(self._meta.get("name", "")),
+            str(self._meta.get("description", self._data.get("description", ""))),
+            *_strings(self._meta.get("tags", ())),
+        )
+        semantic_texts = _normalize_phrases(texts)
+        if not semantic_texts:
+            return None
+        return LexiconRule(
+            skill_id=self.skill_id,
+            field="skill",
+            value=self.skill_id,
+            phrases=(),
+            confidence=float(self._analysis.get("skill_confidence", 0.68)),
+            source=f"skill:{self.skill_id}:description",
+            semantic_texts=semantic_texts,
+        )
+
     def domain_rule(self) -> LexiconRule | None:
         """Return the domain rule declared by this Skill, if any."""
 
@@ -94,6 +167,7 @@ class SkillAnalysisDocument:
             return None
         phrases = _strings(self._analysis.get("domain_aliases", ())) or (str(domain),)
         return LexiconRule(
+            skill_id=self.skill_id,
             field="domain",
             value=str(domain),
             phrases=_normalize_phrases(phrases),
@@ -110,6 +184,7 @@ class SkillAnalysisDocument:
         semantics = dict(self._analysis.get("trigger_semantics", {}))
         return tuple(
             LexiconRule(
+                skill_id=self.skill_id,
                 field="task_type",
                 value=str(trigger),
                 phrases=_normalize_phrases(_strings(aliases)),
@@ -143,6 +218,7 @@ class SkillAnalysisDocument:
 
     def _context_rule(self, item: dict[str, Any]) -> LexiconRule:
         return LexiconRule(
+            skill_id=self.skill_id,
             field=str(item.get("field", "context")),
             value=item.get("value"),
             phrases=_normalize_phrases(_strings(item.get("match", ()))),
@@ -152,6 +228,32 @@ class SkillAnalysisDocument:
             tags=tuple(_strings(item.get("tags", ()))),
             semantic_texts=_normalize_phrases(_strings(item.get("semantic_match", ()))),
         )
+
+    def _activation(self) -> dict[str, Any]:
+        activation = self._data.get("activation", self._meta.get("activation", {}))
+        return activation if isinstance(activation, dict) else {}
+
+
+@dataclass(frozen=True)
+class TaskGate:
+    """First-stage hard facts that constrain semantic recall."""
+
+    domain: str | None = None
+    task_type: str | None = None
+    standard: int | None = None
+
+
+def _standard_min(value: Any) -> int | None:
+    if isinstance(value, dict):
+        raw = value.get("standard")
+        if isinstance(raw, int):
+            return raw
+        if isinstance(raw, str) and raw.startswith(">="):
+            try:
+                return int(raw[2:])
+            except ValueError:
+                return None
+    return None
 
 
 def _iter_skill_files(path: str | Path) -> Iterable[Path]:

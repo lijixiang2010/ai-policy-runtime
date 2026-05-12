@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import os
 import json
 import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
+from unittest.mock import patch
+
+# Keep unit tests deterministic even when the developer shell has remote
+# embedding credentials configured.
+os.environ["AI_POLICY_EMBEDDING_PROVIDER"] = "local"
 
 from ai_policy_runtime import PolicyEngine, Skill, SkillRegistry, TaskContext
 from ai_policy_runtime.application.runtime import PolicyRuntime
@@ -11,7 +17,12 @@ from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.domain.pack import PackRegistry, SkillPack
 from ai_policy_runtime.domain.rule import RuleAction
 from ai_policy_runtime.task_analysis import TaskAnalyzer
-from ai_policy_runtime.task_analysis.embeddings import HashingTextEmbeddingProvider, cosine_similarity
+from ai_policy_runtime.task_analysis.embeddings import (
+    HashingTextEmbeddingProvider,
+    OpenAICompatibleEmbeddingConfig,
+    OpenAICompatibleEmbeddingProvider,
+    cosine_similarity,
+)
 from ai_policy_runtime.task_analysis.lexicon import LexiconRule, TaskLexicon
 from ai_policy_runtime.task_analysis.semantic_index import SemanticTaskIndex
 from ai_policy_runtime.adapters.codex.wrapper import _build_codex_command
@@ -24,6 +35,7 @@ from ai_policy_runtime.services.analyzer import analyze
 from ai_policy_runtime.services.effective_rules import EffectiveRulesRenderer
 from ai_policy_runtime.services.engine import PolicyConflictError
 from ai_policy_runtime.services.injector import BEGIN, END, inject_current_prompt
+from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_mapping
 from ai_policy_runtime.services.verification import FileVerifier, Violation, verify_rules
 
@@ -59,6 +71,20 @@ class CountingEmbeddingProvider(KeywordConceptEmbeddingProvider):
     def encode(self, texts: list[str] | tuple[str, ...]) -> list[list[float]]:
         self.calls += 1
         return super().encode(texts)
+
+
+class FakeHttpResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+
+    def __enter__(self) -> "FakeHttpResponse":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return json.dumps(self._payload).encode("utf-8")
 
 
 class AlwaysViolationVerifier:
@@ -146,6 +172,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         lexicon = TaskLexicon(
             context_rules=(
                 LexiconRule(
+                    skill_id="cpp.performance.hot_path",
                     field="context.hot_path",
                     value=True,
                     phrases=(),
@@ -163,6 +190,41 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertEqual(provider.calls, 1)
 
+    def test_semantic_index_search_can_be_scoped_by_candidate_skill(self) -> None:
+        lexicon = TaskLexicon(
+            context_rules=(
+                LexiconRule(
+                    skill_id="cpp.performance.hot_path",
+                    field="context.hot_path",
+                    value=True,
+                    phrases=(),
+                    confidence=0.9,
+                    source="hot",
+                    semantic_texts=("tail latency must remain stable",),
+                ),
+                LexiconRule(
+                    skill_id="python.web",
+                    field="context.framework",
+                    value="django",
+                    phrases=(),
+                    confidence=0.9,
+                    source="web",
+                    semantic_texts=("tail latency must remain stable",),
+                ),
+            )
+        )
+        index = SemanticTaskIndex(lexicon, KeywordConceptEmbeddingProvider(), threshold=0.1)
+
+        matches = index.search_scoped(
+            "尾延迟要稳定",
+            scope=frozenset({"cpp.performance.hot_path"}),
+        )
+
+        self.assertEqual(
+            [match.rule.skill_id for match in matches],
+            ["cpp.performance.hot_path"],
+        )
+
     def test_hashing_embedding_provider_supports_lightweight_semantic_similarity(self) -> None:
         provider = HashingTextEmbeddingProvider()
         stable_tail_latency, unrelated = provider.encode(
@@ -177,6 +239,70 @@ class PolicyRuntimeTests(unittest.TestCase):
             cosine_similarity(query, stable_tail_latency),
             cosine_similarity(query, unrelated),
         )
+
+    def test_openai_compatible_embedding_provider_uses_batch_endpoint(self) -> None:
+        provider = OpenAICompatibleEmbeddingProvider(
+            OpenAICompatibleEmbeddingConfig(
+                base_url="https://embedding.example.test/v1",
+                model="embed-small",
+                api_key="secret",
+                timeout_seconds=3.0,
+            )
+        )
+        response = FakeHttpResponse(
+            {
+                "data": [
+                    {"index": 1, "embedding": [0.0, 1.0]},
+                    {"index": 0, "embedding": [1.0, 0.0]},
+                ]
+            }
+        )
+
+        with patch(
+            "ai_policy_runtime.task_analysis.embeddings.urlopen",
+            return_value=response,
+        ) as urlopen_mock:
+            vectors = provider.encode(("first", "second"))
+
+        request = urlopen_mock.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(request.full_url, "https://embedding.example.test/v1/embeddings")
+        self.assertEqual(request.get_header("Authorization"), "Bearer secret")
+        self.assertEqual(payload, {"model": "embed-small", "input": ["first", "second"]})
+        self.assertEqual(vectors, [[1.0, 0.0], [0.0, 1.0]])
+
+    def test_openai_compatible_embedding_config_can_be_loaded_from_env(self) -> None:
+        env = {
+            "AI_POLICY_EMBEDDING_PROVIDER": "openai-compatible",
+            "AI_POLICY_EMBEDDING_BASE_URL": "https://gateway.example.test/v1",
+            "AI_POLICY_EMBEDDING_API_KEY": "key",
+            "AI_POLICY_EMBEDDING_MODEL": "embedding-model",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            provider = OpenAICompatibleEmbeddingProvider.from_env()
+
+        self.assertIsNotNone(provider)
+        assert provider is not None
+        self.assertEqual(provider.config.base_url, "https://gateway.example.test/v1")
+        self.assertEqual(provider.config.api_key, "key")
+        self.assertEqual(provider.config.model, "embedding-model")
+
+    def test_local_model_manager_lists_and_installs_known_model(self) -> None:
+        with TemporaryDirectory() as tmp:
+            manager = LocalModelManager(tmp)
+            listed = manager.list()
+
+            self.assertEqual(listed[0]["key"], "multilingual-mini")
+            self.assertFalse(listed[0]["installed"])
+
+            with patch(
+                "ai_policy_runtime.services.local_models._snapshot_download"
+            ) as download:
+                installed = manager.install()
+
+            download.assert_called_once()
+            self.assertEqual(installed["key"], "multilingual-mini")
+            self.assertTrue(installed["path"].endswith("paraphrase-multilingual-MiniLM-L12-v2"))
 
     def test_runtime_explain_returns_task_analysis_without_current_state(self) -> None:
         runtime = PolicyRuntime(RuntimeConfig.from_values(root="."))

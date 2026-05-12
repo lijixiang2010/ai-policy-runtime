@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .lexicon import TaskLexicon
+from .lexicon import TaskGate, TaskLexicon
 from .matching import ExactRuleMatcher, normalize_text
 from .resolution import (
     ExtractionState,
@@ -29,7 +29,7 @@ class DeterministicTaskExtractor:
         self._apply_domain(normalized, signals, state)
         self._apply_task_type(normalized, state)
         self._apply_exact_context(normalized, state)
-        self._apply_semantic_context(normalized, state)
+        self._apply_semantic_context(normalized, state, self._semantic_gate(state))
         return state.to_analysis(self._lexicon)
 
     def _apply_domain(
@@ -67,8 +67,34 @@ class DeterministicTaskExtractor:
         self,
         text: str,
         state: ExtractionState,
+        gate: TaskGate,
     ) -> None:
         if self._semantic_index is None:
             return
-        for match in self._semantic_index.search(text):
+        scope = self._lexicon.semantic_scope(gate)
+        if not scope:
+            return
+        for match in self._semantic_index.search_scoped(text, scope=scope):
             state.apply_rule(match.rule, match.evidence())
+
+    def _semantic_gate(self, state: ExtractionState) -> TaskGate:
+        """Build the first-stage gate from exact evidence and nonsemantic signals."""
+
+        domain = state.best_value("domain", "")
+        task_type = state.best_value("task_type", "")
+        return TaskGate(
+            domain=domain or None,
+            task_type=task_type if task_type != "unknown" else None,
+            standard=_int_or_none(state.context.get("standard")),
+        )
+
+
+def _int_or_none(value: object) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None

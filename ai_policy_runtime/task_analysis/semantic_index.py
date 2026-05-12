@@ -36,7 +36,7 @@ class SemanticTaskIndex:
         lexicon: TaskLexicon,
         provider: EmbeddingProvider,
         *,
-        threshold: float = 0.52,
+        threshold: float = 0.38,
         cache_dir: str | Path | None = None,
     ) -> None:
         self._provider = provider
@@ -45,6 +45,17 @@ class SemanticTaskIndex:
         self._vectors = self._load_or_encode(cache_dir)
 
     def search(self, text: str, *, limit: int = 8) -> tuple[SemanticMatch, ...]:
+        return self.search_scoped(text, scope=None, limit=limit)
+
+    def search_scoped(
+        self,
+        text: str,
+        *,
+        scope: frozenset[str] | None,
+        limit: int = 8,
+    ) -> tuple[SemanticMatch, ...]:
+        """Search semantic entries, optionally constrained to candidate skills."""
+
         if not self._entries or not self._vectors:
             return ()
         query_vectors = self._provider.encode([text])
@@ -58,10 +69,14 @@ class SemanticTaskIndex:
                 text=entry_text,
             )
             for (rule, entry_text), vector in zip(self._entries, self._vectors)
+            if scope is None or rule.skill_id in scope
         ]
         selected = [item for item in matches if item.score >= self._threshold]
-        selected.sort(key=lambda item: item.score, reverse=True)
-        return tuple(_best_per_field(selected[:limit]))
+        selected.sort(
+            key=lambda item: (_field_priority(item.rule.field), item.score),
+            reverse=True,
+        )
+        return tuple(_best_per_field(selected))[:limit]
 
     def _load_or_encode(self, cache_dir: str | Path | None) -> list[list[float]]:
         texts = [entry[1] for entry in self._entries]
@@ -108,7 +123,12 @@ class SemanticIndexCache:
 
 
 def _iter_entries(lexicon: TaskLexicon) -> Iterable[tuple[LexiconRule, str]]:
-    for rule in (*lexicon.domain_rules, *lexicon.trigger_rules, *lexicon.context_rules):
+    for rule in (
+        *lexicon.skill_rules,
+        *lexicon.domain_rules,
+        *lexicon.trigger_rules,
+        *lexicon.context_rules,
+    ):
         texts = rule.semantic_texts or rule.phrases
         for text in texts:
             yield rule, text
@@ -122,3 +142,13 @@ def _best_per_field(matches: Sequence[SemanticMatch]) -> Iterable[SemanticMatch]
             continue
         seen.add(key)
         yield match
+
+
+def _field_priority(field: str) -> int:
+    if field.startswith("context."):
+        return 4
+    if field in {"domain", "task_type"}:
+        return 3
+    if field == "skill":
+        return 2
+    return 1

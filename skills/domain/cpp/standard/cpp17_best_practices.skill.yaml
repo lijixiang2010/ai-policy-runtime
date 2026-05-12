@@ -58,16 +58,9 @@ task_analysis:
   trigger_aliases:
     design_api:
       - api
-      - api 设计
-      - 接口设计
       - design api
-      - 设计
-      - 设计 api
-      - 设计一个 api
     modernize_code:
       - modernize
-      - 现代化
-      - 升级到
 
   trigger_capabilities:
     design_api:
@@ -96,8 +89,6 @@ task_analysis:
       value: true
       match:
         - api
-        - 接口
-        - 参数
         - parameter
       set:
         designing_api: true
@@ -105,7 +96,6 @@ task_analysis:
         - design a public interface
         - choose parameter types for an API
         - define function signatures
-        - 设计接口和参数类型
       confidence: 0.72
 
   dependencies:

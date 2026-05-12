@@ -20,6 +20,7 @@ class ExtractionState:
 
     context: dict[str, Any] = field(default_factory=dict)
     tags: set[str] = field(default_factory=set)
+    skill_matches: set[str] = field(default_factory=set)
     evidence: list[ExtractionEvidence] = field(default_factory=list)
 
     def add(self, evidence: ExtractionEvidence) -> None:
@@ -32,6 +33,10 @@ class ExtractionState:
 
         if self.has_stronger_or_equal(evidence):
             return
+        if rule.field == "skill":
+            self.skill_matches.add(str(rule.value))
+            self.evidence.append(evidence)
+            return
         self.context.update(rule.set_context)
         self.tags.update(rule.tags)
         self.evidence.append(evidence)
@@ -39,6 +44,13 @@ class ExtractionState:
     def has_stronger_or_equal(self, candidate: ExtractionEvidence) -> bool:
         """Return whether current evidence should suppress a candidate."""
 
+        if candidate.field == "skill":
+            return any(
+                item.field == candidate.field
+                and item.value == candidate.value
+                and item.confidence >= candidate.confidence
+                for item in self.evidence
+            )
         return any(
             item.field == candidate.field and item.confidence >= candidate.confidence
             for item in self.evidence
@@ -60,6 +72,8 @@ class ExtractionState:
         if domain != GENERAL_DOMAIN:
             self.context.setdefault("language", domain)
             self.tags.add(domain)
+        if self.skill_matches:
+            self.context["semantic_skill_matches"] = tuple(sorted(self.skill_matches))
 
         confidence = _confidence(self.evidence, domain, task_type)
         task = TaskContext(

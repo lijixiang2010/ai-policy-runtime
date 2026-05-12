@@ -5,6 +5,8 @@ from .deterministic_extractor import DeterministicTaskExtractor
 from .embeddings import (
     EmbeddingProvider,
     HashingTextEmbeddingProvider,
+    OpenAICompatibleEmbeddingConfig,
+    OpenAICompatibleEmbeddingProvider,
     SentenceTransformerEmbeddingProvider,
 )
 from .lexicon import LexiconRule, TaskLexicon, TriggerProfile
@@ -16,6 +18,8 @@ __all__ = [
     "ExtractionEvidence",
     "HashingTextEmbeddingProvider",
     "LexiconRule",
+    "OpenAICompatibleEmbeddingConfig",
+    "OpenAICompatibleEmbeddingProvider",
     "SentenceTransformerEmbeddingProvider",
     "TaskAnalysis",
     "TaskAnalyzer",

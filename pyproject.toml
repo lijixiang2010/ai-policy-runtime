@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 semantic = [
+    "huggingface-hub>=0.23",
     "sentence-transformers>=2.7",
 ]
 dev = [

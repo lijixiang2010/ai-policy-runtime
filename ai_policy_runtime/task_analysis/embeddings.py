@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 import re
 import unicodedata
 from collections import Counter
+from dataclasses import dataclass
 from typing import Protocol, Sequence
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 
 class EmbeddingProvider(Protocol):
@@ -14,6 +18,84 @@ class EmbeddingProvider(Protocol):
 
     def encode(self, texts: Sequence[str]) -> list[list[float]]:
         """Return one embedding vector per input text."""
+
+
+@dataclass(frozen=True)
+class OpenAICompatibleEmbeddingConfig:
+    """Configuration for an OpenAI-compatible embeddings endpoint."""
+
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "text-embedding-3-small"
+    api_key: str = ""
+    timeout_seconds: float = 30.0
+
+    @classmethod
+    def from_env(cls) -> "OpenAICompatibleEmbeddingConfig | None":
+        """Return config when the environment requests remote embeddings."""
+
+        provider = os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "").strip().lower()
+        base_url = os.environ.get("AI_POLICY_EMBEDDING_BASE_URL", "").strip()
+        api_key = (
+            os.environ.get("AI_POLICY_EMBEDDING_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+            or ""
+        ).strip()
+        if provider not in {"openai", "openai-compatible"} and not (base_url or api_key):
+            return None
+        return cls(
+            base_url=base_url or cls.base_url,
+            model=os.environ.get("AI_POLICY_EMBEDDING_MODEL", cls.model).strip() or cls.model,
+            api_key=api_key,
+            timeout_seconds=_float_env("AI_POLICY_EMBEDDING_TIMEOUT", cls.timeout_seconds),
+        )
+
+
+class OpenAICompatibleEmbeddingProvider:
+    """Embedding provider backed by an OpenAI-compatible /v1/embeddings API."""
+
+    def __init__(self, config: OpenAICompatibleEmbeddingConfig) -> None:
+        self.config = config
+        self.model_name = f"openai-compatible:{config.base_url}:{config.model}"
+
+    @classmethod
+    def from_env(cls) -> "OpenAICompatibleEmbeddingProvider | None":
+        """Create a provider from environment variables when configured."""
+
+        config = OpenAICompatibleEmbeddingConfig.from_env()
+        return cls(config) if config else None
+
+    def encode(self, texts: Sequence[str]) -> list[list[float]]:
+        if not texts:
+            return []
+
+        payload = {
+            "model": self.config.model,
+            "input": list(texts),
+        }
+        request = Request(
+            _embeddings_url(self.config.base_url),
+            data=json.dumps(payload).encode("utf-8"),
+            headers=self._headers(),
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=self.config.timeout_seconds) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", "replace")
+            raise RuntimeError(
+                f"Embedding endpoint returned HTTP {exc.code}: {body}"
+            ) from exc
+        except (OSError, URLError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Embedding endpoint request failed: {exc}") from exc
+
+        return _extract_openai_embeddings(data, expected_count=len(texts))
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.config.api_key:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        return headers
 
 
 class HashingTextEmbeddingProvider:
@@ -154,3 +236,44 @@ def _normalize(vector: list[float]) -> list[float]:
     if not norm:
         return vector
     return [value / norm for value in vector]
+
+
+def _embeddings_url(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    return base if base.endswith("/embeddings") else f"{base}/embeddings"
+
+
+def _extract_openai_embeddings(data: object, *, expected_count: int) -> list[list[float]]:
+    if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+        raise RuntimeError("Embedding endpoint response must contain a data list.")
+
+    items = sorted(
+        data["data"],
+        key=lambda item: item.get("index", 0) if isinstance(item, dict) else 0,
+    )
+    vectors = [_embedding_from_item(item) for item in items]
+    if len(vectors) != expected_count:
+        raise RuntimeError(
+            "Embedding endpoint returned "
+            f"{len(vectors)} vectors for {expected_count} inputs."
+        )
+    return vectors
+
+
+def _embedding_from_item(item: object) -> list[float]:
+    if not isinstance(item, dict) or not isinstance(item.get("embedding"), list):
+        raise RuntimeError("Embedding endpoint response item is missing embedding.")
+    try:
+        return [float(value) for value in item["embedding"]]
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Embedding vector contains a non-numeric value.") from exc
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default

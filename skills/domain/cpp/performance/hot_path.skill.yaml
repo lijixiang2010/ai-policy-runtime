@@ -39,12 +39,10 @@ task_analysis:
     - field: context.hot_path
       value: true
       match:
-        - 低延迟
         - low latency
         - low-latency
         - hot path
         - hot_path
-        - 性能关键
         - performance critical
         - performance-critical
       set:
@@ -59,9 +57,6 @@ task_analysis:
         - tail latency must remain stable
         - avoid allocation blocking or unbounded work in the critical path
         - code runs in a main processing loop with strict latency constraints
-        - 延迟敏感的关键路径
-        - 尾延迟需要稳定
-        - 主循环里不能分配内存或阻塞
       confidence: 0.9
 
   dependencies:

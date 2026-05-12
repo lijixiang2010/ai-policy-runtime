@@ -48,8 +48,6 @@ task_analysis:
     - cpp
     - cxx
     - modern c++
-    - 现代 c++
-    - 现代cpp
   domain_semantics:
     - modern C++ systems programming task
     - C++ source code or header implementation
@@ -60,22 +58,17 @@ task_analysis:
       - write
       - implement
       - generate
-      - 实现
-      - 写
-      - 生成
-      - 帮我写
     review_code:
       - review
       - inspect
-      - 审查
-      - 检查
-      - 评审
     refactor_code:
       - refactor
-      - 重构
-      - 整理代码
   trigger_semantics:
     write_code:
+      - write code
+      - write a C++ implementation
+      - write a data structure implementation
+      - write a queue implementation
       - create an implementation
       - generate source code for the requested component
       - build a working code example
@@ -100,8 +93,6 @@ task_analysis:
       value: 17
       match:
         - modern c++
-        - 现代 c++
-        - 现代cpp
       set:
         standard: 17
         selected_standard_is_known: false
@@ -113,15 +104,15 @@ task_analysis:
       value: queue
       match:
         - queue
-        - 队列
         - ring buffer
-        - 环形缓冲
       set:
         data_structure: queue
       tags:
         - data_structure
       semantic_match:
         - FIFO data structure
+        - queue data structure
+        - queue implementation
         - producer consumer data channel
         - message passing buffer
       confidence: 0.78

@@ -8,6 +8,7 @@ from typing import Any
 from ai_policy_runtime.application.runtime import PolicyRuntime
 from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.infrastructure.schema_loader import SchemaLoader
+from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_file
 
 
@@ -43,6 +44,19 @@ def main() -> None:
     cache = subparsers.add_parser("cache", help="Inspect or clear runtime caches.")
     cache.add_argument("action", choices=("list", "clear"))
     cache.add_argument("--root", default=".", help="Project root.")
+
+    model = subparsers.add_parser("model", help="Inspect or install local embedding models.")
+    model.add_argument("action", choices=("list", "install"))
+    model.add_argument(
+        "--policy-root",
+        default=".",
+        help="Policy asset root where models/ should be inspected or installed.",
+    )
+    model.add_argument(
+        "--model",
+        default="default",
+        help="Known model key, repo id, or directory name. Defaults to the multilingual model.",
+    )
 
     verify = subparsers.add_parser("verify", help="Verify files against current Effective Rules.")
     verify.add_argument("--root", default=".", help="Project root.")
@@ -119,6 +133,7 @@ class CommandDispatcher:
             "schema": self._schema,
             "inspect": self._inspect,
             "cache": self._cache,
+            "model": self._model,
             "verify": self._verify,
             "repair-plan": self._repair_plan,
             "inject": self._inject,
@@ -174,6 +189,12 @@ class CommandDispatcher:
             for item in cache_dir.glob("*.json"):
                 item.unlink()
         return {"cache": str(cache_dir), "cleared": True}, 0
+
+    def _model(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+        manager = LocalModelManager(args.policy_root)
+        if args.action == "list":
+            return {"models": list(manager.list())}, 0
+        return {"model": manager.install(args.model)}, 0
 
     def _verify(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         violations = _runtime_from_args(args).verify(Path(args.target))

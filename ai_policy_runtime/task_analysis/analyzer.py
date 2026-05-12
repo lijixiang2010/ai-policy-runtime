@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from .deterministic_extractor import DeterministicTaskExtractor
 from .embeddings import (
     EmbeddingProvider,
     HashingTextEmbeddingProvider,
+    NullEmbeddingProvider,
+    OpenAICompatibleEmbeddingProvider,
     SentenceTransformerEmbeddingProvider,
 )
 from .lexicon import TaskLexicon
@@ -21,7 +24,7 @@ class TaskAnalyzer:
         *,
         deterministic: DeterministicTaskExtractor | None = None,
     ) -> None:
-        self._deterministic = deterministic or DeterministicTaskExtractor()
+        self._deterministic = deterministic or build_extractor("skills")
 
     @classmethod
     def from_skills_dir(
@@ -69,8 +72,42 @@ def build_extractor(
 
 
 def _default_embedding_provider() -> EmbeddingProvider:
-    """Return the default dependency-free semantic provider."""
+    """Return the best configured embedding provider.
 
+    Selection order keeps the product lightweight by default while preserving
+    offline options:
+
+    1. OpenAI-compatible /v1/embeddings when configured.
+    2. Explicit provider choices from AI_POLICY_EMBEDDING_PROVIDER.
+    3. Local bundled sentence-transformers model when available.
+    4. Dependency-free hashing fallback.
+    """
+
+    provider = _configured_provider_name()
+    if provider in {"disabled", "none", "null"}:
+        return NullEmbeddingProvider()
+    if provider in {"hashing", "lightweight"}:
+        return HashingTextEmbeddingProvider()
+    if provider in {"openai", "openai-compatible"}:
+        remote = OpenAICompatibleEmbeddingProvider.from_env()
+        if remote is None:
+            raise RuntimeError(
+                "AI_POLICY_EMBEDDING_PROVIDER requests openai-compatible, "
+                "but no endpoint configuration was found."
+            )
+        return remote
+    if remote := OpenAICompatibleEmbeddingProvider.from_env():
+        return remote
+
+    local_model = Path("models") / "paraphrase-multilingual-MiniLM-L12-v2"
+    if provider in {"local", "sentence-transformers"}:
+        model_name = str(local_model) if local_model.exists() else None
+        return SentenceTransformerEmbeddingProvider(model_name)
+    if local_model.exists():
+        try:
+            return SentenceTransformerEmbeddingProvider(str(local_model))
+        except RuntimeError:
+            pass
     return HashingTextEmbeddingProvider()
 
 
@@ -81,3 +118,12 @@ def optional_sentence_transformer_provider() -> EmbeddingProvider | None:
         return SentenceTransformerEmbeddingProvider()
     except RuntimeError:
         return None
+
+
+def _configured_provider_name() -> str:
+    return (
+        os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "")
+        .strip()
+        .lower()
+        .replace("_", "-")
+    )
