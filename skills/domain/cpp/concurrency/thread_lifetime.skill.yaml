@@ -1,0 +1,180 @@
+# Skill: C++ Thread Lifetime
+# File: skills/domain/cpp/concurrency/thread_lifetime.skill.yaml
+
+skill:
+  id: cpp.concurrency.thread_lifetime
+  name: C++ Thread Lifetime
+  version: 1.0.0
+  status: stable
+  description: >-
+    Thread lifetime skill for owned threads, joining, detaching, and C++20 jthread
+    guidance.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 88
+
+  tags:
+    - cpp
+    - concurrency
+    - lifetime
+    - cpp20
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - modernize_code
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+
+  dependencies:
+    - cpp.concurrency.data_race_safety
+    - cpp.safety.ownership_and_lifetime
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_owned_thread_lifetime
+      when_text_matches:
+        - thread
+        - std::thread
+        - jthread
+        - join
+        - detach
+      set:
+        concurrent: true
+        creates_owned_thread: true
+      tags:
+        - concurrency
+      semantic_match:
+        - scope owns a running thread
+        - join or detach thread safely
+        - prefer jthread for owned thread lifetime
+      confidence: 0.84
+
+sources:
+  - cpp_core_guidelines:CP.23
+  - cpp_core_guidelines:CP.25
+  - cpp_core_guidelines:CP.26
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.thread.no_unmanaged_thread_lifetime
+      title: Ensure owned std::thread is joined or detached safely
+      when: language == "cpp" and creates_owned_thread == true
+      must: >-
+        Ensure every owned std::thread is joined or safely detached before destruction.
+      target: thread_lifetime
+      action: require
+      rationale: >-
+        Destroying a joinable std::thread terminates the program and unmanaged
+        threads can outlive required state.
+
+  soft:
+    - id: cpp.thread.make_ownership_explicit
+      title: Make thread ownership explicit
+      when: language == "cpp" and creates_owned_thread == true
+      should: >-
+        Make thread ownership and shutdown responsibility explicit.
+      target: thread_lifetime
+      action: recommend
+      rationale: >-
+        The code should show which object or scope is responsible for stopping
+        and joining a thread.
+
+    - id: cpp.thread.prefer_jthread_cpp20
+      title: Prefer std::jthread in C++20 when the current scope owns the thread
+      when: language == "cpp" and standard >= 20 and creates_owned_thread == true
+      should: >-
+        Prefer std::jthread for owned thread lifetime in C++20 when cooperative
+        cancellation or scoped joining is useful.
+      target: thread_lifetime
+      action: recommend
+      rationale: >-
+        std::jthread joins automatically and supports cooperative cancellation.
+      require:
+        - Do not recommend std::jthread for C++17 tasks unless a project-approved
+          compatibility abstraction exists.
+
+    - id: cpp.thread.avoid_detached_threads
+      title: Avoid detached threads unless justified
+      when: language == "cpp" and creates_owned_thread == true
+      should_not: >-
+        Avoid detached threads unless the lifetime, cancellation, and ownership
+        model are explicitly justified.
+      target: thread_lifetime
+      action: discourage
+      rationale: >-
+        Detached threads often obscure ownership, shutdown ordering, and lifetime
+        dependencies.
+      unless: detached_thread_required == true
+      require:
+        - If a detached thread is used, explain shutdown, cancellation, and lifetime
+          guarantees.
+        - Do not let detached work reference stack objects or other short-lived
+          state.
+
+  preference:
+    - id: cpp.thread.preference_scoped_thread_owner
+      title: Prefer scoped thread ownership
+      when: language == "cpp" and creates_owned_thread == true
+      prefer: scoped_thread_owner
+      over:
+        - detached_thread
+      target: thread_lifetime
+      action: prefer
+
+exceptions:
+  - id: cpp.thread.exception_detached_background_task
+    when: detached_thread_required == true
+    allow:
+      - detached_thread
+    require:
+      - Explain shutdown and lifetime guarantees.
+      - Avoid references to stack or short-lived objects.
+
+verification:
+  llm_self_check:
+    - id: cpp.concurrency.thread_lifetime.verify.thread_lifetime_review
+      type: llm_self_check
+      applies_to:
+        - thread_lifetime
+      severity: advisory
+      prompt: >-
+        Review thread ownership, joining, detaching, and cancellation responsibilities.
+
+    - id: cpp.concurrency.thread_lifetime.verify.exception_justification_review
+      type: llm_self_check
+      applies_to:
+        - thread_lifetime
+      severity: advisory
+      prompt: >-
+        Review thread ownership, joining, detaching, and cancellation responsibilities.
+
+effective_rule_examples:
+  owned_thread:
+    task_context:
+      language: cpp
+      standard: 20
+      creates_owned_thread: true
+    effective_rules:
+      soft:
+        - Prefer std::jthread for owned thread lifetime.
+
+authoring_notes:
+  - Thread lifetime combines ownership and concurrency semantics; keep both active.

@@ -1,0 +1,23 @@
+kind: pack
+api_version: policy.skill/v1
+
+pack:
+  id: generic.production_refinement
+  name: Generic Production Refinement
+  version: 1.0.0
+  description: >-
+    Language-independent refinement pack for turning working code into clearer,
+    more maintainable, production-quality code.
+
+includes:
+  - generic.code_quality.complexity_reduction
+  - generic.refactoring.component_grouping
+  - generic.refactoring.duplication_extraction
+  - generic.refactoring.parameterized_abstraction
+  - generic.code_quality.expressive_implementation
+  - generic.code_quality.api_usability
+  - generic.architecture.hierarchy_cleanup
+  - generic.code_quality.implementation_polish
+
+excludes: []
+overrides: []

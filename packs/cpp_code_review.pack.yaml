@@ -1,0 +1,26 @@
+kind: pack
+api_version: policy.skill/v1
+pack:
+  id: cpp.code_review
+  name: C++ Code Review
+  version: 1.0.0
+  description: Review-focused C++ policy pack emphasizing safety, API contracts, and structure.
+
+includes:
+  - cpp.core.baseline
+  - cpp.safety.undefined_behavior
+  - cpp.safety.ownership_and_lifetime
+  - cpp.safety.bounds_safety
+  - cpp.safety.type_safety
+  - cpp.resource_management.raii
+  - cpp.api_design.interface_intent
+  - cpp.api_design.parameter_passing
+  - cpp.api_design.ownership_in_interfaces
+  - cpp.error_handling.error_model
+  - cpp.concurrency.data_race_safety
+  - cpp.concurrency.thread_lifetime
+  - cpp.source_structure.source_file_organization
+  - cpp.standard.standard_availability
+
+excludes: []
+overrides: []

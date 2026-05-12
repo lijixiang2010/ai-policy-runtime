@@ -1,0 +1,11 @@
+task: Design a modern C++ library API with explicit ownership and read-only parameters.
+packs:
+  - cpp.library_api_design
+expected:
+  activates:
+    - cpp.api_design.interface_intent
+    - cpp.api_design.parameter_passing
+    - cpp.api_design.ownership_in_interfaces
+  includes:
+    - explicit ownership transfer guidance
+    - parameter passing guidance

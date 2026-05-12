@@ -1,0 +1,141 @@
+# Skill: Generic API Usability
+# File: skills/generic/code_quality/api_usability.skill.yaml
+
+skill:
+  id: generic.code_quality.api_usability
+  name: Generic API Usability
+  version: 1.0.0
+  status: stable
+  description: >-
+    Reduces common-case user burden by preferring simple API flows, reasonable
+    defaults, and clear initialization paths.
+
+  level: domain
+  domain: generic_code
+  category: code_quality
+  priority: 84
+
+  tags:
+    - generic
+    - code-quality
+    - usability
+    - api-design
+
+  capabilities:
+    - api_design
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      artifact_type: code
+    triggers:
+      - design_api
+      - refactor_code
+      - improve_code_quality
+      - polish_implementation
+
+  dependencies:
+    - generic.code_quality.complexity_reduction
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_api_usability_refinement
+      when_text_matches:
+        - common case
+        - reasonable defaults
+        - API usability
+        - minimize user steps
+        - reduce caller burden
+        - simple setup
+        - initialization helper
+        - smart defaults
+        - ergonomic API
+        - easy common path
+      set:
+        user_facing_api: true
+        artifact_type: code
+        refinement_requested: true
+      tags:
+        - usability
+        - api-design
+      semantic_match:
+        - minimize setup and steps for common API usage
+        - provide reasonable defaults without hiding advanced control
+      confidence: 0.84
+
+rules:
+  soft:
+    - id: generic.api.minimize_user_steps
+      title: Minimize common-case user steps
+      when: artifact_type == "code" and user_facing_api == true
+      should: >-
+        Minimize the number of steps required for users or callers to accomplish
+        the common case.
+      target: api_usability
+      action: recommend
+      rationale: >-
+        A good API reduces user burden by making the common path simple and explicit.
+
+    - id: generic.api.provide_reasonable_defaults
+      title: Provide reasonable defaults and initialization
+      when: artifact_type == "code" and user_facing_api == true
+      should: >-
+        Provide reasonable defaults, initialization helpers, or higher-level entry
+        points when they reduce setup without removing advanced control.
+      target: api_usability
+      action: recommend
+      rationale: >-
+        Defaults should make correct usage easy while still allowing explicit configuration.
+
+    - id: generic.api.hide_incidental_wiring
+      title: Hide incidental setup and wiring
+      when: artifact_type == "code" and user_facing_api == true
+      should: >-
+        Hide incidental setup, wiring, and sequencing behind clear operations when
+        those details are not part of the user's real task.
+      target: api_usability
+      action: recommend
+      rationale: >-
+        Users should spend attention on meaningful choices, not internal setup order.
+
+  preference:
+    - id: generic.api.preference_simple_common_case
+      title: Prefer simple common-case usage over exposed internal steps
+      when: artifact_type == "code"
+      prefer: simple_common_case_usage
+      over:
+        - exposed_internal_steps
+      target: api_usability
+      action: prefer
+
+exceptions:
+  - id: generic.api.exception_low_level_or_expert_api
+    when: user_requested_minimal_code == true or abstraction_would_increase_complexity == true
+    allow:
+      - explicit_setup_steps
+    require:
+      - Keep the required setup order documented or encoded.
+      - Do not make the common case harder without a clear reason.
+
+verification:
+  llm_self_check:
+    - id: generic.api.review_common_case
+      type: llm_self_check
+      applies_to:
+        - api_usability
+      severity: advisory
+      prompt: >-
+        Check whether the API minimizes common-case steps, provides reasonable defaults,
+        and keeps advanced control available when needed.
+
+effective_rule_examples:
+  user_facing_api:
+    task_context:
+      artifact_type: code
+      user_facing_api: true
+    effective_rules:
+      soft:
+        - Minimize the number of steps required for users or callers to accomplish the common case.

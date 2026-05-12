@@ -1,0 +1,204 @@
+# Skill: C++ Ownership In Interfaces
+# File: skills/domain/cpp/api_design/ownership_in_interfaces.skill.yaml
+
+skill:
+  id: cpp.api_design.ownership_in_interfaces
+  name: C++ Ownership In Interfaces
+  version: 1.0.0
+  status: stable
+  description: >-
+    Interface ownership policy for unique ownership, shared ownership, borrowing,
+    and nullability.
+
+  level: domain
+  domain: cpp
+  category: api_design
+  priority: 86
+
+  tags:
+    - cpp
+    - api-design
+    - ownership
+    - lifetime
+    - core-guidelines
+
+  capabilities:
+    - api_design
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: cpp
+      designing_api: true
+    triggers:
+      - design_api
+      - write_code
+      - review_code
+      - refactor_code
+
+  dependencies:
+    - cpp.safety.ownership_and_lifetime
+    - cpp.api_design.interface_intent
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_ownership_in_interface
+      when_text_matches:
+        - unique_ptr
+        - shared_ptr
+        - ownership transfer
+        - nullable
+        - borrow
+      set:
+        designing_api: true
+        ownership_in_interface: true
+      tags:
+        - ownership
+        - api-design
+      semantic_match:
+        - encode ownership transfer in the function signature
+        - document nullability or use a type that encodes it
+      confidence: 0.82
+
+sources:
+  - cpp_core_guidelines:F.7
+  - cpp_core_guidelines:R.30
+  - cpp_core_guidelines:R.32
+  - cpp_core_guidelines:R.34
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.api.owner.make_transfer_explicit
+      title: Make ownership transfer explicit
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Make ownership transfer explicit in the function signature or return type.
+      target: ownership_transfer
+      action: recommend
+      rationale: >-
+        Callers and callees should not infer ownership from naming or comments.
+
+    - id: cpp.api.owner.unique_for_exclusive_transfer
+      title: Use unique_ptr for exclusive ownership transfer
+      when: language == "cpp" and ownership_required == true
+      should: >-
+        Use std::unique_ptr when an interface transfers exclusive ownership.
+      target: ownership_transfer
+      action: recommend
+      rationale: unique_ptr expresses single ownership transfer directly.
+      unless: legacy_interface_required == true
+      require:
+        - If a legacy interface prevents std::unique_ptr, document the ownership
+          transfer contract explicitly.
+        - Avoid raw owning pointers outside the legacy boundary.
+
+    - id: cpp.api.owner.shared_only_for_shared_ownership
+      title: Use shared_ptr only for shared ownership
+      when: language == "cpp"
+      should_not: >-
+        Do not use std::shared_ptr unless the interface genuinely shares ownership.
+      target: ownership
+      action: discourage
+      rationale: >-
+        shared_ptr should not be used merely for optionality or borrowing.
+
+    - id: cpp.api.owner.raw_for_non_owning_only
+      title: Use raw pointer or reference only for non-owning access
+      when: language == "cpp"
+      should: >-
+        Use raw pointers or references only for non-owning access, with nullability
+        made explicit when relevant.
+      target: ownership
+      action: recommend
+      rationale: Raw access should not imply ownership.
+      unless: legacy_interface_required == true
+      require:
+        - If legacy code requires a raw owning form, document ownership and cleanup
+          responsibility at the boundary.
+        - Prefer non-owning raw pointers or references only when ownership is
+          not transferred.
+
+    - id: cpp.api.owner.encode_nullability
+      title: Document or encode nullability
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Make nullable parameters and return values explicit through type choice,
+        naming, or documented contract.
+      target: interface_intent
+      action: recommend
+      rationale: >-
+        Optional pointer-like access must make null validity clear.
+
+  preference:
+    - id: cpp.api.owner.preference_unique_over_shared
+      title: Prefer exclusive ownership unless sharing is required
+      when: language == "cpp"
+      prefer: exclusive_ownership
+      over:
+        - shared_ownership
+      target: ownership
+      action: prefer
+
+exceptions:
+  - id: cpp.api.owner.exception_legacy_api
+    when: legacy_interface_required == true
+    allow:
+      - legacy_ownership_convention
+    require:
+      - Preserve legacy compatibility.
+      - Add wrapper documentation or adapter types where practical.
+
+verification:
+  static_checks:
+    - id: cpp.api_design.ownership_in_interfaces.verify.cppcoreguidelines_owning_memory
+      type: static_analysis
+      applies_to:
+        - interface_intent
+        - ownership
+        - ownership_transfer
+      severity: warning
+      check: cppcoreguidelines-owning-memory
+
+  llm_self_check:
+    - id: cpp.api_design.ownership_in_interfaces.verify.ownership_clarity_review
+      type: llm_self_check
+      applies_to:
+        - interface_intent
+        - ownership
+        - ownership_transfer
+      severity: advisory
+      prompt: >-
+        Check whether interface intent is expressed through types rather than
+        comments alone.
+
+    - id: cpp.api_design.ownership_in_interfaces.verify.interface_intent_review
+      type: llm_self_check
+      applies_to:
+        - interface_intent
+        - ownership
+        - ownership_transfer
+      severity: advisory
+      prompt: >-
+        Check whether interface intent is expressed through types rather than
+        comments alone.
+
+effective_rule_examples:
+  ownership_api:
+    task_context:
+      language: cpp
+      designing_api: true
+    effective_rules:
+      soft:
+        - Use unique_ptr only when exclusive ownership transfer is intended.
+
+authoring_notes:
+  - This skill handles ownership in signatures; lifetime safety remains enforced
+    by the safety skill.

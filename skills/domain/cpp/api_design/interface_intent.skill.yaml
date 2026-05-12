@@ -1,0 +1,182 @@
+# Skill: C++ Interface Intent
+# File: skills/domain/cpp/api_design/interface_intent.skill.yaml
+
+skill:
+  id: cpp.api_design.interface_intent
+  name: C++ Interface Intent
+  version: 1.0.0
+  status: stable
+  description: >-
+    API design skill for expressing ownership, borrowing, mutation, and domain
+    intent through C++ types.
+
+  level: domain
+  domain: cpp
+  category: api_design
+  priority: 82
+
+  tags:
+    - cpp
+    - api-design
+    - generation
+    - review
+    - core-guidelines
+
+  capabilities:
+    - api_design
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - design_api
+      - write_code
+      - review_code
+      - refactor_code
+
+  dependencies:
+    - cpp.safety.ownership_and_lifetime
+
+  incompatibilities: []
+
+task_analysis:
+  trigger_aliases:
+    design_api:
+      - api
+      - design api
+      - interface
+      - function signature
+
+  trigger_semantics:
+    design_api:
+      - design a C++ public interface
+      - choose function signatures and parameter types
+      - define API ownership and mutation intent
+
+  trigger_capabilities:
+    design_api:
+      - api_design
+      - code_generation
+
+  context_rules:
+    - id: detect_interface_design
+      when_text_matches:
+        - api
+        - interface
+        - signature
+        - parameter
+      set:
+        designing_api: true
+      tags:
+        - api-design
+      semantic_match:
+        - design function signatures
+        - express API intent through types
+      confidence: 0.78
+
+sources:
+  - cpp_core_guidelines:I.4
+  - cpp_core_guidelines:I.11
+  - cpp_core_guidelines:F.16
+  - cpp_core_guidelines:F.21
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.api.intent.express_with_types
+      title: Express interface intent through types
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Express interface ownership, borrowing, mutation, nullability, and domain
+        intent through C++ types.
+      target: interface_intent
+      action: recommend
+      rationale: >-
+        Callers should understand ownership, mutation, optionality, and lifetime
+        from the signature.
+
+    - id: cpp.api.intent.avoid_comment_only_contract
+      title: Avoid APIs that require lifetime or ownership inference from comments
+      when: language == "cpp" and designing_api == true
+      should_not: >-
+        Avoid APIs that require callers to infer lifetime or ownership semantics
+        only from comments.
+      target: api_design
+      action: discourage
+      rationale: >-
+        Comments are useful, but core API contracts should be encoded in types
+        when practical.
+
+    - id: cpp.api.intent.prefer_standard_view_value_types
+      title: Prefer standard view and value types when available
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Prefer standard view or value types when they accurately express the interface
+        contract.
+      target: interface_intent
+      action: recommend
+      rationale: >-
+        Standard vocabulary types are recognizable and reduce custom convention.
+      unless: abi_boundary == true
+      require:
+        - If ABI constraints prevent vocabulary types at the boundary, explain
+          the ABI requirement.
+        - Keep boundary-specific forms localized and convert to clearer internal
+          types when practical.
+
+  preference:
+    - id: cpp.api.intent.preference_explicit_semantics
+      title: Prefer explicit interface intent over implicit convention
+      when: language == "cpp" and designing_api == true
+      prefer: explicit_interface_intent
+      over:
+        - implicit_convention
+      target: api_design
+      action: prefer
+
+exceptions:
+  - id: cpp.api.intent.exception_stable_abi
+    when: abi_boundary == true
+    allow:
+      - legacy_signature
+    require:
+      - Keep ABI-shaped types at the boundary.
+      - Convert to clearer internal types where possible.
+
+verification:
+  llm_self_check:
+    - id: cpp.api_design.interface_intent.verify.interface_intent_review
+      type: llm_self_check
+      applies_to:
+        - api_design
+        - interface_intent
+      severity: advisory
+      prompt: Review interface intent review for this skill.
+
+    - id: cpp.api_design.interface_intent.verify.ownership_clarity_review
+      type: llm_self_check
+      applies_to:
+        - api_design
+        - interface_intent
+      severity: advisory
+      prompt: Review ownership clarity review for this skill.
+
+effective_rule_examples:
+  library_api:
+    task_context:
+      language: cpp
+      designing_api: true
+    effective_rules:
+      soft:
+        - Express ownership, borrowing, mutation, and lifetime intent through
+          types.
+
+authoring_notes:
+  - Use this skill to make API contracts visible before selecting specific standard-version
+    idioms.

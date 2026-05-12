@@ -1,0 +1,12 @@
+task: Review this C++ code for lifetime, ownership, RAII, and undefined behavior risks.
+packs:
+  - cpp.code_review
+expected:
+  activates:
+    - cpp.safety.ownership_and_lifetime
+    - cpp.resource_management.raii
+    - cpp.safety.undefined_behavior
+  verification:
+    - ownership clarity review
+    - dangling reference review
+    - undefined behavior review

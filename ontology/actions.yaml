@@ -1,0 +1,15 @@
+actions:
+  require:
+    description: Output must include or preserve the requested property.
+  forbid:
+    description: Output must not include the prohibited behavior.
+  recommend:
+    description: Prefer this design unless a valid exception applies.
+  discourage:
+    description: Avoid this choice unless justified by context.
+  prefer:
+    description: Rank one valid choice over another.
+  allow:
+    description: Permit an exception under explicit conditions.
+  constrain:
+    description: Restrict recommendations to a context or availability boundary.

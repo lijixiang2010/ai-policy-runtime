@@ -94,8 +94,8 @@ class PolicyRuntime:
         analysis = self._analyze(task_text, project)
         task = analysis.task
         registry = SkillRegistry.from_dirs(paths.skills, paths.packs)
-        active_skills, _ = registry.activate(task, pack_ids)
         effective_rules = PolicyEngine(registry).evaluate(task, pack_ids)
+        contributing_skills = _contributing_skill_ids(effective_rules)
         current, structured = write_current_state(
             root=paths.root,
             task=task,
@@ -105,7 +105,7 @@ class PolicyRuntime:
                 "packs": list(pack_ids),
                 "project_context": project.to_dict(),
                 "task_analysis": analysis.to_dict(),
-                "active_skills": [skill.skill_id for skill in active_skills],
+                "active_skills": contributing_skills,
                 "conflict_count": len(effective_rules.conflicts),
             },
             project_context=project.to_dict(),
@@ -219,3 +219,18 @@ class PolicyRuntime:
         if local_model.exists():
             return SentenceTransformerEmbeddingProvider(str(local_model))
         return optional_sentence_transformer_provider()
+
+
+def _contributing_skill_ids(effective_rules: EffectiveRules) -> list[str]:
+    sources = {
+        rule.source
+        for group in (
+            effective_rules.hard,
+            effective_rules.soft,
+            effective_rules.preferences,
+            effective_rules.exceptions,
+        )
+        for rule in group
+        if rule.source
+    }
+    return sorted(sources)

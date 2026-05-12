@@ -1,0 +1,24 @@
+warnings:
+  - id: compiler.unavailable_standard_features
+    type: compiler_check
+    targets: [standard_availability]
+    severity: error
+  - id: compiler.narrowing_conversion_warnings
+    type: compiler_check
+    targets: [type_safety]
+    severity: warning
+  - id: compiler.uninitialized_variables
+    type: compiler_check
+    targets: [undefined_behavior]
+    severity: error
+  - id: compiler.unreachable_code
+    type: compiler_check
+    targets: [error_propagation, source_structure]
+    severity: warning
+  - id: compiler.switch_enum_warnings
+    type: compiler_check
+    targets: [type_safety]
+    severity: warning
+
+notes:
+  - Compiler diagnostics depend on toolchain and warning configuration.

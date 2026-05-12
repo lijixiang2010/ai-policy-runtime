@@ -1,0 +1,44 @@
+checks:
+  - id: clang_tidy.modernize_use_nullptr
+    check: modernize-use-nullptr
+    type: static_analysis
+    targets: [type_safety]
+    severity: warning
+  - id: clang_tidy.modernize_use_override
+    check: modernize-use-override
+    type: static_analysis
+    targets: [api_design, source_structure]
+    severity: warning
+  - id: clang_tidy.cppcoreguidelines_owning_memory
+    check: cppcoreguidelines-owning-memory
+    type: static_analysis
+    targets: [ownership, resource_lifetime]
+    severity: error
+  - id: clang_tidy.cppcoreguidelines_pro_bounds_pointer_arithmetic
+    check: cppcoreguidelines-pro-bounds-pointer-arithmetic
+    type: static_analysis
+    targets: [bounds_safety]
+    severity: warning
+  - id: clang_tidy.cppcoreguidelines_pro_type_reinterpret_cast
+    check: cppcoreguidelines-pro-type-reinterpret-cast
+    type: static_analysis
+    targets: [type_safety, undefined_behavior]
+    severity: error
+  - id: clang_tidy.performance_unnecessary_copy_initialization
+    check: performance-unnecessary-copy-initialization
+    type: static_analysis
+    targets: [hot_path, allocation]
+    severity: warning
+  - id: clang_tidy.readability_identifier_naming
+    check: readability-identifier-naming
+    type: static_analysis
+    targets: [source_structure]
+    severity: note
+  - id: clang_tidy.readability_include_order
+    check: readability-include-order
+    type: static_analysis
+    targets: [source_structure]
+    severity: note
+
+notes:
+  - clang-tidy mappings are partial verification aids, not complete proofs.

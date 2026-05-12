@@ -1,0 +1,34 @@
+checks:
+  - id: llm.interface_intent_review
+    type: llm_self_check
+    targets: [interface_intent, api_design]
+    severity: warning
+    prompt: Review whether ownership, borrowing, mutation, and lifetime intent are clear from the API shape.
+  - id: llm.ownership_clarity_review
+    type: llm_self_check
+    targets: [ownership, ownership_transfer, resource_lifetime]
+    severity: warning
+    prompt: Check whether each owned resource has a clear owner and lifetime.
+  - id: llm.exception_justification_review
+    type: llm_self_check
+    targets: [hot_path, bounds_safety, type_safety]
+    severity: warning
+    prompt: Confirm that each lower-level or unsafe idiom has a specific context-based justification.
+  - id: llm.standard_version_idiom_review
+    type: llm_self_check
+    targets: [standard_availability, string_parameter, contiguous_range_parameter]
+    severity: warning
+    prompt: Verify that recommended standard facilities are available for the selected C++ standard.
+  - id: llm.hot_path_tradeoff_review
+    type: llm_self_check
+    targets: [hot_path, allocation]
+    severity: warning
+    prompt: Confirm that performance tradeoffs in hot paths do not weaken safety or defined behavior.
+  - id: human.api_boundary_review
+    type: human_review
+    targets: [api_design, ownership_transfer]
+    severity: note
+    prompt: Review ABI, C API, and legacy compatibility exceptions before accepting lower-level interface choices.
+
+notes:
+  - LLM and human review checks supplement deterministic and tool-based verification.

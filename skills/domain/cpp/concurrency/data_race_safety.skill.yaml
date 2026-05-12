@@ -1,0 +1,165 @@
+# Skill: C++ Data Race Safety
+# File: skills/domain/cpp/concurrency/data_race_safety.skill.yaml
+
+skill:
+  id: cpp.concurrency.data_race_safety
+  name: C++ Data Race Safety
+  version: 1.0.0
+  status: stable
+  description: >-
+    Concurrency skill for avoiding data races and making shared mutable state
+    explicit.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 94
+
+  tags:
+    - cpp
+    - concurrency
+    - safety
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+
+  dependencies:
+    - cpp.safety.undefined_behavior
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_concurrency_safety
+      when_text_matches:
+        - thread
+        - mutex
+        - concurrent
+        - shared state
+        - data race
+      set:
+        concurrent: true
+      tags:
+        - concurrency
+        - safety
+      semantic_match:
+        - multiple threads access shared mutable state
+        - avoid unsynchronized data races
+        - protect concurrent state
+      confidence: 0.84
+
+sources:
+  - cpp_core_guidelines:CP.1
+  - cpp_core_guidelines:CP.2
+  - cpp_core_guidelines:CP.3
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.concurrent.no_data_race
+      title: Avoid data races
+      when: language == "cpp" and concurrent == true
+      must_not: >-
+        Avoid data races in C++ code that accesses shared mutable state.
+      target: data_race
+      action: forbid
+      rationale: >-
+        A data race is undefined behavior and invalidates program reasoning.
+
+  soft:
+    - id: cpp.concurrent.make_shared_state_explicit
+      title: Make shared mutable state explicit
+      when: language == "cpp" and concurrent == true
+      should: >-
+        Make shared mutable state explicit and visible at the ownership or synchronization
+        boundary.
+      target: concurrency_safety
+      action: recommend
+      rationale: >-
+        Shared state should be easy to identify, guard, and review.
+
+    - id: cpp.concurrent.prefer_sync_or_messages
+      title: Prefer synchronization primitives or message passing
+      when: language == "cpp" and concurrent == true
+      should: >-
+        Prefer synchronization primitives or message passing when data is shared
+        across threads.
+      target: concurrency_safety
+      action: recommend
+      rationale: Threads need an explicit coordination model.
+
+    - id: cpp.concurrent.avoid_exposed_unsynchronized_state
+      title: Avoid exposing unsynchronized shared state
+      when: language == "cpp" and concurrent == true
+      should_not: >-
+        Avoid exposing shared mutable state without a synchronization strategy.
+      target: concurrency_safety
+      action: discourage
+      rationale: >-
+        Public unsynchronized mutable state makes correct use unlikely.
+
+  preference:
+    - id: cpp.concurrent.preference_isolated_state
+      title: Prefer isolated state over shared mutable state
+      when: language == "cpp" and concurrent == true
+      prefer: isolated_state_or_message_passing
+      over:
+        - shared_mutable_state
+      target: concurrency_safety
+      action: prefer
+
+verification:
+  sanitizers:
+    - id: cpp.concurrency.data_race_safety.verify.thread_sanitizer
+      type: sanitizer
+      applies_to:
+        - concurrency_safety
+        - data_race
+      severity: error
+      tool: thread_sanitizer
+
+  llm_self_check:
+    - id: cpp.concurrency.data_race_safety.verify.data_race_review
+      type: llm_self_check
+      applies_to:
+        - concurrency_safety
+        - data_race
+      severity: advisory
+      prompt: >-
+        Review shared mutable state, synchronization, and data-race risks.
+
+    - id: cpp.concurrency.data_race_safety.verify.shared_state_review
+      type: llm_self_check
+      applies_to:
+        - concurrency_safety
+        - data_race
+      severity: advisory
+      prompt: >-
+        Review shared mutable state, synchronization, and data-race risks.
+
+effective_rule_examples:
+  threaded_review:
+    task_context:
+      language: cpp
+      concurrent: true
+    effective_rules:
+      hard:
+        - Avoid data races.
+
+authoring_notes:
+  - Concurrency rules become active when task semantics mention threads or shared
+    state.

@@ -1,0 +1,238 @@
+# Skill: C++ Ownership And Lifetime Safety
+# File: skills/domain/cpp/safety/ownership_and_lifetime.skill.yaml
+
+skill:
+  id: cpp.safety.ownership_and_lifetime
+  name: C++ Ownership And Lifetime Safety
+  version: 1.0.0
+  status: stable
+  description: >-
+    Compressed ownership and lifetime policy for generated, reviewed, and refactored
+    C++.
+
+  level: domain
+  domain: cpp
+  category: safety
+  priority: 95
+
+  tags:
+    - cpp
+    - safety
+    - lifetime
+    - ownership
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - modernize_code
+
+  dependencies: []
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_ownership_required
+      when_text_matches:
+        - ownership
+        - owner
+        - lifetime
+        - resource owner
+      set:
+        ownership_required: true
+      tags:
+        - ownership
+        - lifetime
+        - safety
+      semantic_match:
+        - transfer ownership of a resource
+        - API takes ownership of a resource
+        - caller transfers ownership to callee
+      confidence: 0.84
+
+    - id: detect_lifetime_sensitive_task
+      when_text_matches:
+        - lifetime
+        - dangling
+        - borrowed lifetime
+      set:
+        lifetime_sensitive: true
+      tags:
+        - lifetime
+        - safety
+      semantic_match:
+        - make object lifetime explicit
+        - avoid dangling borrowed references
+      confidence: 0.84
+
+sources:
+  - cpp_core_guidelines:P.8
+  - cpp_core_guidelines:R.1
+  - cpp_core_guidelines:R.3
+  - cpp_core_guidelines:R.4
+  - cpp_core_guidelines:F.7
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.ownership.no_resource_leak
+      title: Do not leak owned resources
+      when: language == "cpp"
+      must_not: >-
+        Do not leak owned resources in generated, reviewed, or refactored C++
+        code.
+      target: ownership
+      action: forbid
+      rationale: >-
+        Owned resources must have a clear release path even when errors or exceptions
+        occur.
+
+    - id: cpp.lifetime.no_dangling_access
+      title: Do not create dangling references, pointers, iterators, or views
+      when: language == "cpp"
+      must_not: >-
+        Do not create dangling pointers, references, iterators, or views.
+      target: dangling_reference
+      action: forbid
+      rationale: >-
+        Borrowed access must not outlive the object or range it observes.
+
+    - id: cpp.lifetime.no_return_local_address
+      title: Do not return addresses or references to local objects
+      when: language == "cpp"
+      must_not: Do not return pointers or references to local objects.
+      target: resource_lifetime
+      action: forbid
+      rationale: >-
+        Returning a pointer, reference, iterator, or view to a local object creates
+        immediate lifetime risk.
+
+  soft:
+    - id: cpp.ownership.make_ownership_explicit
+      title: Make ownership explicit
+      when: language == "cpp"
+      should: >-
+        Make resource ownership explicit through types, names, or API boundaries.
+      target: ownership
+      action: recommend
+      rationale: >-
+        Code should distinguish ownership transfer, shared ownership, borrowing,
+        and optional access.
+
+    - id: cpp.lifetime.borrow_only_when_clear
+      title: Use borrowing and view types only when lifetime is clear
+      when: language == "cpp"
+      should: >-
+        Use borrowing and view types only when the observed lifetime is clear.
+      target: resource_lifetime
+      action: recommend
+      rationale: >-
+        Views such as string_view and span are valuable only when the observed
+        lifetime is obvious or encoded.
+      unless: hot_path == true
+      require:
+        - If a hot path uses lower-level lifetime management, state the lifetime
+          invariant explicitly.
+        - Do not weaken ownership clarity or create dangling views.
+
+    - id: cpp.ownership.use_owner_types_for_transfer
+      title: Use ownership types when ownership transfer is intended
+      when: language == "cpp" and ownership_required == true
+      should: >-
+        Use ownership types when an interface transfers or stores ownership.
+      target: ownership_transfer
+      action: recommend
+      rationale: >-
+        Ownership transfer should be expressed with values, containers, unique_ptr,
+        shared_ptr, or a domain owner type.
+      unless: hot_path == true
+      require:
+        - If ownership transfer uses a lower-level form, explain the lifetime
+          and cleanup contract.
+        - Keep the lower-level ownership form localized.
+
+  preference:
+    - id: cpp.ownership.preference_explicit_lifetime
+      title: Prefer explicit lifetime over implicit convention
+      when: language == "cpp"
+      prefer: explicit_lifetime_contract
+      over:
+        - comment_only_lifetime_convention
+      target: ownership
+      action: prefer
+      rationale: >-
+        The type system and API shape should carry lifetime intent whenever practical.
+
+exceptions:
+  - id: cpp.ownership.exception_hot_path_manual_control
+    when: hot_path == true
+    allow:
+      - manual_lifetime_control
+    require:
+      - Explain why the hot path requires manual lifetime control.
+      - Preserve explicit ownership and lifetime boundaries.
+      - Do not introduce undefined behavior or leaks.
+
+verification:
+  static_checks:
+    - id: cpp.safety.ownership_and_lifetime.verify.cppcoreguidelines_owning_memory
+      type: static_analysis
+      applies_to:
+        - dangling_reference
+        - ownership
+        - ownership_transfer
+      severity: warning
+      check: cppcoreguidelines-owning-memory
+
+  llm_self_check:
+    - id: cpp.safety.ownership_and_lifetime.verify.ownership_clarity_review
+      type: llm_self_check
+      applies_to:
+        - dangling_reference
+        - ownership
+        - ownership_transfer
+      severity: advisory
+      prompt: >-
+        Check whether pointers, references, iterators, and views can outlive what
+        they observe.
+
+    - id: cpp.safety.ownership_and_lifetime.verify.dangling_reference_review
+      type: llm_self_check
+      applies_to:
+        - dangling_reference
+        - ownership
+        - ownership_transfer
+      severity: advisory
+      prompt: >-
+        Check whether pointers, references, iterators, and views can outlive what
+        they observe.
+
+effective_rule_examples:
+  cpp_review_lifetime:
+    task_context:
+      language: cpp
+      task_type: review_code
+    effective_rules:
+      hard:
+        - Do not create dangling references, pointers, iterators, or views.
+      soft:
+        - Make ownership transfer and borrowed lifetimes explicit.
+
+authoring_notes:
+  - This skill compresses resource ownership and lifetime guidance into enforceable
+    AI execution rules.

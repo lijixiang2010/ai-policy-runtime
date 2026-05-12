@@ -1,23 +1,25 @@
+# Skill: C++ Hot Path Performance
+# File: skills/domain/cpp/performance/hot_path.skill.yaml
+
 skill:
   id: cpp.performance.hot_path
   name: C++ Hot Path Performance
   version: 1.0.0
   status: stable
-
-  description: >
-    Low-latency constraints for performance-critical C++ hot paths.
+  description: >-
+    Low-latency hot-path policy that permits performance-sensitive choices only
+    when safety is preserved.
 
   level: domain
   domain: cpp
   category: performance
   priority: 85
-  owner: core-policy
 
   tags:
     - cpp
     - performance
-    - hot-path
     - low-latency
+    - hot-path
 
   capabilities:
     - code_generation
@@ -28,26 +30,29 @@ skill:
     when:
       language: cpp
       hot_path: true
-
     triggers:
       - write_code
       - review_code
       - refactor_code
+      - design_api
+
+  dependencies:
+    - cpp.safety.undefined_behavior
+    - cpp.safety.ownership_and_lifetime
+
+  incompatibilities: []
 
 task_analysis:
   context_rules:
-    - field: context.hot_path
-      value: true
-      match:
+    - id: detect_hot_path
+      when_text_matches:
         - low latency
         - low-latency
         - hot path
-        - hot_path
         - performance critical
-        - performance-critical
       set:
-        performance_critical: true
         hot_path: true
+        performance_critical: true
       tags:
         - low_latency
         - hot_path
@@ -55,36 +60,176 @@ task_analysis:
       semantic_match:
         - latency-sensitive hot path
         - tail latency must remain stable
-        - avoid allocation blocking or unbounded work in the critical path
-        - code runs in a main processing loop with strict latency constraints
       confidence: 0.9
 
-  dependencies:
-    - cpp.core.baseline
-    - cpp.safety.ownership
+    - id: detect_matching_engine_scenario
+      when_text_matches:
+        - matching engine
+        - match engine
+        - order matching
+      set:
+        scenario: matching_engine
+        performance_critical: true
+        hot_path: true
+      tags:
+        - systems_programming
+        - trading
+        - low_latency
+      semantic_match:
+        - low latency matching engine
+        - order matching engine
+        - trading engine matching loop
+        - exchange core matching path
+      confidence: 0.84
 
-  incompatibilities: []
+    - id: detect_low_latency_queue_scenario
+      when_text_matches:
+        - low latency queue
+        - low-latency queue
+        - latency-sensitive queue
+      set:
+        scenario: low_latency_queue
+        data_structure: queue
+        performance_critical: true
+        hot_path: true
+      tags:
+        - data_structure
+        - low_latency
+      semantic_match:
+        - low latency queue
+        - latency-sensitive producer consumer queue
+        - queue for passing events in a trading hot path
+        - data channel with strict tail latency requirements
+      confidence: 0.84
+
+sources:
+  - cpp_core_guidelines:Per.1
+  - cpp_core_guidelines:Per.3
+  - cpp_core_guidelines:Per.15
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
 
 rules:
-  hard: []
   soft:
-    - id: avoid_heap_allocation_hot_path
-      when: hot_path == true
-      should_not: heap_allocation
-      target: allocation.heap
-      reason: Avoid heap allocation in hot paths.
-    - id: avoid_hidden_work_hot_path
-      when: hot_path == true
-      should_not: hidden_complexity
-      target: performance.hidden_work
-      reason: Avoid hidden allocations, locks, exceptions, or unbounded work in hot paths.
-  preference:
-    - id: prefer_performance_hot_path
-      when: hot_path == true
-      prefer:
-        higher: performance
-        lower: readability
-      target: decision.optimization
+    - id: cpp.hot_path.preserve_safety
+      title: In hot paths, preserve safety when choosing lower-level idioms
+      when: language == "cpp" and hot_path == true
+      should: >-
+        In hot paths, choose performance-sensitive idioms only when safety, ownership,
+        and lifetime clarity are preserved.
+      target: hot_path
+      action: recommend
+      rationale: >-
+        Hot-path code may optimize aggressively, but safety and defined behavior
+        remain mandatory.
+      require:
+        - Preserve safety, ownership clarity, lifetime clarity, and defined behavior.
+        - Justify lower-level idioms with measured or expected hot-path benefit.
 
-exceptions: []
-verification: []
+    - id: cpp.hot_path.minimize_allocation
+      title: Minimize unnecessary allocation in hot paths
+      when: language == "cpp" and hot_path == true
+      should_not: >-
+        Avoid unnecessary dynamic allocation, especially in hot paths or allocation-sensitive
+        code.
+      target: allocation
+      action: discourage
+      rationale: >-
+        Allocation can add latency variance and hidden synchronization.
+
+    - id: cpp.hot_path.avoid_unnecessary_copies
+      title: Avoid unnecessary copies in hot paths
+      when: language == "cpp" and hot_path == true
+      should_not: >-
+        Avoid unnecessary copies in hot paths unless the copy is intentional and
+        justified.
+      target: hot_path
+      action: discourage
+      rationale: >-
+        Copies in critical loops should be intentional and measured.
+
+    - id: cpp.hot_path.prefer_cache_friendly_layout
+      title: Prefer cache-friendly data layout when relevant
+      when: language == "cpp" and hot_path == true
+      should: >-
+        Prefer cache-friendly data layout when it is relevant to measured hot-path
+        performance.
+      target: hot_path
+      action: recommend
+      rationale: >-
+        Memory layout can dominate latency in performance-critical code.
+
+  preference:
+    - id: cpp.hot_path.preference_performance_when_safe
+      title: Prefer performance over readability only in safe hot paths
+      when: language == "cpp" and hot_path == true
+      prefer: performance
+      over:
+        - readability
+      target: hot_path
+      action: prefer
+      rationale: >-
+        Performance can outrank local readability only when safety and invariants
+        remain clear.
+      require:
+        - Performance may outrank readability only when safety and invariants
+          remain clear.
+        - Lower-level hot-path idioms require justification.
+
+exceptions:
+  - id: cpp.hot_path.exception_lower_level_idiom
+    when: hot_path == true
+    allow:
+      - lower_level_idiom_with_justification
+    require:
+      - Explain the measured or expected latency reason.
+      - State safety and lifetime invariants.
+      - Preserve defined behavior.
+
+verification:
+  static_checks:
+    - id: cpp.performance.hot_path.verify.performance_unnecessary_copy_initialization
+      type: static_analysis
+      applies_to:
+        - allocation
+        - hot_path
+      severity: warning
+      check: performance-unnecessary-copy-initialization
+
+  llm_self_check:
+    - id: cpp.performance.hot_path.verify.hot_path_tradeoff_review
+      type: llm_self_check
+      applies_to:
+        - allocation
+        - hot_path
+      severity: advisory
+      prompt: >-
+        Review whether allocation choices are justified by task context and measured
+        needs.
+
+    - id: cpp.performance.hot_path.verify.exception_justification_review
+      type: llm_self_check
+      applies_to:
+        - allocation
+        - hot_path
+      severity: advisory
+      prompt: >-
+        Review whether allocation choices are justified by task context and measured
+        needs.
+
+effective_rule_examples:
+  low_latency_queue:
+    task_context:
+      language: cpp
+      hot_path: true
+    effective_rules:
+      soft:
+        - Minimize unnecessary allocation and copies in hot paths.
+      preference:
+        - Prefer performance over readability only when safety is preserved.
+
+authoring_notes:
+  - This skill does not weaken safety skills; it only changes valid tradeoff ordering
+    in hot paths.

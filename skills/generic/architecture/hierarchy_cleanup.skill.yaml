@@ -1,0 +1,141 @@
+# Skill: Generic Hierarchy Cleanup
+# File: skills/generic/architecture/hierarchy_cleanup.skill.yaml
+
+skill:
+  id: generic.architecture.hierarchy_cleanup
+  name: Generic Hierarchy Cleanup
+  version: 1.0.0
+  status: stable
+  description: >-
+    Clarifies component hierarchy, dependency direction, and call chains while
+    discouraging cycles and unclear layering.
+
+  level: domain
+  domain: generic_code
+  category: architecture
+  priority: 79
+
+  tags:
+    - generic
+    - architecture
+    - refactoring
+    - code-quality
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      artifact_type: code
+    triggers:
+      - refactor_code
+      - improve_code_quality
+      - reduce_complexity
+      - design_api
+
+  dependencies:
+    - generic.code_quality.complexity_reduction
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_hierarchy_cleanup
+      when_text_matches:
+        - hierarchy
+        - layering
+        - dependency direction
+        - call chain
+        - circular dependency
+        - dependency cycle
+        - layered architecture
+        - unclear layers
+        - clean call chain
+      set:
+        unclear_hierarchy: true
+        artifact_type: code
+        refinement_requested: true
+      tags:
+        - architecture
+        - refactoring
+      semantic_match:
+        - clarify component hierarchy and dependency direction
+        - avoid circular dependencies and confusing call chains
+      confidence: 0.84
+
+rules:
+  soft:
+    - id: generic.hierarchy.clarify_layers
+      title: Clarify component hierarchy and layers
+      when: artifact_type == "code" and unclear_hierarchy == true
+      should: >-
+        Clarify component hierarchy so higher-level code depends on stable lower-level
+        services or data abstractions through clear interfaces.
+      target: hierarchy
+      action: recommend
+      rationale: >-
+        Clear layers make call chains easier to follow and reduce accidental coupling.
+
+    - id: generic.hierarchy.keep_dependency_direction_stable
+      title: Keep dependency direction stable
+      when: artifact_type == "code" and refinement_requested == true
+      should: >-
+        Keep dependency direction stable and avoid designs where low-level components
+        unexpectedly depend on high-level orchestration details.
+      target: dependency_direction
+      action: recommend
+      rationale: >-
+        Stable dependency direction makes components easier to test, reuse, and replace.
+
+    - id: generic.hierarchy.avoid_cycles
+      title: Avoid circular dependencies
+      when: artifact_type == "code"
+      should_not: >-
+        Avoid introducing circular dependencies between components or layers unless
+        a project constraint explicitly requires them.
+      target: dependency_direction
+      action: discourage
+      rationale: >-
+        Cycles make build order, initialization, testing, and reasoning harder.
+
+  preference:
+    - id: generic.hierarchy.preference_clear_call_chain
+      title: Prefer clear call chains over hidden coupling
+      when: artifact_type == "code"
+      prefer: clear_call_chain
+      over:
+        - hidden_cross_layer_coupling
+      target: hierarchy
+      action: prefer
+
+exceptions:
+  - id: generic.hierarchy.exception_framework_boundary
+    when: legacy_interface_required == true or abstraction_would_increase_complexity == true
+    allow:
+      - local_layer_violation
+    require:
+      - Explain the boundary or compatibility reason.
+      - Keep the violation localized and avoid spreading the dependency cycle.
+
+verification:
+  llm_self_check:
+    - id: generic.hierarchy.review_dependency_direction
+      type: llm_self_check
+      applies_to:
+        - hierarchy
+        - dependency_direction
+      severity: advisory
+      prompt: >-
+        Check whether component layers, dependency direction, and call chains are clear
+        and whether any cycle is justified and localized.
+
+effective_rule_examples:
+  hierarchy_refinement:
+    task_context:
+      artifact_type: code
+      unclear_hierarchy: true
+    effective_rules:
+      soft:
+        - Clarify component hierarchy and keep dependency direction stable.

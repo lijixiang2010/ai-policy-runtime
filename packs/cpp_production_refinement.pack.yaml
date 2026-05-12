@@ -1,0 +1,25 @@
+kind: pack
+api_version: policy.skill/v1
+
+pack:
+  id: cpp.production_refinement
+  name: C++ Production Refinement
+  version: 1.0.0
+  description: >-
+    C++ refinement pack combining generic production-quality rules with C++ safety,
+    API design, standard-version, and resource-management guidance.
+
+extends:
+  - generic.production_refinement
+  - cpp.safe_generation
+
+includes:
+  - cpp.standard.cpp17.best_practices
+  - cpp.standard.cpp20.best_practices
+  - cpp.api_design.parameter_passing
+  - cpp.api_design.ownership_in_interfaces
+  - cpp.source_structure.source_file_organization
+  - cpp.templates.generic_constraints
+
+excludes: []
+overrides: []

@@ -21,6 +21,7 @@ def evaluate_condition(expression: str | None, context: dict[str, Any]) -> bool:
 
 
 def _normalize(expression: str) -> str:
+    expression = " ".join(expression.split())
     expression = re.sub(r"\btrue\b", "True", expression, flags=re.IGNORECASE)
     expression = re.sub(r"\bfalse\b", "False", expression, flags=re.IGNORECASE)
     return expression
@@ -28,11 +29,10 @@ def _normalize(expression: str) -> str:
 
 def _eval_node(node: ast.AST, context: dict[str, Any]) -> Any:
     if isinstance(node, ast.BoolOp):
-        values = [_eval_node(value, context) for value in node.values]
         if isinstance(node.op, ast.And):
-            return all(values)
+            return all(_eval_node(value, context) for value in node.values)
         if isinstance(node.op, ast.Or):
-            return any(values)
+            return any(_eval_node(value, context) for value in node.values)
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return not bool(_eval_node(node.operand, context))
     if isinstance(node, ast.Compare):
@@ -46,7 +46,7 @@ def _eval_node(node: ast.AST, context: dict[str, Any]) -> Any:
     if isinstance(node, ast.Name):
         if node.id in context:
             return context[node.id]
-        raise ConditionError(f"Unknown condition identifier: {node.id}")
+        return False
     if isinstance(node, ast.Constant):
         return node.value
     if isinstance(node, ast.List):

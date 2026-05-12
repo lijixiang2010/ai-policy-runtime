@@ -1,0 +1,161 @@
+# Skill: C++ Error Model
+# File: skills/domain/cpp/error_handling/error_model.skill.yaml
+
+skill:
+  id: cpp.error_handling.error_model
+  name: C++ Error Model
+  version: 1.0.0
+  status: stable
+  description: >-
+    Error-handling policy for explicit propagation, recoverability, and consistent
+    failure models.
+
+  level: domain
+  domain: cpp
+  category: error_handling
+  priority: 76
+
+  tags:
+    - cpp
+    - safety
+    - error-handling
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+
+  dependencies: []
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_error_handling_required
+      when_text_matches:
+        - error handling
+        - exception
+        - expected
+        - error code
+      set:
+        error_handling_required: true
+      tags:
+        - safety
+      semantic_match:
+        - choose how errors are propagated
+        - design recoverable error handling
+      confidence: 0.78
+
+sources:
+  - cpp_core_guidelines:E.2
+  - cpp_core_guidelines:E.3
+  - cpp_core_guidelines:E.6
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.error.use_consistent_error_model
+      title: Use a consistent error model
+      when: language == "cpp"
+      should: >-
+        Use a consistent error model for recoverable failures across the API or
+        component.
+      target: error_propagation
+      action: recommend
+      rationale: >-
+        Mixing exceptions, status codes, and optional results without intent creates
+        unclear failure handling.
+
+    - id: cpp.error.make_recovery_visible
+      title: Make recoverable failure visible to callers
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Represent recoverable failure visibly through exceptions, result types,
+        or error codes according to project policy.
+      target: error_propagation
+      action: recommend
+      rationale: >-
+        APIs should make it clear whether failure is exceptional, expected, or
+        impossible.
+      unless: abi_boundary == true or exceptions_disabled == true
+      require:
+        - If ABI policy or disabled exceptions require error codes, make success
+          and failure states explicit.
+        - Keep cleanup exception-safe regardless of the error propagation model.
+
+    - id: cpp.error.keep_cleanup_exception_safe
+      title: Keep cleanup exception-safe
+      when: language == "cpp"
+      should: >-
+        Ensure cleanup remains exception-safe and does not rely on fragile manual
+        release paths.
+      target: resource_lifetime
+      action: recommend
+      rationale: >-
+        Error paths must preserve invariants and resource ownership.
+
+  preference:
+    - id: cpp.error.preference_local_recovery
+      title: Prefer local recovery when the caller can act
+      when: language == "cpp"
+      prefer: explicit_recoverable_result
+      over:
+        - hidden_global_error_state
+      target: error_propagation
+      action: prefer
+
+exceptions:
+  - id: cpp.error.exception_abi_no_exceptions
+    when: abi_boundary == true or exceptions_disabled == true
+    allow:
+      - status_code_error_model
+    require:
+      - State why exceptions are unavailable or inappropriate.
+      - Keep error propagation explicit.
+
+verification:
+  compiler_warnings:
+    - id: cpp.error_handling.error_model.verify.unreachable_code
+      type: compiler_check
+      applies_to:
+        - error_propagation
+        - resource_lifetime
+      severity: warning
+      check: unreachable code
+
+  llm_self_check:
+    - id: cpp.error_handling.error_model.verify.error_model_review
+      type: llm_self_check
+      applies_to:
+        - error_propagation
+        - resource_lifetime
+      severity: advisory
+      prompt: >-
+        Review whether recoverable failures are represented consistently and visibly.
+
+effective_rule_examples:
+  api_error_model:
+    task_context:
+      language: cpp
+      designing_api: true
+    effective_rules:
+      soft:
+        - Make recoverable failure visible to callers.
+
+authoring_notes:
+  - This skill does not mandate exceptions; it mandates an explicit and consistent
+    failure model.

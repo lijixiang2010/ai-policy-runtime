@@ -104,7 +104,7 @@ class SkillDocument:
             "domains": [meta["domain"]] if meta.get("domain") else (),
             "triggers": activation.get("triggers", ()),
             "capabilities": meta.get("capabilities", ()),
-            "tags": (),
+            "tags": meta.get("tags", ()),
         }
 
     def _normalized_context(
@@ -201,7 +201,7 @@ def _normalize_rule_data(
                 if isinstance(over, list):
                     over = " > ".join(str(item) for item in over)
                 value = f"{value} > {over}"
-            data["action"] = action
+            data.setdefault("action", action)
             data.setdefault("value", value)
             break
 

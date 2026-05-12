@@ -1,26 +1,14 @@
-# C++17 Standard-Aware Best Practices Skill
-#
-# File:
-#   skills/domain/cpp/standard/cpp17_best_practices.skill.yaml
-#
-# Purpose:
-#   Provide C++17-specific best-practice guidance for AI coding agents.
-#   The Policy Runtime should activate this skill when the current task context
-#   uses C++17 or a newer standard, unless a newer standard skill supersedes a
-#   specific rule with a more precise alternative.
+# Skill: C++17 Best Practices
+# File: skills/domain/cpp/standard/cpp17_best_practices.skill.yaml
 
 skill:
   id: cpp.standard.cpp17.best_practices
   name: C++17 Best Practices
   version: 1.0.0
   status: stable
-
-  description: >
-    Provides C++17 best-practice rules for API design, resource handling,
-    optional values, closed alternatives, path operations, and scoped control
-    flow. The rules are mostly SOFT recommendations because valid exceptions
-    exist for ABI boundaries, C API boundaries, legacy interfaces, and
-    performance-sensitive code.
+  description: >-
+    C++17 idiom skill for vocabulary types, filesystem, optional values, closed
+    alternatives, and scoped control flow.
 
   level: domain
   domain: cpp
@@ -30,37 +18,48 @@ skill:
   tags:
     - cpp
     - cpp17
-    - best-practices
-    - api-design
     - modernization
     - standard-library
+    - api-design
 
   capabilities:
     - code_generation
     - code_review
-    - refactor
+    - refactor_code
     - api_design
     - modernization
 
   activation:
     when:
       language: cpp
-      standard: ">=17"
-
+      standard: '>=17'
     triggers:
       - write_code
-      - refactor_code
       - review_code
+      - refactor_code
       - design_api
       - modernize_code
+
+  dependencies:
+    - cpp.standard.standard_availability
+
+  incompatibilities: []
 
 task_analysis:
   trigger_aliases:
     design_api:
       - api
       - design api
+      - interface
     modernize_code:
       - modernize
+
+  trigger_semantics:
+    design_api:
+      - design a public C++ API
+      - choose parameter types for a function signature
+    modernize_code:
+      - modernize C++ code to standard library vocabulary types
 
   trigger_capabilities:
     design_api:
@@ -68,13 +67,12 @@ task_analysis:
       - code_generation
     modernize_code:
       - modernization
-      - refactor
+      - refactor_code
       - code_generation
 
   context_rules:
-    - field: context.standard
-      value: 17
-      match:
+    - id: detect_cpp17_standard
+      when_text_matches:
         - c++17
         - cpp17
         - cxx17
@@ -85,257 +83,147 @@ task_analysis:
         - cpp17
       confidence: 0.95
 
-    - field: context.designing_api
-      value: true
-      match:
-        - api
-        - parameter
+    - id: detect_cpp17_read_only_string_parameter
+      when_text_matches:
+        - read-only string
+        - string parameter
+        - string input
       set:
         designing_api: true
+        parameter_kind: read_only_string
+        ownership_required: false
+      tags:
+        - api-design
       semantic_match:
-        - design a public interface
-        - choose parameter types for an API
-        - define function signatures
-      confidence: 0.72
+        - function accepts a read-only string-like parameter
+      confidence: 0.84
 
-  dependencies:
-    - cpp.core.baseline
-    - cpp.safety.ownership
-    - cpp.safety.lifetime
+sources:
+  - cpp_core_guidelines:F.16
+  - cpp_core_guidelines:F.21
+  - cpp_core_guidelines:SL.str.2
+  - cpp_core_guidelines:Enum.5
 
-  incompatibilities: []
-
-  rule_defaults:
-    strength: soft
-    failure_behavior: warn
-    require_justification_on_violation: true
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
 
 rules:
   soft:
     - id: cpp17.prefer_string_view_for_read_only_string_parameters
       title: Prefer std::string_view for read-only string parameters
-      when: >
-        language == "cpp"
-        and standard >= 17
-        and parameter_kind == "read_only_string"
+      when: language == "cpp" and standard >= 17 and parameter_kind == "read_only_string"
         and ownership_required == false
-      should: >
-        Prefer std::string_view over const char*, const std::string&, or
-        std::string when the function only needs to observe a string and does
-        not need ownership.
+      should: >-
+        Prefer std::string_view for non-owning read-only string-like input in
+        C++17 and later.
       target: string_parameter
-      action: prefer
-      prefer: std::string_view
-      over:
-        - const char*
-        - char*
-        - const std::string&
-        - std::string
-      unless: >
-        abi_boundary == true
-        or c_api_boundary == true
-        or null_terminated_required == true
-        or lifetime_not_guaranteed == true
-        or legacy_interface_required == true
+      action: recommend
+      unless: abi_boundary == true or c_api_boundary == true or null_terminated_required
+        == true or legacy_interface_required == true
       require:
-        - If const char* is used, justify whether null-termination or C API compatibility is required.
-        - If const std::string& is used, justify why std::string_view is not appropriate.
-      rationale: >
-        std::string_view is a lightweight non-owning view introduced in C++17.
-        It is appropriate for read-only string parameters when the callee does
-        not need ownership and the caller controls the lifetime.
+        - If const char* is used, justify null-termination, ABI, C API, or legacy
+          requirements.
+      rationale: >-
+        std::string_view represents non-owning string-like input; it is not a
+        general range type.
 
-    - id: cpp17.prefer_optional_for_optional_values
-      title: Prefer std::optional for optional values
-      when: >
-        language == "cpp"
-        and standard >= 17
-        and value_may_be_absent == true
+    - id: cpp17.prefer_optional_for_normal_absence
+      title: Prefer std::optional for normal absence
+      when: language == "cpp" and standard >= 17 and value_may_be_absent == true
         and absence_is_not_error == true
-      should: >
-        Prefer std::optional<T> over sentinel values, nullable output
-        parameters, or ad-hoc boolean result flags when absence is a normal
-        state rather than an error.
-      target: optional_value
-      action: prefer
-      prefer: std::optional
-      over:
-        - sentinel values
-        - nullable output parameters
-        - paired boolean flags
-      unless: >
-        performance_critical == true
-        or abi_boundary == true
-        or storage_layout_fixed == true
-      require:
-        - If a sentinel value is used, document the sentinel and its invariants.
-      rationale: >
-        std::optional makes optionality explicit in the type system and reduces
-        ambiguity around absence.
+      should: >-
+        Prefer std::optional for normal absence when absence is not an error.
+      target: api_design
+      action: recommend
+      rationale: >-
+        optional makes normal absence explicit without sentinel values.
 
-    - id: cpp17.prefer_variant_for_closed_sum_types
+    - id: cpp17.prefer_variant_for_closed_alternatives
       title: Prefer std::variant for closed alternatives
-      when: >
-        language == "cpp"
-        and standard >= 17
-        and alternatives_are_closed == true
-        and runtime_polymorphism_required == false
-      should: >
-        Prefer std::variant over inheritance-based polymorphism or manual
-        tagged unions for a closed set of alternatives.
-      target: sum_type
-      action: prefer
-      prefer: std::variant
-      over:
-        - manual tagged union
-        - inheritance hierarchy for closed alternatives
-      unless: >
-        open_extension_required == true
-        or abi_boundary == true
-        or recursive_type_without_indirection == true
-      require:
-        - If inheritance is used for a closed set, justify the need for virtual dispatch.
-      rationale: >
-        std::variant represents closed alternatives directly and avoids
-        unnecessary heap allocation and virtual dispatch in suitable cases.
+      when: language == "cpp" and standard >= 17 and alternatives_are_closed ==
+        true
+      should: >-
+        Prefer std::variant for closed alternatives that are known at compile
+        time.
+      target: type_safety
+      action: recommend
+      rationale: >-
+        variant models closed alternatives without open inheritance or manual
+        tags.
 
-    - id: cpp17.prefer_filesystem_for_path_operations
+    - id: cpp17.prefer_filesystem_for_paths
       title: Prefer std::filesystem for path operations
-      when: >
-        language == "cpp"
-        and standard >= 17
-        and operation_involves_filesystem_path == true
-      should: >
-        Prefer std::filesystem::path and std::filesystem operations over manual
-        string manipulation for paths.
-      target: filesystem_path
-      action: prefer
-      prefer: std::filesystem
-      over:
-        - manual path string concatenation
-        - platform-specific path parsing
-      unless: >
-        platform_api_boundary == true
-        or project_filesystem_abstraction_required == true
-      require:
-        - If manual path handling is used, justify the platform assumptions.
-      rationale: >
-        std::filesystem provides standard path handling and reduces
-        platform-specific path bugs.
+      when: language == "cpp" and standard >= 17 and operation_involves_filesystem_path
+        == true
+      should: >-
+        Prefer std::filesystem for portable path operations in C++17 and later.
+      target: standard_availability
+      action: recommend
+      rationale: >-
+        filesystem provides portable path vocabulary and operations.
 
-    - id: cpp17.prefer_if_with_initializer_for_limited_scope
-      title: Prefer if/switch initializers for limited-scope temporaries
-      when: >
-        language == "cpp"
-        and standard >= 17
-        and temporary_needed_only_for_condition == true
-      should: >
-        Prefer if or switch statements with initializer when a temporary value
-        is only needed for the condition and selected branch.
-      target: control_flow_scope
-      action: prefer
-      prefer: if_with_initializer
-      over:
-        - wider-scope temporary variable
-      unless: >
-        readability_would_decrease == true
-      rationale: >
-        C++17 if/switch initializers reduce variable scope and make ownership
-        and lifetime easier to inspect.
+    - id: cpp17.prefer_if_switch_initializer
+      title: Prefer if/switch initializer for limited-scope temporaries
+      when: language == "cpp" and standard >= 17 and temporary_needed_only_for_condition
+        == true
+      should: >-
+        Prefer if or switch initializers for temporaries whose lifetime should
+        be limited to the condition.
+      target: source_structure
+      action: recommend
+      rationale: Initializers reduce variable scope and clarify lifetime.
 
   preference:
-    - id: cpp17.preference.modern_facility_over_legacy_idiom
+    - id: cpp17.preference_modern_vocabulary_types
+      title: Prefer C++17 vocabulary types over ad-hoc conventions
       when: language == "cpp" and standard >= 17
-      prefer: modern_standard_facility
-      over: legacy_idiom
-      target: idiom_selection
-      condition: modern facility is available, readable, and compatible with project constraints
-
-    - id: cpp17.preference.explicit_interface_intent
-      when: language == "cpp" and designing_api == true
-      prefer: explicit_interface_intent
-      over: implicit_convention
+      prefer: standard_vocabulary_type
+      over:
+        - ad_hoc_convention
       target: api_design
-      examples:
-        - Use std::string_view to express non-owning string input.
-        - Use std::optional to express normal absence.
-        - Use std::variant to express a closed set of alternatives.
+      action: prefer
 
 exceptions:
-  - id: cpp17.exception.abi_boundary
-    when: abi_boundary == true
+  - id: cpp17.exception_abi_or_legacy_interface
+    when: abi_boundary == true or c_api_boundary == true or legacy_interface_required
+      == true
     allow:
-      - legacy_parameter_types
-      - const_char_pointer
-      - raw_pointer_and_size
+      - legacy_parameter_type
     require:
-      - Explicitly state that the API is constrained by ABI compatibility.
-      - Avoid leaking ABI-driven implementation choices into internal interfaces.
-
-  - id: cpp17.exception.c_api_boundary
-    when: c_api_boundary == true
-    allow:
-      - const_char_pointer
-      - raw_pointer
-      - pointer_and_size
-    require:
-      - Keep C-compatible types at the boundary.
-      - Convert to modern C++ view/value types internally when practical.
+      - Explain the boundary or compatibility requirement.
+      - Convert to modern vocabulary types internally when practical.
 
 verification:
-  static_checks:
-    - id: cpp17.check.unavailable_facility
-      description: Detect use of standard-library facilities unavailable in C++17 mode.
-      applies_to:
-        - standard_availability
-      tool: compiler_configuration
-      severity: error
-
   llm_self_check:
-    - id: cpp17.self_check.version_aware_guidance
-      prompt: >
-        Check whether the proposed code only uses facilities available in C++17,
-        unless a project-approved polyfill or compatibility exception is
-        explicitly declared.
+    - id: cpp.standard.cpp17.best_practices.verify.standard_version_idiom_review
+      type: llm_self_check
+      applies_to:
+        - api_design
+        - source_structure
+        - standard_availability
+      severity: advisory
+      prompt: Review standard-version idiom review for this skill.
 
-normalization_examples:
-  - source_rule: cpp17.prefer_string_view_for_read_only_string_parameters
-    rule_ir:
-      strength: SOFT
-      target: string_parameter
-      action: PREFER
-      value: std::string_view
-      over:
-        - const char*
-        - const std::string&
-      condition:
-        language: cpp
-        standard: ">=17"
-        parameter_kind: read_only_string
-        ownership_required: false
-      exceptions:
-        - abi_boundary
-        - c_api_boundary
-        - null_terminated_required
-        - legacy_interface_required
+    - id: cpp.standard.cpp17.best_practices.verify.interface_intent_review
+      type: llm_self_check
+      applies_to:
+        - api_design
+        - source_structure
+        - standard_availability
+      severity: advisory
+      prompt: Review interface intent review for this skill.
 
 effective_rule_examples:
-  cpp17_read_only_string_api:
+  cpp17_string_view_task:
     task_context:
       language: cpp
       standard: 17
-      operation: design_api
       parameter_kind: read_only_string
-      ownership_required: false
     effective_rules:
       soft:
-        - Prefer std::string_view over const char* for read-only string parameters.
-      preference:
-        - Prefer explicit interface intent over implicit convention.
-      exceptions:
-        - Use const char* when null-termination, ABI, or C API compatibility is required.
+        - Prefer std::string_view for read-only string-like input.
 
 authoring_notes:
-  - Do not model C++17 modernization recommendations as HARD rules unless the project explicitly forbids alternatives.
-  - Keep ABI and C API boundaries as first-class exceptions.
-  - Use semantic conditions such as parameter_kind and ownership_required rather than only syntax matching.
+  - Do not recommend std::span for string-like input; std::string_view carries
+    string intent.

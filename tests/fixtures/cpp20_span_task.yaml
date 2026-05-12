@@ -1,0 +1,14 @@
+task: Write a C++20 API that accepts a non-owning contiguous range.
+packs:
+  - cpp.library_api_design
+expected:
+  activates:
+    - cpp.standard.cpp17.best_practices
+    - cpp.standard.cpp20.best_practices
+    - cpp.standard.standard_availability
+  recommends:
+    - std::span
+  conditional_recommendations:
+    - std::string_view only if string-like input is present
+  includes:
+    - standard_availability

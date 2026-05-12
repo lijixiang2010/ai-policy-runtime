@@ -1,0 +1,14 @@
+task: Implement a C++20 low-latency matching engine API that accepts a non-owning range of orders.
+packs:
+  - cpp.low_latency
+expected:
+  activates:
+    - cpp.safe_generation
+    - cpp.performance.hot_path
+    - cpp.performance.allocation_control
+    - cpp.standard.cpp20.best_practices
+  recommends:
+    - std::span
+  preferences:
+    - safety over performance by default
+    - performance over readability only under hot_path

@@ -77,8 +77,8 @@ def _default_embedding_provider() -> EmbeddingProvider:
     Selection order keeps the product lightweight by default while preserving
     offline options:
 
-    1. OpenAI-compatible /v1/embeddings when configured.
-    2. Explicit provider choices from AI_POLICY_EMBEDDING_PROVIDER.
+    1. Explicit provider choices from AI_POLICY_EMBEDDING_PROVIDER.
+    2. OpenAI-compatible /v1/embeddings when configured.
     3. Local bundled sentence-transformers model when available.
     4. Dependency-free hashing fallback.
     """
@@ -96,13 +96,15 @@ def _default_embedding_provider() -> EmbeddingProvider:
                 "but no endpoint configuration was found."
             )
         return remote
-    if remote := OpenAICompatibleEmbeddingProvider.from_env():
-        return remote
 
     local_model = Path("models") / "paraphrase-multilingual-MiniLM-L12-v2"
     if provider in {"local", "sentence-transformers"}:
         model_name = str(local_model) if local_model.exists() else None
         return SentenceTransformerEmbeddingProvider(model_name)
+    if provider:
+        raise RuntimeError(f"Unsupported AI_POLICY_EMBEDDING_PROVIDER: {provider}")
+    if remote := OpenAICompatibleEmbeddingProvider.from_env():
+        return remote
     if local_model.exists():
         try:
             return SentenceTransformerEmbeddingProvider(str(local_model))

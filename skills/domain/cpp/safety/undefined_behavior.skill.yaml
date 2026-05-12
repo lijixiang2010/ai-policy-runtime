@@ -1,22 +1,24 @@
+# Skill: C++ Undefined Behavior Safety
+# File: skills/domain/cpp/safety/undefined_behavior.skill.yaml
+
 skill:
   id: cpp.safety.undefined_behavior
   name: C++ Undefined Behavior Safety
   version: 1.0.0
   status: stable
-
-  description: >
-    Prevents generated or reviewed C++ code from relying on undefined behavior.
+  description: >-
+    Hard safety policy preventing undefined behavior and invalid object use in
+    C++ output.
 
   level: domain
   domain: cpp
   category: safety
-  priority: 95
-  owner: core-policy
+  priority: 100
 
   tags:
     - cpp
     - safety
-    - undefined-behavior
+    - core-guidelines
 
   capabilities:
     - code_generation
@@ -26,42 +28,180 @@ skill:
   activation:
     when:
       language: cpp
-
     triggers:
       - write_code
       - review_code
       - refactor_code
+      - modernize_code
 
-  dependencies:
-    - cpp.core.baseline
+  dependencies: []
 
   incompatibilities: []
 
+task_analysis:
+  context_rules:
+    - id: detect_safety_critical_task
+      when_text_matches:
+        - undefined behavior
+        - ub
+        - invalid lifetime
+        - invalid cast
+      set:
+        safety_critical: true
+      tags:
+        - safety
+      semantic_match:
+        - avoid invalid object access
+        - check for undefined behavior risks
+        - prevent use after move or invalid casts
+      confidence: 0.86
+
+sources:
+  - cpp_core_guidelines:P.8
+  - cpp_core_guidelines:ES.65
+  - cpp_core_guidelines:ES.100
+  - cpp_core_guidelines:Type.4
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
 rules:
   hard:
-    - id: no_undefined_behavior
-      must_not: undefined_behavior
-      target: behavior.undefined
-      reason: Undefined behavior is not acceptable in generated or modified C++ code.
-  soft:
-    - id: prefer_defined_edge_cases
-      should: define_edge_case_behavior
-      target: behavior.edge_cases
-      reason: Prefer explicit behavior for overflow, bounds, lifetime, and nullability edge cases.
-  preference:
-    - id: prefer_safety_default
-      prefer:
-        higher: safety
-        lower: performance
-      target: decision.optimization
+    - id: cpp.ub.no_undefined_behavior
+      title: Avoid undefined behavior
+      when: language == "cpp"
+      must_not: >-
+        Avoid undefined behavior in generated or modified C++ code.
+      target: undefined_behavior
+      action: forbid
+      rationale: >-
+        Output that relies on undefined behavior cannot be considered correct
+        or portable.
 
-exceptions: []
+    - id: cpp.ub.no_invalid_lifetime_access
+      title: Do not access objects outside their valid lifetime
+      when: language == "cpp"
+      must_not: Do not access objects outside their valid lifetime.
+      target: resource_lifetime
+      action: forbid
+      rationale: >-
+        Lifetime violations are a primary source of memory safety failures.
+
+    - id: cpp.ub.no_invalid_cast
+      title: Avoid invalid casts
+      when: language == "cpp"
+      must_not: >-
+        Avoid invalid casts that break object lifetime, aliasing, or type safety.
+      target: type_safety
+      action: forbid
+      rationale: >-
+        Casts that violate object type, alignment, or lifetime rules create undefined
+        behavior.
+      unless: low_level_boundary == true
+      require:
+        - If a low-level cast or intrinsic is required, justify the boundary and
+          preserve defined behavior.
+        - Do not use low-level casts to bypass ownership, lifetime, or aliasing
+          rules.
+
+  soft:
+    - id: cpp.ub.guard_signed_overflow
+      title: Guard signed integer overflow when it can occur
+      when: language == "cpp"
+      should: >-
+        Guard signed arithmetic when overflow can occur or would affect correctness.
+      target: undefined_behavior
+      action: recommend
+      rationale: >-
+        Arithmetic with untrusted or extreme values should either use checked
+        logic or a wider/unsigned model.
+
+    - id: cpp.ub.use_after_move_only_when_valid
+      title: Avoid use-after-move unless the moved-from state is explicitly valid
+      when: language == "cpp"
+      should_not: >-
+        Avoid using moved-from objects unless the moved-from state is explicitly
+        valid for the operation.
+      target: resource_lifetime
+      action: discourage
+      rationale: >-
+        Moved-from objects should be reassigned, destroyed, or used only through
+        documented valid operations.
+
+  preference:
+    - id: cpp.ub.preference_safety_first
+      title: Prefer safety over performance by default
+      when: language == "cpp"
+      prefer: safety
+      over:
+        - performance
+      target: undefined_behavior
+      action: prefer
+      rationale: >-
+        Performance tradeoffs must not weaken correctness or defined behavior
+        unless a valid exception is justified.
+
+exceptions:
+  - id: cpp.ub.exception_low_level_boundary
+    when: low_level_boundary == true
+    allow:
+      - low_level_cast_with_invariant
+    require:
+      - State the representation or ABI invariant.
+      - Keep the unsafe operation isolated.
+      - Provide a safer wrapper for ordinary callers.
 
 verification:
-  - rule: cpp.safety.undefined_behavior.no_undefined_behavior
-    validator: clang_tidy
-    severity: error
-    config:
-      checks:
-        - cppcoreguidelines-*
-        - clang-analyzer-*
+  static_checks:
+    - id: cpp.safety.undefined_behavior.verify.cppcoreguidelines_pro_type_reinterpret_cast
+      type: static_analysis
+      applies_to:
+        - resource_lifetime
+        - type_safety
+        - undefined_behavior
+      severity: warning
+      check: cppcoreguidelines-pro-type-reinterpret-cast
+
+  sanitizers:
+    - id: cpp.safety.undefined_behavior.verify.undefined_behavior_sanitizer
+      type: sanitizer
+      applies_to:
+        - resource_lifetime
+        - type_safety
+        - undefined_behavior
+      severity: error
+      tool: undefined_behavior_sanitizer
+
+    - id: cpp.safety.undefined_behavior.verify.address_sanitizer
+      type: sanitizer
+      applies_to:
+        - resource_lifetime
+        - type_safety
+        - undefined_behavior
+      severity: error
+      tool: address_sanitizer
+
+  llm_self_check:
+    - id: cpp.safety.undefined_behavior.verify.undefined_behavior_review
+      type: llm_self_check
+      applies_to:
+        - resource_lifetime
+        - type_safety
+        - undefined_behavior
+      severity: advisory
+      prompt: >-
+        Check whether resource and object lifetimes are clear and exception-safe.
+
+effective_rule_examples:
+  safe_generation:
+    task_context:
+      language: cpp
+      task_type: write_code
+    effective_rules:
+      hard:
+        - Avoid undefined behavior and invalid object lifetime access.
+
+authoring_notes:
+  - Keep this skill strict; exceptions belong at low-level boundaries with explicit
+    invariants.

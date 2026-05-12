@@ -1,0 +1,208 @@
+# Skill: Generic Complexity Reduction
+# File: skills/generic/code_quality/complexity_reduction.skill.yaml
+
+skill:
+  id: generic.code_quality.complexity_reduction
+  name: Generic Complexity Reduction
+  version: 1.0.0
+  status: stable
+  description: >-
+    Reduces accidental implementation complexity while preserving the effective
+    complexity required by the problem.
+
+  level: domain
+  domain: generic_code
+  category: code_quality
+  priority: 80
+
+  tags:
+    - generic
+    - code-quality
+    - refactoring
+    - complexity
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      artifact_type: code
+    triggers:
+      - refactor_code
+      - improve_code_quality
+      - reduce_complexity
+      - polish_implementation
+
+  dependencies: []
+  incompatibilities: []
+
+task_analysis:
+  domain_confidence: 0.55
+  trigger_confidence: 0.19
+
+  domain_aliases:
+    - code
+    - source code
+    - implementation
+
+  trigger_aliases:
+    refactor_code:
+      - refactor
+      - restructure code
+      - reorganize code
+      - clean up code
+    improve_code_quality:
+      - improve code quality
+      - production quality
+      - production-ready code
+      - make working code maintainable
+      - refine implementation quality
+    reduce_complexity:
+      - reduce complexity
+      - simplify structure
+      - remove accidental complexity
+      - compress scattered complexity
+      - preserve effective complexity
+  trigger_semantics:
+    improve_code_quality:
+      - turn working code into production-quality code
+      - make code clearer and more maintainable
+    reduce_complexity:
+      - preserve effective complexity and remove accidental complexity
+
+  trigger_capabilities:
+    refactor_code:
+      - refactor_code
+    improve_code_quality:
+      - refactor_code
+      - code_review
+    reduce_complexity:
+      - refactor_code
+  context_rules:
+    - id: detect_generic_refinement_request
+      when_text_matches:
+        - production quality
+        - production-ready code
+        - reduce complexity
+        - refactor for clarity
+        - improve code quality
+        - make it maintainable
+        - not just working code
+        - remove accidental complexity
+        - preserve effective complexity
+        - refine the implementation
+      set:
+        refinement_requested: true
+        artifact_type: code
+        behavior_preservation_required: true
+      tags:
+        - code-quality
+        - refactoring
+        - complexity
+      semantic_match:
+        - improve working code into production-quality code
+        - remove accidental complexity while preserving useful structure
+        - make code clearer and easier to maintain
+      confidence: 0.88
+
+rules:
+  hard:
+    - id: generic.complexity.preserve_observable_behavior
+      title: Preserve observable behavior during refinement
+      when: artifact_type == "code" and behavior_preservation_required == true
+      must: >-
+        Preserve the existing observable behavior while reducing complexity unless
+        the task explicitly asks for a behavior change.
+      target: behavior_preservation
+      action: require
+      rationale: >-
+        Refactoring and quality refinement should improve structure without changing
+        what users or callers observe.
+
+  soft:
+    - id: generic.complexity.remove_accidental_complexity
+      title: Remove accidental complexity
+      when: artifact_type == "code" and refinement_requested == true
+      should: >-
+        Remove accidental complexity that does not contribute to correctness,
+        extensibility, performance, or clarity.
+      target: complexity
+      action: recommend
+      rationale: >-
+        Code should preserve necessary problem complexity while avoiding unnecessary
+        implementation noise.
+
+    - id: generic.complexity.keep_useful_structure
+      title: Keep useful complexity where it carries meaning
+      when: artifact_type == "code" and refinement_requested == true
+      should: >-
+        Keep complexity that represents real domain rules, safety constraints,
+        performance needs, or important extension points.
+      target: complexity
+      action: recommend
+      rationale: >-
+        The goal is not to make code smaller at all costs; it is to separate useful
+        structure from accidental noise.
+
+    - id: generic.complexity.avoid_over_abstraction
+      title: Avoid unnecessary abstraction
+      when: artifact_type == "code"
+      should_not: >-
+        Avoid introducing abstractions that increase conceptual overhead without
+        improving reuse, clarity, testability, or extension.
+      target: abstraction
+      action: discourage
+      rationale: >-
+        Abstraction is useful only when it reduces net complexity.
+
+  preference:
+    - id: generic.complexity.preference_effective_over_accidental
+      title: Prefer effective complexity over accidental complexity
+      when: artifact_type == "code"
+      prefer: effective_complexity
+      over:
+        - accidental_complexity
+      target: complexity
+      action: prefer
+      rationale: >-
+        Necessary complexity should remain visible, while accidental complexity
+        should be removed or hidden behind clearer structure.
+
+exceptions:
+  - id: generic.complexity.exception_minimal_or_throwaway
+    when: minimal_example == true or throwaway_script == true or user_requested_minimal_code == true
+    allow:
+      - minimal_structure
+    require:
+      - Keep the implementation clear even when avoiding broader refinement.
+      - Do not introduce reusable abstractions for intentionally tiny examples.
+
+verification:
+  llm_self_check:
+    - id: generic.complexity.review_net_complexity
+      type: llm_self_check
+      applies_to:
+        - complexity
+        - behavior_preservation
+      severity: advisory
+      prompt: >-
+        Check whether the refinement removes accidental complexity while preserving
+        useful domain, safety, performance, and extension complexity.
+
+effective_rule_examples:
+  production_refinement:
+    task_context:
+      artifact_type: code
+      refinement_requested: true
+    effective_rules:
+      hard:
+        - Preserve observable behavior unless a behavior change is explicitly requested.
+      soft:
+        - Remove accidental complexity that does not contribute to correctness, extensibility, performance, or clarity.
+
+authoring_notes:
+  - Keep this skill language-independent; language-specific syntax belongs in domain skills.
+  - Keep task-analysis phrases in English; multilingual matching should come from
+    semantic embeddings, not duplicated keyword lists.

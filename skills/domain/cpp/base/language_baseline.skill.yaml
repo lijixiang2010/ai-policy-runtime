@@ -1,21 +1,12 @@
-# C++ Core Baseline Skill
-#
-# File:
-#   skills/domain/cpp/base/language_baseline.skill.yaml
-#
-# Purpose:
-#   Provide the baseline C++ policy that other C++ skills may depend on.
+# Skill: C++ Core Baseline
+# File: skills/domain/cpp/base/language_baseline.skill.yaml
 
 skill:
   id: cpp.core.baseline
   name: C++ Core Baseline
   version: 1.0.0
   status: stable
-
-  description: >
-    Baseline activation and style policy for modern C++ coding tasks.
-    This skill keeps the general C++ context explicit and provides defaults
-    that more specific safety, standard, and performance skills can refine.
+  description: Minimal baseline activation policy for modern C++ tasks.
 
   level: domain
   domain: cpp
@@ -30,28 +21,30 @@ skill:
   capabilities:
     - code_generation
     - code_review
-    - refactor
+    - refactor_code
 
   activation:
     when:
       language: cpp
-      standard: ">=17"
-
+      standard: '>=17'
     triggers:
       - write_code
       - review_code
       - refactor_code
+
+  dependencies: []
+
+  incompatibilities: []
 
 task_analysis:
   domain_aliases:
     - c++
     - cpp
     - cxx
-    - modern c++
+
   domain_semantics:
+    - C++ source or header task
     - modern C++ systems programming task
-    - C++ source code or header implementation
-    - native code using the C++ language
 
   trigger_aliases:
     write_code:
@@ -63,21 +56,17 @@ task_analysis:
       - inspect
     refactor_code:
       - refactor
+
   trigger_semantics:
     write_code:
-      - write code
-      - write a C++ implementation
-      - write a data structure implementation
-      - write a queue implementation
-      - create an implementation
-      - generate source code for the requested component
-      - build a working code example
+      - write C++ code
+      - implement a C++ component
+      - generate source code for a data structure or data channel
+      - write latency-sensitive C++ implementation code
     review_code:
-      - inspect existing code for issues
-      - evaluate code quality and correctness
+      - review C++ code
     refactor_code:
-      - restructure existing code while preserving behavior
-      - improve implementation organization
+      - refactor C++ code
 
   trigger_capabilities:
     write_code:
@@ -85,64 +74,55 @@ task_analysis:
     review_code:
       - code_review
     refactor_code:
-      - refactor
-      - code_generation
+      - refactor_code
 
   context_rules:
-    - field: context.standard
-      value: 17
-      match:
+    - id: detect_modern_cpp_baseline
+      when_text_matches:
         - modern c++
+        - c++
+        - cpp
       set:
-        standard: 17
-        selected_standard_is_known: false
+        language: cpp
       tags:
-        - cpp17
+        - cpp
       confidence: 0.62
-
-    - field: context.data_structure
-      value: queue
-      match:
-        - queue
-        - ring buffer
-      set:
-        data_structure: queue
-      tags:
-        - data_structure
-      semantic_match:
-        - FIFO data structure
-        - queue data structure
-        - queue implementation
-        - producer consumer data channel
-        - message passing buffer
-      confidence: 0.78
-
-  dependencies: []
-  incompatibilities: []
 
 rules:
   hard:
     - id: cpp.core.require_modern_cpp_context
+      title: Use the selected modern C++ context
       when: language == "cpp"
-      must: modern_cpp_context
-      target: language.standard
-      reason: Use modern C++ conventions for C++17 and later tasks.
+      must: >-
+        Use the selected modern C++ standard and project context when generating
+        or modifying C++ code.
+      target: standard_availability
+      action: require
+      rationale: Use modern C++ conventions for C++17 and later tasks.
 
   soft:
     - id: cpp.core.prefer_standard_library
-      should: standard_library
-      target: dependency.selection
-      reason: Prefer the standard library before custom utilities unless task context requires otherwise.
+      title: Prefer standard library facilities first
+      when: language == "cpp"
+      should: >-
+        Prefer standard-library facilities before custom utilities unless task
+        context requires otherwise.
+      target: standard_availability
+      action: recommend
+      rationale: >-
+        Prefer the standard library before custom utilities unless task context
+        requires otherwise.
 
   preference:
     - id: cpp.core.preference.clarity_over_cleverness
+      title: Prefer clarity over cleverness
+      when: language == "cpp"
       prefer: clarity
-      over: cleverness
-      target: decision.implementation_style
-
-exceptions: []
-
-verification: []
+      over:
+        - cleverness
+      target: source_structure
+      action: prefer
 
 authoring_notes:
-  - Keep this skill small; put standard-version rules under domain/cpp/standard.
+  - Keep this baseline small; put safety, standard-version, and source-structure
+    policy in dedicated C++ skills.

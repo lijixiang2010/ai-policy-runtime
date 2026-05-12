@@ -1,0 +1,140 @@
+# Skill: Generic Parameterized Abstraction
+# File: skills/generic/refactoring/parameterized_abstraction.skill.yaml
+
+skill:
+  id: generic.refactoring.parameterized_abstraction
+  name: Generic Parameterized Abstraction
+  version: 1.0.0
+  status: stable
+  description: >-
+    Extracts shared structure with small variations into parameterized, strategy,
+    or policy-style abstractions without binding to a specific programming language.
+
+  level: domain
+  domain: generic_code
+  category: refactoring
+  priority: 81
+
+  tags:
+    - generic
+    - refactoring
+    - abstraction
+    - code-quality
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      artifact_type: code
+    triggers:
+      - refactor_code
+      - improve_code_quality
+      - reduce_complexity
+
+  dependencies:
+    - generic.refactoring.duplication_extraction
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_similar_logic_with_variation
+      when_text_matches:
+        - same structure with variation
+        - similar implementations
+        - mostly identical logic
+        - small variation
+        - parameterized abstraction
+        - generic helper
+        - shared control flow
+        - variation point
+        - policy object
+        - strategy
+      set:
+        similar_logic_with_small_variation: true
+        artifact_type: code
+        refinement_requested: true
+      tags:
+        - abstraction
+        - refactoring
+      semantic_match:
+        - implementations share structure and differ in a small number of decisions
+        - variation should be represented explicitly
+      confidence: 0.84
+
+rules:
+  soft:
+    - id: generic.parameterized.extract_shared_structure
+      title: Extract shared structure with explicit variation points
+      when: artifact_type == "code" and similar_logic_with_small_variation == true
+      should: >-
+        Extract shared control flow or data flow into a parameterized abstraction
+        when multiple implementations differ only in a small number of decisions.
+      target: parameterized_abstraction
+      action: recommend
+      rationale: >-
+        Variation points are easier to review when they are explicit rather than copied
+        across mostly identical implementations.
+
+    - id: generic.parameterized.keep_variation_named
+      title: Name variation points clearly
+      when: artifact_type == "code" and similar_logic_with_small_variation == true
+      should: >-
+        Give variation points clear names so callers can understand what changes
+        between implementations.
+      target: parameterized_abstraction
+      action: recommend
+      rationale: >-
+        Parameterization should make differences clearer, not hide them behind cryptic switches.
+
+    - id: generic.parameterized.avoid_boolean_soup
+      title: Avoid parameterization that creates boolean soup
+      when: artifact_type == "code"
+      should_not: >-
+        Avoid replacing clear specialized logic with a parameterized abstraction
+        whose many flags or modes make behavior harder to understand.
+      target: parameterized_abstraction
+      action: discourage
+      rationale: >-
+        Parameterization is useful only when it clarifies shared structure and variation.
+
+  preference:
+    - id: generic.parameterized.preference_explicit_variation
+      title: Prefer explicit variation points over duplicated structure
+      when: artifact_type == "code" and similar_logic_with_small_variation == true
+      prefer: explicit_variation_point
+      over:
+        - duplicated_structure_with_hidden_differences
+      target: parameterized_abstraction
+      action: prefer
+
+exceptions:
+  - id: generic.parameterized.exception_specialization_clearer
+    when: abstraction_would_increase_complexity == true
+    allow:
+      - specialized_implementation
+    require:
+      - Explain why the specialized form is clearer than a parameterized abstraction.
+      - Keep the specialized implementations small and intentionally separate.
+
+verification:
+  llm_self_check:
+    - id: generic.parameterized.review_variation_points
+      type: llm_self_check
+      applies_to:
+        - parameterized_abstraction
+      severity: advisory
+      prompt: >-
+        Check whether the abstraction captures shared structure cleanly and whether
+        each variation point is explicit, named, and easy to reason about.
+
+effective_rule_examples:
+  similar_implementations:
+    task_context:
+      artifact_type: code
+      similar_logic_with_small_variation: true
+    effective_rules:
+      soft:
+        - Extract shared structure into a parameterized abstraction when implementations differ only in a small number of decisions.

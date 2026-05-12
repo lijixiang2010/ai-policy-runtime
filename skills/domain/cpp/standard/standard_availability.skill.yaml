@@ -1,0 +1,161 @@
+# Skill: C++ Standard Availability
+# File: skills/domain/cpp/standard/standard_availability.skill.yaml
+
+skill:
+  id: cpp.standard.standard_availability
+  name: C++ Standard Availability
+  version: 1.0.0
+  status: stable
+  description: >-
+    Hard guardrail preventing unavailable C++ standard library facilities and
+    version-incompatible recommendations.
+
+  level: domain
+  domain: cpp
+  category: standard
+  priority: 98
+
+  tags:
+    - cpp
+    - cpp17
+    - cpp20
+    - standard-library
+    - modernization
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+    - modernization
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - modernize_code
+
+  dependencies: []
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_selected_cpp_standard
+      when_text_matches:
+        - c++17
+        - c++20
+        - cpp17
+        - cpp20
+      set:
+        selected_standard_is_known: true
+      tags:
+        - standard-library
+      confidence: 0.7
+
+sources:
+  - cpp_reference:language_standard_versions
+  - cpp_core_guidelines:In.0
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.standard.no_cpp20_facility_in_cpp17
+      title: Do not use C++20-only facilities in C++17 tasks
+      when: language == "cpp" and selected_standard_is_known == true and standard
+        < 20
+      must_not: >-
+        Do not use C++20-only facilities when the selected standard is C++17.
+      target: standard_availability
+      action: forbid
+      unless: polyfill_allowed == true or third_party_backport_allowed == true
+      require:
+        - If a newer facility is suggested, provide an approved polyfill or C++17
+          fallback.
+      rationale: >-
+        Generated code must compile under the selected project standard.
+
+    - id: cpp.standard.no_unavailable_library_recommendation
+      title: Do not recommend unavailable standard-library facilities
+      when: language == "cpp" and selected_standard_is_known == true
+      must_not: >-
+        Do not recommend standard-library facilities unavailable in the selected
+        C++ standard.
+      target: standard_availability
+      action: forbid
+      unless: polyfill_allowed == true or third_party_backport_allowed == true
+      require:
+        - Match recommendations to the selected C++ standard.
+      rationale: >-
+        Advice that cannot be used under the selected standard creates repair
+        work.
+
+  soft:
+    - id: cpp.standard.provide_version_appropriate_fallback
+      title: Provide version-appropriate fallbacks when useful
+      when: language == "cpp" and selected_standard_is_known == true
+      should: >-
+        Provide a version-appropriate fallback when recommending a facility that
+        may be unavailable.
+      target: standard_availability
+      action: recommend
+      rationale: >-
+        When modernizing across standards, include the fallback that actually
+        compiles.
+
+  preference:
+    - id: cpp.standard.preference_available_facility
+      title: Prefer available standard facilities
+      when: language == "cpp" and selected_standard_is_known == true
+      prefer: available_standard_facility
+      over:
+        - unavailable_or_unapproved_facility
+      target: standard_availability
+      action: prefer
+
+exceptions:
+  - id: cpp.standard.exception_project_polyfill
+    when: polyfill_allowed == true or third_party_backport_allowed == true
+    allow:
+      - backported_standard_facility
+    require:
+      - Name the approved polyfill or backport.
+      - Keep fallback behavior clear.
+
+verification:
+  compiler_warnings:
+    - id: cpp.standard.standard_availability.verify.unavailable_standard_features
+      type: compiler_check
+      applies_to:
+        - standard_availability
+      severity: warning
+      check: unavailable standard features
+
+  llm_self_check:
+    - id: cpp.standard.standard_availability.verify.standard_version_idiom_review
+      type: llm_self_check
+      applies_to:
+        - standard_availability
+      severity: advisory
+      prompt: >-
+        Verify that recommended facilities are available in the selected C++ standard.
+
+effective_rule_examples:
+  cpp17_task:
+    task_context:
+      language: cpp
+      standard: 17
+    effective_rules:
+      hard:
+        - Do not use C++20-only facilities unless an approved backport exists.
+
+authoring_notes:
+  - This skill is a hard guardrail; version-specific skills provide soft idiom
+    recommendations.

@@ -11,6 +11,17 @@ from ai_policy_runtime.infrastructure.conditions import ConditionError, evaluate
 from ai_policy_runtime.infrastructure.loader import load_packs_from_dir, load_skills_from_dir
 
 
+GENERIC_ACTIVATION_TAGS = frozenset(
+    {
+        "cpp",
+        "generation",
+        "review",
+        "core-guidelines",
+        "standard-library",
+    }
+)
+
+
 class SkillRegistry:
     """In-memory index for Skill activation and Pack expansion."""
 
@@ -77,19 +88,13 @@ class SkillRegistry:
     def _matches(self, skill: Skill, task: TaskContext) -> bool:
         if skill.status in {"deprecated", "removed"}:
             return False
-        semantic_matches = set(task.context.get("semantic_skill_matches", ()))
-        semantic_recalled = skill.skill_id in semantic_matches
         if skill.domains and task.domain not in skill.domains:
             return False
         if skill.triggers and task.task_type not in skill.triggers:
             return False
-        if (
-            not semantic_recalled
-            and skill.capabilities
-            and not set(skill.capabilities).intersection(task.capabilities)
-        ):
+        if skill.capabilities and not set(skill.capabilities).intersection(task.capabilities):
             return False
-        if not semantic_recalled and skill.tags and not set(skill.tags).intersection(task.tags):
+        if not _tags_match(skill.tags, task.tags):
             return False
         if not self._context_matches(skill, task):
             return False
@@ -114,6 +119,13 @@ def _matches_expected(actual: object, expected: object) -> bool:
         except (TypeError, ValueError):
             return False
     return actual == expected
+
+
+def _tags_match(skill_tags: tuple[str, ...], task_tags: tuple[str, ...]) -> bool:
+    meaningful_skill_tags = set(skill_tags) - GENERIC_ACTIVATION_TAGS
+    if not meaningful_skill_tags:
+        return True
+    return bool(meaningful_skill_tags.intersection(task_tags))
 
 
 class ActivationSet:

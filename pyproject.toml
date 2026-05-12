@@ -19,6 +19,7 @@ semantic = [
     "sentence-transformers>=2.7",
 ]
 dev = [
+    "pytest>=8.0",
     "ruff>=0.8",
     "mypy>=1.10",
 ]

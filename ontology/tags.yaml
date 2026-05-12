@@ -1,0 +1,25 @@
+tags:
+  cpp: C++ language tasks.
+  safety: Safety-critical rule or review.
+  lifetime: Object, reference, view, iterator, or resource lifetime.
+  ownership: Resource ownership and transfer.
+  resource-management: RAII, cleanup, and resource ownership.
+  api-design: Interface and signature design.
+  performance: Runtime performance and allocation concerns.
+  concurrency: Threads, synchronization, and shared state.
+  templates: Generic programming and constraints.
+  modernization: Standard-version modernization guidance.
+  cpp17: C++17-aware guidance.
+  cpp20: C++20-aware guidance.
+  standard-library: Standard library facility selection.
+  core-guidelines: Reconstructed from C++ Core Guidelines concepts.
+  review: Code review activation.
+  generation: Code generation activation.
+  generic: Language-independent code policy.
+  code-quality: Clarity, maintainability, and production-readiness.
+  refactoring: Behavior-preserving code improvement.
+  architecture: Component boundaries, layering, and dependency direction.
+  complexity: Effective versus accidental complexity.
+  abstraction: Extraction and abstraction design.
+  usability: Common-case ergonomics and user burden.
+  production-polish: Finished-component quality expectations.

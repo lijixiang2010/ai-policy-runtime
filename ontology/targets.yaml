@@ -1,0 +1,65 @@
+targets:
+  undefined_behavior:
+    description: Defined-behavior correctness and UB avoidance.
+  ownership:
+    description: Resource ownership model and owner identity.
+  ownership_transfer:
+    description: Transfer of resource ownership across scopes or interfaces.
+  resource_lifetime:
+    description: Object, resource, handle, iterator, and view lifetime.
+  dangling_reference:
+    description: Dangling pointers, references, iterators, and views.
+  bounds_safety:
+    description: Index, range, and pointer bounds safety.
+  type_safety:
+    description: Casts, conversions, enum safety, and type-expressive design.
+  api_design:
+    description: Public and internal interface design.
+  interface_intent:
+    description: Ownership, borrowing, mutation, nullability, and domain intent.
+  parameter_passing:
+    description: Function argument and return value conventions.
+  string_parameter:
+    description: String-like non-owning and owning parameter choices.
+  contiguous_range_parameter:
+    description: Non-owning contiguous range and buffer parameter choices.
+  error_propagation:
+    description: Error model and recoverable failure propagation.
+  concurrency_safety:
+    description: Thread coordination and shared-state safety.
+  data_race:
+    description: Unsynchronized conflicting accesses.
+  thread_lifetime:
+    description: Ownership, stop, join, and detach behavior for threads.
+  allocation:
+    description: Dynamic allocation, capacity planning, and allocation policy.
+  hot_path:
+    description: Latency-sensitive performance-critical execution path.
+  template_constraints:
+    description: Generic interface constraints and diagnostics.
+  template_diagnostics:
+    description: Readability and actionability of generic programming diagnostics.
+  standard_availability:
+    description: Selected C++ standard and available library facilities.
+  source_structure:
+    description: Header/source organization, includes, and initialization order.
+  complexity:
+    description: Effective versus accidental implementation complexity.
+  component_structure:
+    description: Grouping of related state, functions, helpers, and responsibilities.
+  duplication:
+    description: Repeated or near-repeated logic that can increase maintenance cost.
+  parameterized_abstraction:
+    description: Shared structure with variation represented by parameters or strategies.
+  implementation_expression:
+    description: Use of clear, language-native implementation constructs.
+  api_usability:
+    description: Common-case API ergonomics, defaults, setup, and user steps.
+  hierarchy:
+    description: Layering, dependency direction, and call-chain clarity.
+  dependency_direction:
+    description: Direction and acyclicity of dependencies between components or layers.
+  implementation_polish:
+    description: Completeness of component interfaces, edge cases, errors, and documentation.
+  behavior_preservation:
+    description: Preserving existing observable behavior during refinement or refactoring.

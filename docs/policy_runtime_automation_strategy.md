@@ -978,7 +978,7 @@ ai_policy_runtime/
 │   │   ├── rust/
 │   │   ├── ui_design/
 │   │   └── documentation/
-│   ├── project/
+│   ├── generic/
 │   └── user/
 │
 ├── adapters/

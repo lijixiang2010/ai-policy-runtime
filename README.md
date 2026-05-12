@@ -59,19 +59,44 @@ skills/
 │       │   └── language_baseline.skill.yaml
 │       ├── safety/
 │       │   ├── undefined_behavior.skill.yaml
-│       │   ├── lifetime.skill.yaml
-│       │   └── ownership.skill.yaml
+│       │   ├── ownership_and_lifetime.skill.yaml
+│       │   ├── bounds_safety.skill.yaml
+│       │   └── type_safety.skill.yaml
+│       ├── resource_management/
+│       │   └── raii.skill.yaml
+│       ├── api_design/
+│       │   ├── interface_intent.skill.yaml
+│       │   ├── parameter_passing.skill.yaml
+│       │   └── ownership_in_interfaces.skill.yaml
+│       ├── error_handling/
+│       │   └── error_model.skill.yaml
+│       ├── concurrency/
+│       │   ├── data_race_safety.skill.yaml
+│       │   └── thread_lifetime.skill.yaml
+│       ├── performance/
+│       │   ├── hot_path.skill.yaml
+│       │   └── allocation_control.skill.yaml
+│       ├── templates/
+│       │   └── generic_constraints.skill.yaml
 │       ├── standard/
 │       │   ├── cpp17_best_practices.skill.yaml
-│       │   └── cpp20_best_practices.skill.yaml
-│       └── performance/
-│           └── hot_path.skill.yaml
-└── project/
-    └── low_latency_trading.skill.yaml
+│       │   ├── cpp20_best_practices.skill.yaml
+│       │   └── standard_availability.skill.yaml
+│       └── source_structure/
+│           └── source_file_organization.skill.yaml
+└── generic/
+    ├── code_quality/
+    ├── refactoring/
+    └── architecture/
 
 packs/
-├── cpp.safe_generation.pack.yaml
-└── cpp.low_latency.pack.yaml
+├── cpp_safe_generation.pack.yaml
+├── cpp_code_review.pack.yaml
+├── cpp_modernization.pack.yaml
+├── cpp_low_latency.pack.yaml
+├── cpp_library_api_design.pack.yaml
+├── generic_production_refinement.pack.yaml
+└── cpp_production_refinement.pack.yaml
 ```
 
 The runtime recursively loads `*.skill.yaml`, `*.yaml`, `*.yml`, and `*.json`
@@ -290,6 +315,20 @@ python -m ai_policy_runtime.cli cache clear
 ```powershell
 python -m ai_policy_runtime.cli resolve "帮我写一个 C++20 低延迟队列"
 python -m ai_policy_runtime.cli resolve --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+```
+
+`resolve` prints the final agent-facing prompt by default. For explicitness in
+test scripts, you can also pass `--format prompt`:
+
+```powershell
+python -m ai_policy_runtime.cli resolve --format prompt "帮我写一个 C++20 低延迟队列"
+python -m ai_policy_runtime.cli resolve --format prompt --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+```
+
+Use `--format json` only when a tool needs structured command output:
+
+```powershell
+python -m ai_policy_runtime.cli resolve --format json "帮我写一个 C++20 低延迟队列"
 ```
 
 This writes the current task state to `.policy/current/`:

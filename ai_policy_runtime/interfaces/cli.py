@@ -22,6 +22,12 @@ def main() -> None:
     _add_runtime_args(resolve)
     resolve.add_argument("task", help="Natural-language task description.")
     resolve.add_argument("--pack", action="append", default=[], help="Pack id to expand.")
+    resolve.add_argument(
+        "--format",
+        choices=("json", "prompt"),
+        default="prompt",
+        help="Output JSON metadata or the agent-facing effective prompt.",
+    )
 
     explain = subparsers.add_parser("explain", help="Explain Task Analysis for a task.")
     _add_runtime_args(explain)
@@ -90,7 +96,10 @@ def main() -> None:
 
     args = parser.parse_args()
     output, exit_code = _dispatch(args)
-    print(json.dumps(output, indent=2))
+    if isinstance(output, str):
+        print(output)
+    else:
+        print(json.dumps(output, indent=2))
     if exit_code:
         raise SystemExit(exit_code)
 
@@ -117,14 +126,14 @@ def _runtime_from_args(args: argparse.Namespace) -> PolicyRuntime:
     )
 
 
-def _dispatch(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+def _dispatch(args: argparse.Namespace) -> tuple[dict[str, Any] | str, int]:
     return CommandDispatcher().dispatch(args)
 
 
 class CommandDispatcher:
     """Dispatch parsed CLI arguments to application services."""
 
-    def dispatch(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+    def dispatch(self, args: argparse.Namespace) -> tuple[dict[str, Any] | str, int]:
         handlers = {
             "resolve": self._resolve,
             "explain": self._explain,
@@ -144,8 +153,12 @@ class CommandDispatcher:
         except KeyError as exc:
             raise ValueError(f"Unsupported command: {args.command}") from exc
 
-    def _resolve(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
-        return _runtime_from_args(args).resolve(args.task, tuple(args.pack)).to_dict(), 0
+    def _resolve(self, args: argparse.Namespace) -> tuple[dict[str, Any] | str, int]:
+        result = _runtime_from_args(args).resolve(args.task, tuple(args.pack))
+        if args.format == "prompt":
+            prompt = result.current / "effective-prompt.md"
+            return prompt.read_text(encoding="utf-8").rstrip(), 0
+        return result.to_dict(), 0
 
     def _explain(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         return _runtime_from_args(args).explain(args.task).to_dict(), 0

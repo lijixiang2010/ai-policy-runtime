@@ -1,0 +1,230 @@
+# Skill: C++ Generic Constraints
+# File: skills/domain/cpp/templates/generic_constraints.skill.yaml
+
+skill:
+  id: cpp.templates.generic_constraints
+  name: C++ Generic Constraints
+  version: 1.0.0
+  status: stable
+  description: >-
+    Template skill for clear generic constraints, C++20 concepts, readable C++17
+    fallback constraints, and understandable diagnostics.
+
+  level: domain
+  domain: cpp
+  category: templates
+  priority: 78
+
+  tags:
+    - cpp
+    - templates
+    - cpp17
+    - cpp20
+    - modernization
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+    - modernization
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - modernize_code
+
+  dependencies:
+    - cpp.standard.standard_availability
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_template_constraints_required
+      when_text_matches:
+        - template constraint
+        - concept
+        - concepts
+        - requires clause
+        - sfinae
+        - enable_if
+        - generic constraint
+        - constrained template
+      set:
+        template_constraints_required: true
+      tags:
+        - templates
+      semantic_match:
+        - generic template interface needs constraints
+        - template diagnostics should be understandable
+        - generic requirements should be explicit
+      confidence: 0.82
+
+sources:
+  - cpp_core_guidelines:T.10
+  - cpp_core_guidelines:T.20
+  - cpp_core_guidelines:T.24
+
+source_notes:
+  - Source references are traceability anchors only; rules are reconstructed into
+    project-owned Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.templates.prefer_concepts_cpp20
+      title: Prefer concepts in C++20 when constraints are part of the interface
+      when: language == "cpp" and standard >= 20 and template_constraints_required
+        == true
+      unless: compatibility_with_cpp17_required == true
+      should: >-
+        Prefer C++20 concepts and requires-clauses over SFINAE or std::enable_if
+        when template constraints are part of the public interface.
+      target: template_constraints
+      action: prefer
+      prefer: concepts
+      over:
+        - sfinae
+        - std::enable_if
+        - unconstrained_templates
+      require:
+        - If SFINAE or std::enable_if is used in C++20 code, explain the compatibility
+          requirement.
+        - Keep constraints visible near the template interface.
+      rationale: >-
+        Concepts make generic requirements visible, improve diagnostics, and reduce
+        accidental overload participation.
+
+    - id: cpp.templates.cpp17.prefer_readable_sfinae
+      title: Use readable SFINAE or type traits in pre-C++20 code
+      when: language == "cpp" and standard < 20 and template_constraints_required
+        == true
+      should: >-
+        Use readable SFINAE, std::enable_if, or type traits when template constraints
+        are required in pre-C++20 code.
+      target: template_constraints
+      action: recommend
+      require:
+        - Keep constraints close to the template interface.
+        - Avoid obscure substitution tricks when a clearer trait, helper alias,
+          or overload structure is available.
+      rationale: >-
+        Pre-C++20 code cannot use standard concepts, but constraints should still
+        express semantic requirements clearly.
+
+    - id: cpp.templates.avoid_unconstrained_templates
+      title: Avoid unconstrained templates when constraints are semantically required
+      when: language == "cpp" and template_constraints_required == true
+      should_not: >-
+        Avoid exposing unconstrained template interfaces when the valid argument
+        set has meaningful semantic requirements.
+      target: template_constraints
+      action: discourage
+      rationale: >-
+        Unconstrained templates can produce unclear errors and accidental overload
+        participation.
+
+    - id: cpp.templates.keep_diagnostics_understandable
+      title: Keep template diagnostics understandable
+      when: language == "cpp" and template_constraints_required == true
+      should: >-
+        Structure generic constraints so invalid arguments fail with actionable
+        diagnostics near the template interface.
+      target: template_diagnostics
+      action: recommend
+      rationale: >-
+        Generic code should fail in ways that help users understand violated requirements.
+
+  preference:
+    - id: cpp.templates.preference_named_concepts
+      title: Prefer named semantic concepts over repeated ad-hoc requires expressions
+      when: language == "cpp" and standard >= 20 and template_constraints_required
+        == true
+      prefer: named_semantic_concept
+      over:
+        - repeated_ad_hoc_requires_expression
+      target: template_constraints
+      action: prefer
+      rationale: >-
+        Named concepts make repeated semantic requirements reusable, searchable,
+        and easier to understand at API boundaries.
+
+exceptions:
+  - id: cpp.templates.exception_cpp17_compatibility
+    when: compatibility_with_cpp17_required == true
+    allow:
+      - sfinae
+      - std::enable_if
+      - type_traits_constraints
+    require:
+      - Keep constraints readable.
+      - Explain the compatibility requirement.
+      - Do not recommend C++20 concepts when the task requires C++17 compatibility.
+
+verification:
+  llm_self_check:
+    - id: cpp.templates.review_constraints
+      type: llm_self_check
+      applies_to:
+        - template_constraints
+        - template_diagnostics
+      severity: advisory
+      prompt: >-
+        Check whether template requirements are explicit, readable, and appropriate
+        for the selected C++ standard. In C++20, prefer concepts when constraints
+        are part of the interface. In C++17, ensure SFINAE, std::enable_if, or
+        type traits remain readable and close to the template interface.
+
+    - id: cpp.templates.review_standard_version
+      type: llm_self_check
+      applies_to:
+        - standard_availability
+        - template_constraints
+      severity: warning
+      prompt: >-
+        Verify that C++20 concepts are not recommended for C++17 tasks unless
+        the project explicitly provides a compatibility abstraction or polyfill.
+
+effective_rule_examples:
+  cpp20_template_constraints:
+    task_context:
+      language: cpp
+      standard: 20
+      template_constraints_required: true
+    effective_rules:
+      soft:
+        - Prefer C++20 concepts and requires-clauses over SFINAE or std::enable_if
+          when template constraints are part of the public interface.
+        - Avoid exposing unconstrained template interfaces when the valid argument
+          set has meaningful semantic requirements.
+      preference:
+        - Prefer named semantic concepts over repeated ad-hoc requires expressions.
+  cpp17_template_constraints:
+    task_context:
+      language: cpp
+      standard: 17
+      template_constraints_required: true
+    effective_rules:
+      soft:
+        - Use readable SFINAE, std::enable_if, or type traits when template constraints
+          are required in pre-C++20 code.
+        - Structure generic constraints so invalid arguments fail with actionable
+          diagnostics near the template interface.
+    not_expected:
+      - Prefer C++20 concepts for C++17 template constraints.
+
+authoring_notes:
+  - Source references are for auditability only; do not mirror C++ Core Guidelines
+    structure mechanically.
+  - The task_analysis section generates context from text features; it is advisory
+    activation metadata, not policy.
+  - Do not recommend C++20 concepts for C++17 tasks.
+  - This skill depends on standard availability checks to prevent C++20-only recommendations
+    in C++17 tasks.
+  - Keep this Skill focused on generic interface constraints and diagnostics.

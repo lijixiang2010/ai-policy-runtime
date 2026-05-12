@@ -1,0 +1,171 @@
+# Skill: C++ Allocation Control
+# File: skills/domain/cpp/performance/allocation_control.skill.yaml
+
+skill:
+  id: cpp.performance.allocation_control
+  name: C++ Allocation Control
+  version: 1.0.0
+  status: stable
+  description: >-
+    Allocation policy for avoiding unnecessary dynamic allocation and using capacity
+    planning where appropriate.
+
+  level: domain
+  domain: cpp
+  category: performance
+  priority: 72
+
+  tags:
+    - cpp
+    - performance
+    - allocation
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when: >
+      language == "cpp" and
+      (allocation_sensitive == true or hot_path == true or performance_critical == true)
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+
+  dependencies:
+    - cpp.resource_management.raii
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_allocation_sensitive_task
+      when_text_matches:
+        - allocation
+        - reserve
+        - heap
+        - dynamic allocation
+        - 分配
+        - 堆分配
+      set:
+        allocation_sensitive: true
+      tags:
+        - performance
+      confidence: 0.76
+
+sources:
+  - cpp_core_guidelines:Per.14
+  - cpp_core_guidelines:Per.15
+  - cpp_core_guidelines:SL.con.2
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.alloc.avoid_unnecessary_dynamic_allocation
+      title: Avoid unnecessary dynamic allocation
+      when: >
+        language == "cpp" and
+        (allocation_sensitive == true or hot_path == true or performance_critical == true)
+      should_not: >-
+        Avoid unnecessary dynamic allocation and make any required allocation
+        policy explicit in allocation-sensitive code.
+      target: allocation
+      action: discourage
+      rationale: >-
+        Allocation adds cost, failure paths, and sometimes latency variance.
+      unless: custom_allocator_required == true
+      require:
+        - If custom allocation is used, explain the ownership, lifetime, and performance
+          reason.
+        - Keep allocator-specific code localized behind a clear abstraction.
+
+    - id: cpp.alloc.prefer_stack_or_contiguous_container
+      title: Prefer stack allocation or contiguous containers where appropriate
+      when: >
+        language == "cpp" and
+        (allocation_sensitive == true or hot_path == true or performance_critical == true)
+      should: >-
+        Prefer stack storage or contiguous standard containers when lifetime and
+        size make them appropriate.
+      target: allocation
+      action: recommend
+      rationale: >-
+        Local objects and standard containers usually simplify ownership and improve
+        locality.
+
+    - id: cpp.alloc.reserve_when_size_known
+      title: Reserve capacity when size is known
+      when: language == "cpp" and expected_size_known == true
+      should: >-
+        Reserve capacity when the required size is known or can be cheaply estimated.
+      target: allocation
+      action: recommend
+      rationale: Reserving can avoid repeated reallocations.
+
+    - id: cpp.alloc.avoid_premature_optimization
+      title: Avoid premature optimization outside hot paths
+      when: language == "cpp" and allocation_sensitive == true and hot_path != true
+      should_not: >-
+        Avoid allocation-focused micro-optimizations outside hot paths unless
+        there is evidence of value.
+      target: allocation
+      action: discourage
+      rationale: >-
+        Allocation changes should preserve clarity unless there is a performance
+        reason.
+
+  preference:
+    - id: cpp.alloc.preference_clarity_outside_hot_path
+      title: Prefer clarity outside hot paths
+      when: language == "cpp" and allocation_sensitive == true and hot_path != true
+      prefer: clarity
+      over:
+        - micro_optimization
+      target: allocation
+      action: prefer
+
+exceptions:
+  - id: cpp.alloc.exception_allocator_policy
+    when: custom_allocator_required == true
+    allow:
+      - custom_allocation_strategy
+    require:
+      - Explain allocator ownership and lifetime.
+      - Keep allocation policy visible.
+
+verification:
+  static_checks:
+    - id: cpp.performance.allocation_control.verify.performance_unnecessary_copy_initialization
+      type: static_analysis
+      applies_to:
+        - allocation
+      severity: warning
+      check: performance-unnecessary-copy-initialization
+
+  llm_self_check:
+    - id: cpp.performance.allocation_control.verify.allocation_review
+      type: llm_self_check
+      applies_to:
+        - allocation
+      severity: advisory
+      prompt: >-
+        Review whether allocation choices are justified by task context and measured
+        needs.
+
+effective_rule_examples:
+  hot_path_alloc:
+    task_context:
+      language: cpp
+      hot_path: true
+    effective_rules:
+      soft:
+        - Avoid unnecessary dynamic allocation.
+
+authoring_notes:
+  - Allocation guidance should be stricter in hot paths and more conservative
+    elsewhere.

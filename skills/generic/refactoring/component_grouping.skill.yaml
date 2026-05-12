@@ -1,0 +1,138 @@
+# Skill: Generic Component Grouping
+# File: skills/generic/refactoring/component_grouping.skill.yaml
+
+skill:
+  id: generic.refactoring.component_grouping
+  name: Generic Component Grouping
+  version: 1.0.0
+  status: stable
+  description: >-
+    Groups scattered related state, functions, helpers, and decisions into coherent
+    components with clear responsibilities.
+
+  level: domain
+  domain: generic_code
+  category: refactoring
+  priority: 78
+
+  tags:
+    - generic
+    - refactoring
+    - code-quality
+    - architecture
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      artifact_type: code
+    triggers:
+      - refactor_code
+      - improve_code_quality
+      - reduce_complexity
+
+  dependencies:
+    - generic.code_quality.complexity_reduction
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_scattered_related_logic
+      when_text_matches:
+        - scattered logic
+        - group related
+        - component grouping
+        - cohesive component
+        - modularize related logic
+        - organize helpers
+        - group related state
+        - extract component
+      set:
+        scattered_related_logic: true
+        artifact_type: code
+        refinement_requested: true
+      tags:
+        - refactoring
+        - code-quality
+      semantic_match:
+        - related functions and state should be grouped by responsibility
+        - scattered helpers should become coherent components
+      confidence: 0.86
+
+rules:
+  soft:
+    - id: generic.grouping.group_related_components
+      title: Group related components by responsibility
+      when: artifact_type == "code" and scattered_related_logic == true
+      should: >-
+        Group related variables, functions, helpers, and state into coherent
+        components when doing so makes responsibilities clearer.
+      target: component_structure
+      action: recommend
+      rationale: >-
+        Related logic is easier to understand when it is organized around stable
+        responsibilities rather than scattered across unrelated functions.
+
+    - id: generic.grouping.name_component_boundaries
+      title: Make component boundaries explicit
+      when: artifact_type == "code" and refinement_requested == true
+      should: >-
+        Group related state, helper functions, and behavior into coherent
+        components with clear responsibilities, names, interfaces, and placement.
+      target: component_structure
+      action: recommend
+      rationale: >-
+        A component should reduce navigation cost by making its purpose obvious.
+
+    - id: generic.grouping.avoid_large_bucket_components
+      title: Avoid vague bucket components
+      when: artifact_type == "code"
+      should_not: >-
+        Avoid creating broad utility or manager components that collect unrelated
+        responsibilities under a vague name.
+      target: component_structure
+      action: discourage
+      rationale: >-
+        Grouping should clarify responsibilities, not hide unrelated behavior in a larger bucket.
+
+  preference:
+    - id: generic.grouping.preference_cohesion
+      title: Prefer cohesive components over scattered helpers
+      when: artifact_type == "code"
+      prefer: cohesive_component
+      over:
+        - scattered_helper_logic
+      target: component_structure
+      action: prefer
+
+exceptions:
+  - id: generic.grouping.exception_small_local_helpers
+    when: minimal_example == true or abstraction_would_increase_complexity == true
+    allow:
+      - local_helper_logic
+    require:
+      - Keep local helper logic small and easy to inline mentally.
+      - Explain why extraction would increase rather than reduce clarity.
+
+verification:
+  llm_self_check:
+    - id: generic.grouping.review_component_cohesion
+      type: llm_self_check
+      applies_to:
+        - component_structure
+      severity: advisory
+      prompt: >-
+        Check whether related state and behavior are grouped around clear responsibilities
+        and whether any extracted component has become a vague bucket.
+
+effective_rule_examples:
+  scattered_helpers:
+    task_context:
+      artifact_type: code
+      scattered_related_logic: true
+    effective_rules:
+      soft:
+        - Group related variables, functions, helpers, and state into coherent components when it improves responsibility clarity.

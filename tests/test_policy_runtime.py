@@ -27,6 +27,7 @@ from ai_policy_runtime.task_analysis.lexicon import LexiconRule, TaskLexicon
 from ai_policy_runtime.task_analysis.semantic_index import SemanticTaskIndex
 from ai_policy_runtime.adapters.codex.wrapper import _build_codex_command
 from ai_policy_runtime.adapters.claude.wrapper import _build_claude_command
+from ai_policy_runtime.interfaces.cli import CommandDispatcher
 from ai_policy_runtime.services.project_context import (
     ProjectContextAnalyzer,
     merge_project_analysis,
@@ -38,6 +39,58 @@ from ai_policy_runtime.services.injector import BEGIN, END, inject_current_promp
 from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_mapping
 from ai_policy_runtime.services.verification import FileVerifier, Violation, verify_rules
+
+
+def _load_fixture(name: str) -> dict[str, object]:
+    import yaml  # type: ignore
+
+    path = Path("tests") / "fixtures" / name
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _resolve_fixture(fixture: dict[str, object]) -> dict[str, object]:
+    runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+    result = runtime.resolve(
+        str(fixture["task"]),
+        tuple(str(item) for item in fixture.get("packs", ())),
+    )
+    return result.structured["effective_rules"]
+
+
+def _statements(effective: dict[str, object]) -> set[str]:
+    statements: set[str] = set()
+    for group in ("hard", "soft", "preference"):
+        for rule in effective.get(group, ()):
+            statements.add(str(rule.get("statement", "")))
+    return statements
+
+
+def _sources(effective: dict[str, object]) -> set[str]:
+    sources: set[str] = set()
+    for group in ("hard", "soft", "preference"):
+        for rule in effective.get(group, ()):
+            source = rule.get("source", {})
+            if isinstance(source, dict):
+                sources.add(str(source.get("skill", "")))
+    for item in effective.get("exceptions", ()):
+        source = item.get("source", {})
+        if isinstance(source, dict):
+            sources.add(str(source.get("skill", "")))
+    return sources
+
+
+def _has_statement_containing(effective: dict[str, object], text: str) -> bool:
+    return any(text in statement for statement in _statements(effective))
+
+
+def _section_bullet_count(prompt: str, title: str) -> int:
+    marker = f"## {title}"
+    start = prompt.find(marker)
+    if start < 0:
+        return 0
+    next_section = prompt.find("\n## ", start + len(marker))
+    section = prompt[start:] if next_section < 0 else prompt[start:next_section]
+    return sum(1 for line in section.splitlines() if line.startswith("- "))
 
 
 class KeywordConceptEmbeddingProvider:
@@ -130,6 +183,19 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(task.context["scenario"], "matching_engine")
         self.assertIn("trading", task.tags)
         self.assertIn("systems_programming", task.tags)
+
+    def test_cpp_refactor_does_not_infer_hot_path_without_latency_signal(self) -> None:
+        task = analyze(
+            "Refactor this C++20 code so it is not just working. "
+            "Reduce complexity and preserve safety."
+        ).task
+
+        self.assertEqual(task.domain, "cpp")
+        self.assertEqual(task.context["standard"], 20)
+        self.assertNotIn("hot_path", task.context)
+        self.assertNotIn("performance_critical", task.context)
+        self.assertNotIn("allocation_sensitive", task.context)
+        self.assertNotIn("low_latency", task.tags)
 
     def test_task_analyzer_extracts_cpp20_api_span_intent(self) -> None:
         task = analyze("设计一个 C++20 API，参数是连续范围，优先使用 span").task
@@ -224,6 +290,20 @@ class PolicyRuntimeTests(unittest.TestCase):
             [match.rule.skill_id for match in matches],
             ["cpp.performance.hot_path"],
         )
+
+    def test_task_analysis_context_rules_use_text_match_authoring_form(self) -> None:
+        lexicon = TaskLexicon.from_skills_dir("skills")
+
+        template_rule = next(
+            rule
+            for rule in lexicon.context_rules
+            if rule.source.endswith(":detect_template_constraints_required")
+        )
+
+        self.assertEqual(template_rule.field, "context.template_constraints_required")
+        self.assertEqual(template_rule.value, True)
+        self.assertIn("concept", template_rule.phrases)
+        self.assertEqual(template_rule.set_context, {"template_constraints_required": True})
 
     def test_hashing_embedding_provider_supports_lightweight_semantic_similarity(self) -> None:
         provider = HashingTextEmbeddingProvider()
@@ -654,6 +734,46 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertEqual(effective.hard, [])
 
+    def test_multiline_condition_expression_is_normalized(self) -> None:
+        skill = Skill.from_mapping(
+            {
+                "skill": {
+                    "id": "cpp.multiline.condition",
+                    "name": "Multiline Condition",
+                    "version": "1.0.0",
+                    "level": "domain",
+                    "domain": "cpp",
+                    "priority": 10,
+                    "activation": {"when": {"language": "cpp"}},
+                    "capabilities": ["code_generation"],
+                },
+                "rules": {
+                    "soft": [
+                        {
+                            "id": "allocation_condition",
+                            "when": (
+                                'language == "cpp" and\n'
+                                "(hot_path == true or performance_critical == true)"
+                            ),
+                            "should": "Keep allocation policy explicit.",
+                            "target": "allocation",
+                            "action": "recommend",
+                        }
+                    ]
+                },
+            }
+        )
+        task = TaskContext(
+            domain="cpp",
+            task_type="write_code",
+            capabilities=("code_generation",),
+            context={"language": "cpp", "hot_path": True},
+        )
+
+        effective = PolicyEngine(SkillRegistry([skill])).evaluate(task)
+
+        self.assertEqual([rule.id for rule in effective.soft], ["allocation_condition"])
+
     def test_pack_expansion_includes_parent_and_overrides(self) -> None:
         base = Skill.from_mapping(
             {
@@ -940,6 +1060,47 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(effective["hard"][0]["source"]["skill"], "cpp.render")
         self.assertEqual(effective["preference"][0]["prefer"], "safety")
 
+    def test_effective_prompt_keeps_bullets_on_separate_lines(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Refactor this C++20 code so it is not just working. "
+            "Reduce complexity and preserve safety.",
+            ("cpp.production_refinement",),
+        )
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+
+        self.assertNotIn(".- ", prompt)
+        self.assertNotIn("Semantic Skill Matches", prompt)
+        self.assertIn("Preserve the existing observable behavior", prompt)
+        self.assertIn("Avoid undefined behavior.", prompt)
+        self.assertIn("Group related state, helper functions, and behavior", prompt)
+        self.assertIn("Verify behavior preservation.", prompt)
+        self.assertIn(
+            "Verify no new ownership, lifetime, resource, bounds, or "
+            "undefined-behavior risks were introduced.",
+            prompt,
+        )
+        self.assertIn(
+            "Verify the refactoring reduced accidental complexity without "
+            "introducing over-abstraction.",
+            prompt,
+        )
+        self.assertNotIn("Verify: Do not use unchecked bounds access", prompt)
+        self.assertLessEqual(_section_bullet_count(prompt, "Verification Requirements"), 5)
+        self.assertLessEqual(_section_bullet_count(prompt, "HARD Rules"), 8)
+        self.assertLessEqual(_section_bullet_count(prompt, "SOFT Rules"), 12)
+
+        detailed_checks = [
+            item["statement"]
+            for item in result.structured["effective_rules"]["verification"]["required"]
+        ]
+        self.assertTrue(
+            any("Do not use unchecked bounds access" in item for item in detailed_checks)
+        )
+        self.assertTrue(
+            any("Preserve the existing observable behavior" in item for item in detailed_checks)
+        )
+
     def test_effective_rules_schema_validator_reports_missing_field(self) -> None:
         diagnostics = validate_effective_rules_mapping(
             {"effective_rules": {"schema_version": 1}},
@@ -947,6 +1108,202 @@ class PolicyRuntimeTests(unittest.TestCase):
         )
 
         self.assertTrue(diagnostics)
+
+    def test_cpp17_string_view_fixture_resolves_version_safe_rules(self) -> None:
+        fixture = _load_fixture("cpp17_string_view_task.yaml")
+        effective = _resolve_fixture(fixture)
+        statements = _statements(effective)
+        sources = _sources(effective)
+
+        self.assertIn("cpp.standard.cpp17.best_practices", sources)
+        self.assertIn("cpp.standard.standard_availability", sources)
+        self.assertTrue(_has_statement_containing(effective, "std::string_view"))
+        self.assertTrue(_has_statement_containing(effective, "C++20-only facilities"))
+        self.assertFalse(_has_statement_containing(effective, "std::span"))
+        self.assertFalse(_has_statement_containing(effective, "C++20 concepts"))
+        self.assertFalse(_has_statement_containing(effective, "std::jthread"))
+
+    def test_cpp20_span_fixture_resolves_contiguous_range_rules(self) -> None:
+        fixture = _load_fixture("cpp20_span_task.yaml")
+        effective = _resolve_fixture(fixture)
+        statements = _statements(effective)
+        sources = _sources(effective)
+
+        self.assertIn("cpp.standard.cpp17.best_practices", sources)
+        self.assertIn("cpp.standard.cpp20.best_practices", sources)
+        self.assertIn("cpp.standard.standard_availability", sources)
+        self.assertTrue(_has_statement_containing(effective, "std::span"))
+        self.assertTrue(_has_statement_containing(effective, "unavailable in the selected C++ standard"))
+        self.assertFalse(_has_statement_containing(effective, "std::string_view"))
+
+    def test_cpp20_low_latency_fixture_keeps_safety_above_performance(self) -> None:
+        fixture = _load_fixture("cpp20_low_latency_task.yaml")
+        effective = _resolve_fixture(fixture)
+        statements = _statements(effective)
+        sources = _sources(effective)
+
+        self.assertIn("cpp.safety.undefined_behavior", sources)
+        self.assertIn("cpp.performance.hot_path", sources)
+        self.assertIn("cpp.performance.allocation_control", sources)
+        self.assertTrue(_has_statement_containing(effective, "std::span"))
+        self.assertIn("safety > performance", statements)
+        self.assertIn("performance > readability", statements)
+
+    def test_cpp_api_design_fixture_resolves_interface_rules(self) -> None:
+        fixture = _load_fixture("cpp_api_design_task.yaml")
+        effective = _resolve_fixture(fixture)
+        sources = _sources(effective)
+
+        self.assertIn("cpp.api_design.interface_intent", sources)
+        self.assertIn("cpp.api_design.parameter_passing", sources)
+        self.assertIn("cpp.api_design.ownership_in_interfaces", sources)
+
+    def test_cpp_review_lifetime_fixture_resolves_review_safety_rules(self) -> None:
+        fixture = _load_fixture("cpp_review_lifetime_task.yaml")
+        effective = _resolve_fixture(fixture)
+        sources = _sources(effective)
+
+        self.assertIn("cpp.safety.ownership_and_lifetime", sources)
+        self.assertIn("cpp.resource_management.raii", sources)
+        self.assertIn("cpp.safety.undefined_behavior", sources)
+        self.assertTrue(effective["verification"]["required"])
+
+    def test_cpp20_template_constraints_prefer_concepts(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Write a C++20 generic template API with explicit template constraints.",
+            ("cpp.modernization",),
+        )
+        effective = result.structured["effective_rules"]
+        statements = _statements(effective)
+
+        self.assertIn(
+            "Prefer C++20 concepts and requires-clauses over SFINAE or std::enable_if "
+            "when template constraints are part of the public interface.",
+            statements,
+        )
+        self.assertIn(
+            "Avoid exposing unconstrained template interfaces when the valid argument set "
+            "has meaningful semantic requirements.",
+            statements,
+        )
+        self.assertIn(
+            "Structure generic constraints so invalid arguments fail with actionable "
+            "diagnostics near the template interface.",
+            statements,
+        )
+        self.assertIn("named_semantic_concept > repeated_ad_hoc_requires_expression", statements)
+
+    def test_cpp17_template_constraints_use_readable_sfinae_fallback(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Write a C++17 generic template API with explicit template constraints.",
+            ("cpp.modernization",),
+        )
+        statements = _statements(result.structured["effective_rules"])
+
+        self.assertIn(
+            "Use readable SFINAE, std::enable_if, or type traits when template "
+            "constraints are required in pre-C++20 code.",
+            statements,
+        )
+        self.assertIn(
+            "Avoid exposing unconstrained template interfaces when the valid argument set "
+            "has meaningful semantic requirements.",
+            statements,
+        )
+        self.assertIn(
+            "Structure generic constraints so invalid arguments fail with actionable "
+            "diagnostics near the template interface.",
+            statements,
+        )
+        self.assertNotIn(
+            "Prefer C++20 concepts and requires-clauses over SFINAE or std::enable_if "
+            "when template constraints are part of the public interface.",
+            statements,
+        )
+
+    def test_resolve_cli_can_output_effective_prompt(self) -> None:
+        from argparse import Namespace
+
+        output, exit_code = CommandDispatcher().dispatch(
+            Namespace(
+                command="resolve",
+                root=".",
+                policy_root=".",
+                skills="skills",
+                packs="packs",
+                task="Write a C++17 function that accepts a read-only string parameter.",
+                pack=[],
+                format="prompt",
+            )
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIsInstance(output, str)
+        self.assertIn("# Effective Rules for Current Task", output)
+        self.assertIn("Prefer std::string_view", output)
+        self.assertNotIn('"effective_rules"', output)
+
+    def test_resolve_cli_defaults_to_effective_prompt(self) -> None:
+        from argparse import Namespace
+
+        output, exit_code = CommandDispatcher().dispatch(
+            Namespace(
+                command="resolve",
+                root=".",
+                policy_root=".",
+                skills="skills",
+                packs="packs",
+                task="Write a C++17 function that accepts a read-only string parameter.",
+                pack=[],
+                format="prompt",
+            )
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIsInstance(output, str)
+        self.assertIn("Prefer available standard facility over unavailable or unapproved facility.", output)
+        self.assertNotIn("available_standard_facility > unavailable_or_unapproved_facility", output)
+
+    def test_generic_production_refinement_pack_outputs_refinement_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Refactor this code so it is not just working. Reduce complexity, "
+            "group scattered logic, and make the API easier to use.",
+            ("generic.production_refinement",),
+        )
+        effective = result.structured["effective_rules"]
+        statements = _statements(effective)
+
+        self.assertIn(
+            "Preserve the existing observable behavior while reducing complexity "
+            "unless the task explicitly asks for a behavior change.",
+            statements,
+        )
+        self.assertIn(
+            "Remove accidental complexity that does not contribute to correctness, "
+            "extensibility, performance, or clarity.",
+            statements,
+        )
+        self.assertTrue(_has_statement_containing(effective, "Group related variables"))
+        self.assertTrue(_has_statement_containing(effective, "Minimize the number of steps"))
+        self.assertFalse(any(item.startswith("Introduce abstractions") for item in statements))
+
+    def test_cpp_production_refinement_pack_combines_generic_and_cpp_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Refactor this C++20 code so it is not just working. Reduce complexity "
+            "and preserve safety.",
+            ("cpp.production_refinement",),
+        )
+        effective = result.structured["effective_rules"]
+        sources = _sources(effective)
+
+        self.assertIn("generic.code_quality.complexity_reduction", sources)
+        self.assertIn("cpp.safety.undefined_behavior", sources)
+        self.assertTrue(_has_statement_containing(effective, "observable behavior"))
+        self.assertTrue(_has_statement_containing(effective, "undefined behavior"))
 
 
 if __name__ == "__main__":

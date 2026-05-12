@@ -1,0 +1,20 @@
+kind: pack
+api_version: policy.skill/v1
+pack:
+  id: cpp.safe_generation
+  name: C++ Safe Generation
+  version: 1.0.0
+  description: Safe default policy for generating modern C++.
+
+includes:
+  - cpp.core.baseline
+  - cpp.safety.undefined_behavior
+  - cpp.safety.ownership_and_lifetime
+  - cpp.safety.bounds_safety
+  - cpp.safety.type_safety
+  - cpp.resource_management.raii
+  - cpp.api_design.interface_intent
+  - cpp.standard.standard_availability
+
+excludes: []
+overrides: []

@@ -217,14 +217,18 @@ class SkillAnalysisDocument:
         }
 
     def _context_rule(self, item: dict[str, Any]) -> LexiconRule:
+        set_context = dict(item.get("set", {}))
+        field, value = _context_evidence_field_value(set_context)
+        rule_id = item.get("id")
+        source_suffix = f"context:{rule_id}" if rule_id else "context"
         return LexiconRule(
             skill_id=self.skill_id,
-            field=str(item.get("field", "context")),
-            value=item.get("value"),
-            phrases=_normalize_phrases(_strings(item.get("match", ()))),
+            field=field,
+            value=value,
+            phrases=_normalize_phrases(_strings(item.get("when_text_matches", ()))),
             confidence=float(item.get("confidence", 0.8)),
-            source=f"skill:{self.skill_id}:context",
-            set_context=dict(item.get("set", {})),
+            source=f"skill:{self.skill_id}:{source_suffix}",
+            set_context=set_context,
             tags=tuple(_strings(item.get("tags", ()))),
             semantic_texts=_normalize_phrases(_strings(item.get("semantic_match", ()))),
         )
@@ -283,3 +287,24 @@ def _strings(value: Any) -> tuple[str, ...]:
 
 def _normalize_phrases(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(" ".join(value.lower().strip().split()) for value in values if value)
+
+
+def _context_evidence_field_value(set_context: dict[str, Any]) -> tuple[str, Any]:
+    generic_context_keys = {
+        "artifact_type",
+        "refinement_requested",
+        "behavior_preservation_required",
+    }
+    for key, value in set_context.items():
+        if value is not True and key not in generic_context_keys:
+            return f"context.{key}", value
+    for key, value in set_context.items():
+        if key not in generic_context_keys:
+            return f"context.{key}", value
+    for key, value in set_context.items():
+        if value is not True:
+            return f"context.{key}", value
+    if set_context:
+        key, value = next(iter(set_context.items()))
+        return f"context.{key}", value
+    return "context", True

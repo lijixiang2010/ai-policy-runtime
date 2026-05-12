@@ -1,0 +1,124 @@
+# Skill: Generic Expressive Implementation
+# File: skills/generic/code_quality/expressive_implementation.skill.yaml
+
+skill:
+  id: generic.code_quality.expressive_implementation
+  name: Generic Expressive Implementation
+  version: 1.0.0
+  status: stable
+  description: >-
+    Prefers language-native, direct, and clear implementation constructs over
+    verbose or ad-hoc code when clarity is preserved.
+
+  level: domain
+  domain: generic_code
+  category: code_quality
+  priority: 76
+
+  tags:
+    - generic
+    - code-quality
+    - production-polish
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      artifact_type: code
+    triggers:
+      - write_code
+      - refactor_code
+      - improve_code_quality
+      - polish_implementation
+
+  dependencies:
+    - generic.code_quality.complexity_reduction
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_expressive_implementation_request
+      when_text_matches:
+        - expressive implementation
+        - language-native
+        - idiomatic code
+        - concise expression
+        - clearer syntax
+        - direct construct
+        - remove boilerplate
+        - more expressive code
+      set:
+        artifact_type: code
+        refinement_requested: true
+      tags:
+        - code-quality
+      semantic_match:
+        - use the clearest language-native construct for the job
+        - replace verbose boilerplate with direct expressive code
+      confidence: 0.78
+
+rules:
+  soft:
+    - id: generic.expression.use_language_native_constructs
+      title: Use clear language-native constructs
+      when: artifact_type == "code" and refinement_requested == true
+      should: >-
+        Use language-native constructs that express the operation directly when
+        they preserve clarity, correctness, and maintainability.
+      target: implementation_expression
+      action: recommend
+      rationale: >-
+        Expressive constructs reduce boilerplate and make the intent easier to see.
+
+    - id: generic.expression.avoid_clever_expression
+      title: Avoid clever expression that hides intent
+      when: artifact_type == "code"
+      should_not: >-
+        Avoid replacing straightforward code with terse or clever expressions
+        that hide intent, obscure errors, or make debugging harder.
+      target: implementation_expression
+      action: discourage
+      rationale: >-
+        Concision is valuable only when it improves or preserves readability.
+
+  preference:
+    - id: generic.expression.preference_clear_native_expression
+      title: Prefer clear native expression over ad-hoc boilerplate
+      when: artifact_type == "code"
+      prefer: clear_language_native_expression
+      over:
+        - verbose_ad_hoc_boilerplate
+      target: implementation_expression
+      action: prefer
+
+exceptions:
+  - id: generic.expression.exception_explicit_steps_for_clarity
+    when: user_requested_minimal_code == true or abstraction_would_increase_complexity == true
+    allow:
+      - explicit_step_by_step_code
+    require:
+      - Keep the explicit form easy to scan.
+      - Avoid hiding important error handling or state changes.
+
+verification:
+  llm_self_check:
+    - id: generic.expression.review_clarity
+      type: llm_self_check
+      applies_to:
+        - implementation_expression
+      severity: advisory
+      prompt: >-
+        Check whether language-native constructs make the code clearer and whether
+        any terse expression hides important intent or error handling.
+
+effective_rule_examples:
+  expressive_refinement:
+    task_context:
+      artifact_type: code
+      refinement_requested: true
+    effective_rules:
+      soft:
+        - Use language-native constructs that express the operation directly when they preserve clarity.

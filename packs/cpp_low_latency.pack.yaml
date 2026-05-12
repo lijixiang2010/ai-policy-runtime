@@ -1,0 +1,25 @@
+kind: pack
+api_version: policy.skill/v1
+pack:
+  id: cpp.low_latency
+  name: C++ Low Latency
+  version: 1.0.0
+  description: Low-latency C++ pack extending safe generation with performance and concurrency rules.
+extends:
+- cpp.safe_generation
+includes:
+- cpp.performance.hot_path
+- cpp.performance.allocation_control
+- cpp.concurrency.data_race_safety
+excludes: []
+overrides:
+- id: cpp.low_latency.preference.performance_when_safe
+  when: hot_path == true
+  prefer: performance
+  over: readability
+  target: hot_path
+  rationale: In hot paths, performance can outrank readability only when safety and defined behavior are preserved.
+  action: prefer
+  require:
+  - Preserve safety, ownership, lifetime clarity, and defined behavior.
+  - Justify lower-level hot-path idioms with measured or expected latency benefit.

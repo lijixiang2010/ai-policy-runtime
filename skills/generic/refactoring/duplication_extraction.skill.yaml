@@ -1,0 +1,142 @@
+# Skill: Generic Duplication Extraction
+# File: skills/generic/refactoring/duplication_extraction.skill.yaml
+
+skill:
+  id: generic.refactoring.duplication_extraction
+  name: Generic Duplication Extraction
+  version: 1.0.0
+  status: stable
+  description: >-
+    Extracts duplicated logic when repeated code expresses the same responsibility
+    and can be shared without adding harmful coupling.
+
+  level: domain
+  domain: generic_code
+  category: refactoring
+  priority: 82
+
+  tags:
+    - generic
+    - refactoring
+    - code-quality
+    - abstraction
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      artifact_type: code
+    triggers:
+      - refactor_code
+      - improve_code_quality
+      - reduce_duplication
+
+  dependencies:
+    - generic.code_quality.complexity_reduction
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.19
+
+  trigger_aliases:
+    reduce_duplication:
+      - remove duplication
+      - reduce duplication
+      - extract duplicated logic
+      - eliminate copy paste
+      - factor common logic
+
+  trigger_capabilities:
+    reduce_duplication:
+      - refactor_code
+
+  context_rules:
+    - id: detect_duplicated_logic
+      when_text_matches:
+        - duplicated logic
+        - duplicate code
+        - repeated logic
+        - common logic
+        - copy paste
+        - shared responsibility
+        - extract common logic
+        - similar code blocks
+      set:
+        duplicated_logic: true
+        artifact_type: code
+        refinement_requested: true
+      tags:
+        - refactoring
+        - code-quality
+      semantic_match:
+        - repeated code expresses the same responsibility
+        - common logic should be extracted carefully
+      confidence: 0.86
+
+rules:
+  soft:
+    - id: generic.duplication.extract_common_logic
+      title: Extract common logic when responsibility is the same
+      when: artifact_type == "code" and duplicated_logic == true
+      should: >-
+        Extract duplicated logic into a shared function, class, strategy, helper,
+        or language-appropriate abstraction when the repeated code expresses the
+        same responsibility.
+      target: duplication
+      action: recommend
+      rationale: >-
+        Repeated responsibility increases maintenance cost and makes future changes error-prone.
+
+    - id: generic.duplication.keep_incidental_similarity_local
+      title: Do not extract incidental similarity
+      when: artifact_type == "code"
+      should_not: >-
+        Avoid extracting code only because it looks similar when the duplicated
+        fragments represent different responsibilities or are likely to change independently.
+      target: duplication
+      action: discourage
+      rationale: >-
+        False abstraction can couple unrelated behavior and make future changes harder.
+
+  preference:
+    - id: generic.duplication.preference_shared_responsibility
+      title: Prefer shared responsibility extraction over copy-paste maintenance
+      when: artifact_type == "code" and duplicated_logic == true
+      prefer: shared_responsibility_abstraction
+      over:
+        - copy_paste_maintenance
+      target: duplication
+      action: prefer
+
+exceptions:
+  - id: generic.duplication.exception_readability_or_independent_change
+    when: duplication_is_intentional_for_readability == true or abstraction_would_increase_complexity == true
+    allow:
+      - local_duplication
+    require:
+      - Explain why extraction would reduce clarity or introduce unnecessary coupling.
+      - Keep duplicated code small and easy to compare.
+
+verification:
+  llm_self_check:
+    - id: generic.duplication.review_extraction_value
+      type: llm_self_check
+      applies_to:
+        - duplication
+        - abstraction
+      severity: advisory
+      prompt: >-
+        Check whether duplicated logic represents the same responsibility and whether
+        extraction reduces maintenance cost without creating false coupling.
+
+effective_rule_examples:
+  duplicated_logic:
+    task_context:
+      artifact_type: code
+      duplicated_logic: true
+    effective_rules:
+      soft:
+        - Extract duplicated logic when the repeated code expresses the same responsibility.

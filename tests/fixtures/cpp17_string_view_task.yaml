@@ -1,0 +1,14 @@
+task: Write a C++17 function that accepts a read-only string parameter.
+packs:
+  - cpp.library_api_design
+expected:
+  activates:
+    - cpp.standard.cpp17.best_practices
+    - cpp.standard.standard_availability
+    - cpp.api_design.parameter_passing
+  recommends:
+    - std::string_view
+  does_not_recommend:
+    - std::span
+  includes:
+    - standard_availability

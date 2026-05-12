@@ -1,0 +1,9 @@
+severity:
+  error:
+    description: Hard safety or correctness issue that should block output or trigger repair.
+  warning:
+    description: Important recommendation or likely defect requiring review.
+  note:
+    description: Preference, style, or context-sensitive guidance.
+  info:
+    description: Traceability or explanatory metadata.

@@ -1102,8 +1102,10 @@ ai_policy_runtime/
 │   │       ├── concurrency/
 │   │       ├── performance/
 │   │       └── project_types/
-│   ├── project/
-│   │   └── low_latency_trading.skill.yaml
+│   ├── generic/
+│   │   ├── code_quality/
+│   │   ├── refactoring/
+│   │   └── architecture/
 │   └── user/
 │       └── preferences.skill.yaml
 │

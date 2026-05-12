@@ -1,0 +1,195 @@
+# Skill: C++ Bounds Safety
+# File: skills/domain/cpp/safety/bounds_safety.skill.yaml
+
+skill:
+  id: cpp.safety.bounds_safety
+  name: C++ Bounds Safety
+  version: 1.0.0
+  status: stable
+  description: >-
+    Bounds and range access policy for safe C++ indexing, pointer use, and range
+    abstractions.
+
+  level: domain
+  domain: cpp
+  category: safety
+  priority: 90
+
+  tags:
+    - cpp
+    - safety
+    - bounds_safety
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+
+  dependencies:
+    - cpp.safety.undefined_behavior
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_bounds_range_parameter
+      when_text_matches:
+        - range
+        - buffer
+        - array
+        - contiguous range
+        - span
+      set:
+        parameter_kind: contiguous_range
+        ownership_required: false
+      tags:
+        - safety
+        - api-design
+      semantic_match:
+        - non-owning contiguous range input
+        - buffer or array view without ownership transfer
+      confidence: 0.8
+
+sources:
+  - cpp_core_guidelines:Bounds.1
+  - cpp_core_guidelines:Bounds.2
+  - cpp_core_guidelines:Bounds.3
+  - cpp_core_guidelines:F.24
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.bounds.no_unproven_unchecked_access
+      title: Do not use unchecked bounds access when range safety is not proven
+      when: language == "cpp"
+      must_not: >-
+        Do not use unchecked bounds access unless the valid range is proven by
+        a clear invariant.
+      target: bounds_safety
+      action: forbid
+      rationale: >-
+        Indexing or pointer access must be guarded by a proven range invariant.
+
+  soft:
+    - id: cpp.bounds.prefer_range_abstractions
+      title: Prefer range-aware abstractions
+      when: language == "cpp"
+      should: >-
+        Prefer range-aware abstractions that keep pointer and extent information
+        together.
+      target: bounds_safety
+      action: recommend
+      rationale: >-
+        Containers, iterators, algorithms, and views communicate extent better
+        than raw pointer arithmetic.
+
+    - id: cpp.bounds.prefer_span_for_contiguous_ranges_cpp20
+      title: Prefer std::span for non-owning contiguous ranges in C++20
+      when: language == "cpp" and standard >= 20 and parameter_kind == "contiguous_range"
+        and ownership_required == false
+      should: >-
+        Prefer std::span for non-owning contiguous range input in C++20 and later.
+      target: contiguous_range_parameter
+      action: recommend
+      rationale: >-
+        std::span couples pointer and extent for non-owning contiguous data.
+      require:
+        - Do not recommend std::span for C++17 tasks unless a project-approved
+          compatibility abstraction exists.
+
+    - id: cpp.bounds.avoid_pointer_arithmetic
+      title: Avoid raw pointer arithmetic unless justified
+      when: language == "cpp"
+      should_not: >-
+        Avoid raw pointer arithmetic unless a localized, justified invariant proves
+        it safe.
+      target: bounds_safety
+      action: discourage
+      rationale: >-
+        Pointer arithmetic hides range invariants and is hard for tools and reviewers
+        to validate.
+      unless: hot_path == true
+      require:
+        - If raw pointer arithmetic is used, state the bounds invariant and keep
+          the operation localized.
+        - Use range-aware abstractions outside the justified low-level section.
+
+  preference:
+    - id: cpp.bounds.preference_range_intent
+      title: Prefer explicit range intent over pointer conventions
+      when: language == "cpp"
+      prefer: range_extent_type
+      over:
+        - pointer_convention
+      target: parameter_passing
+      action: prefer
+
+exceptions:
+  - id: cpp.bounds.exception_hot_path_pointer_arithmetic
+    when: hot_path == true
+    allow:
+      - raw_pointer_arithmetic
+    require:
+      - Explain the measured hot-path reason.
+      - State the bounds invariant.
+      - Keep the unsafe operation localized.
+
+verification:
+  static_checks:
+    - id: cpp.safety.bounds_safety.verify.cppcoreguidelines_pro_bounds_pointer_arithmetic
+      type: static_analysis
+      applies_to:
+        - bounds_safety
+        - contiguous_range_parameter
+        - parameter_passing
+      severity: warning
+      check: cppcoreguidelines-pro-bounds-pointer-arithmetic
+
+  sanitizers:
+    - id: cpp.safety.bounds_safety.verify.address_sanitizer
+      type: sanitizer
+      applies_to:
+        - bounds_safety
+        - contiguous_range_parameter
+        - parameter_passing
+      severity: error
+      tool: address_sanitizer
+
+  llm_self_check:
+    - id: cpp.safety.bounds_safety.verify.bounds_invariant_review
+      type: llm_self_check
+      applies_to:
+        - bounds_safety
+        - contiguous_range_parameter
+        - parameter_passing
+      severity: advisory
+      prompt: >-
+        Check whether range bounds are proven or represented by range-aware abstractions.
+
+effective_rule_examples:
+  cpp20_span_input:
+    task_context:
+      language: cpp
+      standard: 20
+      parameter_kind: contiguous_range
+    effective_rules:
+      soft:
+        - Prefer std::span for non-owning contiguous range input.
+
+authoring_notes:
+  - This skill covers bounds safety; string-like input is handled separately by
+    standard-version API skills.

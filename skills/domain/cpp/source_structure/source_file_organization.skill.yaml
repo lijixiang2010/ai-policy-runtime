@@ -1,0 +1,182 @@
+# Skill: C++ Source File Organization
+# File: skills/domain/cpp/source_structure/source_file_organization.skill.yaml
+
+skill:
+  id: cpp.source_structure.source_file_organization
+  name: C++ Source File Organization
+  version: 1.0.0
+  status: stable
+  description: >-
+    Source organization skill for self-contained headers, include hygiene, and
+    initialization clarity.
+
+  level: domain
+  domain: cpp
+  category: source_structure
+  priority: 62
+
+  tags:
+    - cpp
+    - source_structure
+    - review
+    - generation
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+
+  dependencies: []
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_source_structure_task
+      when_text_matches:
+        - header
+        - include
+        - source file
+        - translation unit
+      set:
+        source_structure: true
+      tags:
+        - review
+      semantic_match:
+        - organize C++ headers and source files
+        - reduce unnecessary includes
+        - avoid hidden global initialization dependencies
+      confidence: 0.74
+
+sources:
+  - cpp_core_guidelines:SF.1
+  - cpp_core_guidelines:SF.8
+  - cpp_core_guidelines:SF.10
+  - cpp_core_guidelines:I.22
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.source.headers_self_contained
+      title: Keep headers self-contained
+      when: language == "cpp"
+      should: >-
+        Keep headers self-contained so they can be included independently.
+      target: source_structure
+      action: recommend
+      rationale: >-
+        A header should include what it needs so users can include it reliably.
+
+    - id: cpp.source.avoid_unnecessary_includes
+      title: Avoid unnecessary includes
+      when: language == "cpp"
+      should_not: >-
+        Avoid unnecessary includes; include only what the interface or implementation
+        requires.
+      target: source_structure
+      action: discourage
+      rationale: >-
+        Include hygiene reduces build cost and accidental coupling.
+      unless: header_only_library == true
+      require:
+        - For header-only code, include only what the public template or inline
+          implementation requires.
+
+    - id: cpp.source.prefer_forward_declarations
+      title: Prefer forward declarations where appropriate
+      when: language == "cpp"
+      should: >-
+        Prefer forward declarations when they are sufficient and do not obscure
+        the interface.
+      target: source_structure
+      action: recommend
+      rationale: >-
+        Forward declarations can reduce dependencies when complete types are not
+        required.
+
+    - id: cpp.source.separate_interface_when_clearer
+      title: Separate interface and implementation when it improves clarity
+      when: language == "cpp"
+      should: >-
+        Separate interface and implementation when it improves clarity or build
+        hygiene.
+      target: source_structure
+      action: recommend
+      rationale: >-
+        File organization should help users identify the public contract.
+      unless: header_only_library == true
+      require:
+        - If a header-only design is required, keep dependencies minimal and initialization
+          order explicit.
+
+    - id: cpp.source.avoid_hidden_global_initialization
+      title: Avoid hidden global initialization dependencies
+      when: language == "cpp"
+      should_not: >-
+        Avoid hidden global initialization dependencies across translation units.
+      target: source_structure
+      action: discourage
+      rationale: >-
+        Initialization order dependencies are fragile across translation units.
+
+  preference:
+    - id: cpp.source.preference_minimal_dependency
+      title: Prefer minimal source dependencies
+      when: language == "cpp"
+      prefer: minimal_include_dependency
+      over:
+        - broad_include_dependency
+      target: source_structure
+      action: prefer
+
+exceptions:
+  - id: cpp.source.exception_unity_build_or_header_only
+    when: header_only_library == true
+    allow:
+      - header_implementation
+    require:
+      - Keep dependencies explicit.
+      - Avoid hidden global initialization dependencies.
+
+verification:
+  static_checks:
+    - id: cpp.source_structure.source_file_organization.verify.readability_include_order
+      type: static_analysis
+      applies_to:
+        - source_structure
+      severity: warning
+      check: readability-include-order
+
+  llm_self_check:
+    - id: cpp.source_structure.source_file_organization.verify.source_structure_review
+      type: llm_self_check
+      applies_to:
+        - source_structure
+      severity: advisory
+      prompt: >-
+        Review include hygiene, self-contained headers, and initialization dependencies.
+
+effective_rule_examples:
+  code_review:
+    task_context:
+      language: cpp
+      task_type: review_code
+    effective_rules:
+      soft:
+        - Keep headers self-contained and avoid unnecessary includes.
+
+authoring_notes:
+  - Source structure rules should remain recommendations unless they affect correctness
+    or build portability.

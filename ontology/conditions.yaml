@@ -1,0 +1,31 @@
+conditions:
+  language: Programming language inferred for the task.
+  standard: Selected C++ standard version.
+  task_type: Runtime task trigger such as write_code, review_code, or design_api.
+  hot_path: Whether the code is latency-sensitive or performance-critical.
+  performance_critical: Whether performance materially affects correctness or value.
+  designing_api: Whether the task includes API/signature design.
+  parameter_kind: Semantic parameter class such as read_only_string or contiguous_range.
+  ownership_required: Whether ownership transfer or ownership storage is intended.
+  abi_boundary: Whether ABI compatibility constrains the interface.
+  c_api_boundary: Whether C ABI or C interop constrains the interface.
+  legacy_interface_required: Whether an existing interface must be preserved.
+  null_terminated_required: Whether a string input must be null-terminated.
+  compile_time_evaluation_intended: Whether constexpr/constant evaluation is intended.
+  template_constraints_required: Whether generic constraints are semantic API requirements.
+  creates_owned_thread: Whether the current scope or object owns a thread.
+  cooperative_cancellation_useful: Whether cooperative thread cancellation is useful.
+  artifact_type: Kind of artifact being generated or modified, such as code.
+  refinement_requested: Whether the user requested production-quality refinement.
+  after_initial_implementation: Whether the task is in a refinement pass after a first implementation.
+  scattered_related_logic: Whether related logic appears split across unrelated places.
+  duplicated_logic: Whether repeated logic expresses the same responsibility.
+  similar_logic_with_small_variation: Whether implementations share structure but differ in small decisions.
+  user_facing_api: Whether the component exposes an interface used by callers.
+  unclear_hierarchy: Whether layers, dependency direction, or call chains are unclear.
+  temporary_component: Whether current code is hard-coded, one-off, or not reusable.
+  minimal_example: Whether the user requested a minimal example.
+  throwaway_script: Whether the task is intentionally temporary or one-off.
+  user_requested_minimal_code: Whether the user explicitly asked for minimal code.
+  abstraction_would_increase_complexity: Whether extraction would add more conceptual cost than value.
+  behavior_preservation_required: Whether refactoring must preserve observable behavior.

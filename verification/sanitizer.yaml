@@ -1,0 +1,24 @@
+sanitizers:
+  - id: sanitizer.address
+    tool: address_sanitizer
+    type: sanitizer
+    targets: [undefined_behavior, bounds_safety, dangling_reference]
+    severity: error
+  - id: sanitizer.undefined_behavior
+    tool: undefined_behavior_sanitizer
+    type: sanitizer
+    targets: [undefined_behavior, type_safety]
+    severity: error
+  - id: sanitizer.leak
+    tool: leak_sanitizer
+    type: sanitizer
+    targets: [ownership, resource_lifetime]
+    severity: error
+  - id: sanitizer.thread
+    tool: thread_sanitizer
+    type: sanitizer
+    targets: [data_race, concurrency_safety]
+    severity: error
+
+notes:
+  - Sanitizers are runtime checks and require representative execution.

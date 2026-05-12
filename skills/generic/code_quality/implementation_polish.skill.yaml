@@ -1,0 +1,141 @@
+# Skill: Generic Implementation Polish
+# File: skills/generic/code_quality/implementation_polish.skill.yaml
+
+skill:
+  id: generic.code_quality.implementation_polish
+  name: Generic Implementation Polish
+  version: 1.0.0
+  status: stable
+  description: >-
+    Raises components from working code to finished components with clear contracts,
+    edge-case handling, explicit errors, and useful review hooks.
+
+  level: domain
+  domain: generic_code
+  category: code_quality
+  priority: 83
+
+  tags:
+    - generic
+    - code-quality
+    - production-polish
+    - review
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      artifact_type: code
+    triggers:
+      - refactor_code
+      - improve_code_quality
+      - polish_implementation
+      - review_code
+
+  dependencies:
+    - generic.code_quality.complexity_reduction
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_implementation_polish
+      when_text_matches:
+        - production polish
+        - finished component
+        - edge cases
+        - explicit errors
+        - complete component
+        - boundary conditions
+        - clear failure behavior
+        - explicit exceptions
+        - hard-coded paths
+        - magic numbers
+        - temporary implementation
+      set:
+        temporary_component: true
+        artifact_type: code
+        refinement_requested: true
+      tags:
+        - production-polish
+        - code-quality
+      semantic_match:
+        - component should be complete enough for others to use
+        - handle edge cases and explicit errors
+      confidence: 0.84
+
+rules:
+  soft:
+    - id: generic.polish.complete_component_contract
+      title: Complete the component contract
+      when: artifact_type == "code" and refinement_requested == true
+      should: >-
+        Make each component feel complete by clarifying its public contract, expected
+        inputs, outputs, failure behavior, and ownership of important state.
+      target: implementation_polish
+      action: recommend
+      rationale: >-
+        A finished component should be understandable and usable without relying on hidden assumptions.
+
+    - id: generic.polish.handle_boundaries_and_errors
+      title: Handle boundary conditions and errors explicitly
+      when: artifact_type == "code" and refinement_requested == true
+      should: >-
+        Handle important boundary conditions and failure paths explicitly rather
+        than leaving them as implicit assumptions.
+      target: implementation_polish
+      action: recommend
+      rationale: >-
+        Production-quality code should make edge cases and error behavior reviewable.
+
+    - id: generic.polish.replace_temporary_implementation_details
+      title: Replace temporary implementation details
+      when: artifact_type == "code" and temporary_component == true
+      should: >-
+        Replace hard-coded paths, magic numbers, temporary variables, and one-off wiring
+        with named constants, configuration, or reusable component boundaries when useful.
+      target: implementation_polish
+      action: recommend
+      rationale: >-
+        Temporary details become maintenance hazards when they remain in reusable code.
+
+  preference:
+    - id: generic.polish.preference_finished_component
+      title: Prefer finished components over temporary assembly
+      when: artifact_type == "code"
+      prefer: finished_component
+      over:
+        - temporary_assembly
+      target: implementation_polish
+      action: prefer
+
+exceptions:
+  - id: generic.polish.exception_prototype_or_minimal_example
+    when: minimal_example == true or throwaway_script == true
+    allow:
+      - prototype_level_polish
+    require:
+      - Keep prototype limitations obvious.
+      - Avoid presenting prototype-level code as production-ready.
+
+verification:
+  llm_self_check:
+    - id: generic.polish.review_finished_component_quality
+      type: llm_self_check
+      applies_to:
+        - implementation_polish
+      severity: advisory
+      prompt: >-
+        Check whether each component has a clear contract, handles relevant edge cases,
+        states error behavior, and avoids hidden temporary assumptions.
+
+effective_rule_examples:
+  production_polish:
+    task_context:
+      artifact_type: code
+      refinement_requested: true
+    effective_rules:
+      soft:
+        - Make each component feel complete by clarifying contracts, edge cases, and failure behavior.

@@ -39,9 +39,17 @@ class PolicyEngine:
         try:
             if not evaluate_condition(rule.condition, context):
                 return False
-            if rule.unless and evaluate_condition(rule.unless, context):
+            if rule.unless and self._unless_applies(rule.unless, context):
                 return False
             return True
+        except ConditionError:
+            return False
+
+    def _unless_applies(self, expression: str, context: dict[str, object]) -> bool:
+        """Treat unknown exception flags as absent rather than disabling a rule."""
+
+        try:
+            return evaluate_condition(expression, context)
         except ConditionError:
             return False
 

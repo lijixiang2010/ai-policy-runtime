@@ -1,0 +1,206 @@
+# Skill: C++ RAII Resource Management
+# File: skills/domain/cpp/resource_management/raii.skill.yaml
+
+skill:
+  id: cpp.resource_management.raii
+  name: C++ RAII Resource Management
+  version: 1.0.0
+  status: stable
+  description: >-
+    Resource-management skill requiring RAII, exception-safe cleanup, and explicit
+    ownership.
+
+  level: domain
+  domain: cpp
+  category: resource_management
+  priority: 92
+
+  tags:
+    - cpp
+    - resource-management
+    - ownership
+    - safety
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - modernize_code
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+
+  dependencies:
+    - cpp.safety.ownership_and_lifetime
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_resource_management_task
+      when_text_matches:
+        - raii
+        - resource
+        - cleanup
+        - new
+        - delete
+      set:
+        resource_management: true
+      tags:
+        - resource-management
+      semantic_match:
+        - manage resource acquisition and release safely
+        - make cleanup exception safe
+        - replace manual new delete with ownership types
+      confidence: 0.82
+
+sources:
+  - cpp_core_guidelines:R.1
+  - cpp_core_guidelines:R.5
+  - cpp_core_guidelines:R.11
+  - cpp_core_guidelines:E.6
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.raii.no_leaked_owned_resource
+      title: Do not leak owned resources
+      when: language == "cpp"
+      must_not: >-
+        Do not leak owned resources; every acquired resource must have a clear
+        exception-safe release path.
+      target: resource_lifetime
+      action: forbid
+      rationale: >-
+        Every owned resource must be released by a deterministic owner.
+
+  soft:
+    - id: cpp.raii.prefer_raii
+      title: Prefer RAII for resource acquisition and release
+      when: language == "cpp"
+      should: >-
+        Prefer RAII and standard ownership types over manual resource release
+        when resource ownership is required.
+      target: resource_lifetime
+      action: recommend
+      rationale: >-
+        RAII keeps cleanup tied to object lifetime and works under exceptions.
+
+    - id: cpp.raii.avoid_naked_new_delete
+      title: Avoid naked new and delete in application code
+      when: language == "cpp"
+      should_not: >-
+        Avoid naked new and delete in application code; use standard owners, containers,
+        or RAII wrappers instead.
+      target: ownership
+      action: discourage
+      rationale: >-
+        Direct allocation and release split ownership and make errors easy.
+      unless: custom_allocator_required == true
+      require:
+        - If manual allocation primitives are required, hide them behind an owning
+          abstraction.
+        - Document cleanup and exception behavior.
+
+    - id: cpp.raii.prefer_standard_owners
+      title: Prefer standard ownership types and containers
+      when: language == "cpp"
+      should: >-
+        Prefer standard ownership types and containers for owned resources.
+      target: ownership
+      action: recommend
+      rationale: >-
+        Standard containers and smart pointers encode common ownership patterns.
+      unless: custom_allocator_required == true
+      require:
+        - If standard owners are not used, provide an equivalent owner with deterministic
+          cleanup.
+
+    - id: cpp.raii.ensure_exception_safe_cleanup
+      title: Ensure cleanup is exception-safe
+      when: language == "cpp"
+      should: >-
+        Ensure cleanup remains exception-safe and does not rely on fragile manual
+        release paths.
+      target: resource_lifetime
+      action: recommend
+      rationale: Error paths must not bypass cleanup.
+
+  preference:
+    - id: cpp.raii.preference_single_owner
+      title: Prefer single explicit ownership
+      when: language == "cpp"
+      prefer: single_explicit_owner
+      over:
+        - distributed_manual_cleanup
+      target: ownership
+      action: prefer
+
+exceptions:
+  - id: cpp.raii.exception_low_level_allocator
+    when: custom_allocator_required == true
+    allow:
+      - manual_allocation_primitive
+    require:
+      - Hide manual allocation behind an owning abstraction.
+      - Provide clear cleanup and exception behavior.
+
+verification:
+  static_checks:
+    - id: cpp.resource_management.raii.verify.cppcoreguidelines_owning_memory
+      type: static_analysis
+      applies_to:
+        - ownership
+        - resource_lifetime
+      severity: warning
+      check: cppcoreguidelines-owning-memory
+
+  sanitizers:
+    - id: cpp.resource_management.raii.verify.leak_sanitizer
+      type: sanitizer
+      applies_to:
+        - ownership
+        - resource_lifetime
+      severity: error
+      tool: leak_sanitizer
+
+    - id: cpp.resource_management.raii.verify.address_sanitizer
+      type: sanitizer
+      applies_to:
+        - ownership
+        - resource_lifetime
+      severity: error
+      tool: address_sanitizer
+
+  llm_self_check:
+    - id: cpp.resource_management.raii.verify.resource_cleanup_review
+      type: llm_self_check
+      applies_to:
+        - ownership
+        - resource_lifetime
+      severity: advisory
+      prompt: >-
+        Check whether ownership transfer, storage, and borrowing are explicit
+        and justified.
+
+effective_rule_examples:
+  safe_generation:
+    task_context:
+      language: cpp
+    effective_rules:
+      soft:
+        - Prefer RAII and standard owners over manual cleanup.
+
+authoring_notes:
+  - RAII is a resource rule, not only a memory rule; apply it to files, locks,
+    handles, and threads.

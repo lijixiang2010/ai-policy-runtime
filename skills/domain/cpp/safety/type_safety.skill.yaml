@@ -1,0 +1,190 @@
+# Skill: C++ Type Safety
+# File: skills/domain/cpp/safety/type_safety.skill.yaml
+
+skill:
+  id: cpp.safety.type_safety
+  name: C++ Type Safety
+  version: 1.0.0
+  status: stable
+  description: >-
+    Type-safety policy for casts, conversions, enums, and type-expressive C++
+    design.
+
+  level: domain
+  domain: cpp
+  category: safety
+  priority: 85
+
+  tags:
+    - cpp
+    - safety
+    - type_safety
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - modernize_code
+
+  dependencies:
+    - cpp.safety.undefined_behavior
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_type_sensitive_task
+      when_text_matches:
+        - cast
+        - conversion
+        - enum
+        - type-safe
+      set:
+        type_sensitive: true
+      tags:
+        - safety
+      semantic_match:
+        - avoid unsafe casts or narrowing conversions
+        - model alternatives with type-safe abstractions
+      confidence: 0.76
+
+sources:
+  - cpp_core_guidelines:Type.1
+  - cpp_core_guidelines:Type.2
+  - cpp_core_guidelines:ES.46
+  - cpp_core_guidelines:Enum.3
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.type.no_unsafe_cast
+      title: Avoid unsafe casts
+      when: language == "cpp"
+      must_not: >-
+        Avoid unsafe casts that bypass the C++ type system or object lifetime
+        rules.
+      target: type_safety
+      action: forbid
+      rationale: >-
+        Casts that bypass the type system must not be used to make invalid code
+        compile.
+      unless: abi_boundary == true
+      require:
+        - If a cast is required at an ABI boundary, justify it and preserve object
+          lifetime and aliasing rules.
+
+  soft:
+    - id: cpp.type.prefer_type_safe_abstractions
+      title: Prefer type-safe abstractions
+      when: language == "cpp"
+      should: >-
+        Prefer type-safe abstractions that encode domain meaning instead of primitive
+        conventions.
+      target: type_safety
+      action: recommend
+      rationale: >-
+        Strong types, variants, optionals, and enums make invalid states harder
+        to express.
+
+    - id: cpp.type.avoid_narrowing_without_justification
+      title: Avoid narrowing conversions unless explicit and justified
+      when: language == "cpp"
+      should_not: >-
+        Avoid narrowing conversions unless they are explicit and justified.
+      target: type_safety
+      action: discourage
+      rationale: >-
+        Narrowing can silently lose information and should be visible at the conversion
+        site.
+      unless: abi_boundary == true
+      require:
+        - If narrowing is required at an ABI boundary, make the conversion explicit
+          and justify the range assumption.
+
+    - id: cpp.type.prefer_scoped_enum
+      title: Prefer scoped enum where appropriate
+      when: language == "cpp"
+      should: >-
+        Prefer scoped enums when enumerators should not leak into the surrounding
+        scope.
+      target: type_safety
+      action: recommend
+      rationale: >-
+        Scoped enums avoid implicit integer conversions and name leakage.
+
+  preference:
+    - id: cpp.type.preference_domain_types
+      title: Prefer domain-specific types over primitive conventions
+      when: language == "cpp"
+      prefer: domain_specific_type
+      over:
+        - primitive_convention
+      target: interface_intent
+      action: prefer
+
+exceptions:
+  - id: cpp.type.exception_abi_boundary
+    when: abi_boundary == true
+    allow:
+      - narrow_abi_type
+      - legacy_enum
+    require:
+      - Keep conversion at the boundary.
+      - Validate range or representation assumptions.
+
+verification:
+  static_checks:
+    - id: cpp.safety.type_safety.verify.cppcoreguidelines_pro_type_reinterpret_cast
+      type: static_analysis
+      applies_to:
+        - interface_intent
+        - type_safety
+      severity: warning
+      check: cppcoreguidelines-pro-type-reinterpret-cast
+
+  compiler_warnings:
+    - id: cpp.safety.type_safety.verify.narrowing_conversion_warnings
+      type: compiler_check
+      applies_to:
+        - interface_intent
+        - type_safety
+      severity: warning
+      check: narrowing conversion warnings
+
+  llm_self_check:
+    - id: cpp.safety.type_safety.verify.type_safety_review
+      type: llm_self_check
+      applies_to:
+        - interface_intent
+        - type_safety
+      severity: advisory
+      prompt: >-
+        Check whether interface intent is expressed through types rather than
+        comments alone.
+
+effective_rule_examples:
+  type_review:
+    task_context:
+      language: cpp
+      task_type: review_code
+    effective_rules:
+      soft:
+        - Avoid narrowing conversions unless explicit and justified.
+
+authoring_notes:
+  - Treat casts as design pressure; prefer making the intended type relationship
+    explicit.

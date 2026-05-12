@@ -1,0 +1,236 @@
+# Skill: C++ Parameter Passing
+# File: skills/domain/cpp/api_design/parameter_passing.skill.yaml
+
+skill:
+  id: cpp.api_design.parameter_passing
+  name: C++ Parameter Passing
+  version: 1.0.0
+  status: stable
+  description: >-
+    Parameter passing policy for values, references, views, ownership types, and
+    output parameters.
+
+  level: domain
+  domain: cpp
+  category: api_design
+  priority: 84
+
+  tags:
+    - cpp
+    - api-design
+    - standard-library
+    - core-guidelines
+
+  capabilities:
+    - api_design
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: cpp
+      designing_api: true
+    triggers:
+      - design_api
+      - write_code
+      - review_code
+      - refactor_code
+
+  dependencies:
+    - cpp.api_design.interface_intent
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_parameter_design
+      when_text_matches:
+        - parameter
+        - argument
+        - function signature
+        - string parameter
+        - range parameter
+      set:
+        designing_api: true
+        parameter_design: true
+      tags:
+        - api-design
+      semantic_match:
+        - choose parameter passing style for a C++ API
+        - read-only string parameter
+        - non-owning range parameter
+      confidence: 0.82
+
+    - id: detect_read_only_string_parameter
+      when_text_matches:
+        - read-only string
+        - string input
+        - string parameter
+      set:
+        parameter_kind: read_only_string
+        ownership_required: false
+      tags:
+        - api-design
+      semantic_match:
+        - accepts a read-only string-like input
+      confidence: 0.84
+
+    - id: detect_contiguous_range_parameter
+      when_text_matches:
+        - contiguous range
+        - buffer input
+        - array view
+      set:
+        parameter_kind: contiguous_range
+        ownership_required: false
+      tags:
+        - api-design
+      semantic_match:
+        - accepts a non-owning contiguous range
+        - function takes a buffer view without ownership
+      confidence: 0.84
+
+sources:
+  - cpp_core_guidelines:F.16
+  - cpp_core_guidelines:F.18
+  - cpp_core_guidelines:F.20
+  - cpp_core_guidelines:F.24
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.param.use_value_for_cheap_copy
+      title: Use value for cheap copyable types
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Pass cheap copyable values by value when ownership is not transferred
+        and copying is inexpensive.
+      target: parameter_passing
+      action: recommend
+      rationale: Small cheap values make ownership and mutation simple.
+
+    - id: cpp.param.use_const_ref_when_no_view
+      title: Use const reference for expensive objects when no better view type
+        exists
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Use const references for expensive read-only objects when no more precise
+        view type exists.
+      target: parameter_passing
+      action: recommend
+      rationale: >-
+        const reference avoids copies while preserving read-only intent when a
+        vocabulary view is not appropriate.
+
+    - id: cpp.param.use_string_view_for_read_only_string_cpp17
+      title: Use std::string_view for read-only string-like input in C++17+
+      when: language == "cpp" and standard >= 17 and parameter_kind == "read_only_string"
+        and ownership_required == false
+      should: >-
+        Prefer std::string_view for non-owning read-only string-like input in
+        C++17 and later.
+      target: string_parameter
+      action: recommend
+      rationale: >-
+        std::string_view communicates non-owning string observation without requiring
+        a specific string owner.
+      unless: abi_boundary == true or c_api_boundary == true or null_terminated_required
+        == true or legacy_interface_required == true
+      require:
+        - If const char* or another lower-level string form is used, explain the
+          ABI, C API, null-termination, or legacy requirement.
+        - Keep lower-level string forms at the boundary and convert internally
+          when practical.
+
+    - id: cpp.param.use_span_for_contiguous_range_cpp20
+      title: Use std::span for non-owning contiguous range input in C++20+
+      when: language == "cpp" and standard >= 20 and parameter_kind == "contiguous_range"
+        and ownership_required == false
+      should: >-
+        Prefer std::span for non-owning contiguous range input in C++20 and later.
+      target: contiguous_range_parameter
+      action: recommend
+      rationale: >-
+        std::span represents pointer plus extent as one non-owning range value.
+      unless: abi_boundary == true or c_api_boundary == true or legacy_interface_required
+        == true
+      require:
+        - If pointer-and-size is used instead of std::span, explain the ABI, C
+          API, or legacy requirement.
+        - Keep pointer-and-size forms at the boundary and preserve the extent
+          invariant.
+
+    - id: cpp.param.avoid_output_parameters
+      title: Avoid output parameters unless justified
+      when: language == "cpp" and designing_api == true
+      should_not: >-
+        Avoid output parameters unless an existing API, ABI boundary, or performance
+        constraint justifies them.
+      target: parameter_passing
+      action: discourage
+      rationale: >-
+        Return values and structured results usually express output more clearly.
+      unless: abi_boundary == true or c_api_boundary == true
+      require:
+        - If an output parameter is used, explain the ABI, C API, or performance
+          constraint.
+        - Prefer return values or structured results when the boundary constraint
+          does not apply.
+
+  preference:
+    - id: cpp.param.preference_vocabulary_types
+      title: Prefer vocabulary parameter types over ad-hoc conventions
+      when: language == "cpp" and designing_api == true
+      prefer: standard_vocabulary_type
+      over:
+        - pointer_convention
+      target: parameter_passing
+      action: prefer
+
+exceptions:
+  - id: cpp.param.exception_abi_or_c_boundary
+    when: abi_boundary == true or c_api_boundary == true
+    allow:
+      - raw_pointer_parameter
+      - pointer_and_size
+      - output_parameter
+    require:
+      - State the ABI or C boundary reason.
+      - Convert to clearer internal types when possible.
+
+verification:
+  llm_self_check:
+    - id: cpp.api_design.parameter_passing.verify.parameter_passing_review
+      type: llm_self_check
+      applies_to:
+        - contiguous_range_parameter
+        - parameter_passing
+        - string_parameter
+      severity: advisory
+      prompt: Review parameter passing review for this skill.
+
+    - id: cpp.api_design.parameter_passing.verify.standard_version_idiom_review
+      type: llm_self_check
+      applies_to:
+        - contiguous_range_parameter
+        - parameter_passing
+        - string_parameter
+      severity: advisory
+      prompt: Review standard-version idiom review for this skill.
+
+effective_rule_examples:
+  cpp17_string:
+    task_context:
+      language: cpp
+      standard: 17
+      parameter_kind: read_only_string
+    effective_rules:
+      soft:
+        - Prefer std::string_view for read-only string-like input.
+
+authoring_notes:
+  - std::string_view is string-like input; std::span is contiguous range input.
