@@ -993,6 +993,55 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertFalse(user_prompt_submit._enabled({"enabled": "off"}))
         self.assertTrue(user_prompt_submit._enabled({}))
 
+    def test_codex_hook_applies_openai_compatible_embedding_config(self) -> None:
+        config = user_prompt_submit.ProjectHookConfig.from_mapping(
+            {
+                "embeddingProvider": "openai-compatible",
+                "embeddingBaseUrl": "https://embedding.example.test/v1",
+                "embeddingApiKey": "project-key",
+                "embeddingModel": "embedding-model",
+                "embeddingTimeout": "12.5",
+            }
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            config.apply_environment()
+
+            self.assertEqual(
+                os.environ["AI_POLICY_EMBEDDING_PROVIDER"], "openai-compatible"
+            )
+            self.assertEqual(
+                os.environ["AI_POLICY_EMBEDDING_BASE_URL"],
+                "https://embedding.example.test/v1",
+            )
+            self.assertEqual(os.environ["AI_POLICY_EMBEDDING_API_KEY"], "project-key")
+            self.assertEqual(os.environ["AI_POLICY_EMBEDDING_MODEL"], "embedding-model")
+            self.assertEqual(os.environ["AI_POLICY_EMBEDDING_TIMEOUT"], "12.5")
+
+    def test_codex_hook_keeps_environment_embedding_overrides(self) -> None:
+        config = user_prompt_submit.ProjectHookConfig.from_mapping(
+            {
+                "embeddingProvider": "openai-compatible",
+                "embeddingBaseUrl": "https://project.example.test/v1",
+                "embeddingApiKey": "project-key",
+                "embeddingModel": "project-model",
+                "embeddingTimeout": "12.5",
+            }
+        )
+        env = {
+            "AI_POLICY_EMBEDDING_PROVIDER": "hashing",
+            "AI_POLICY_EMBEDDING_BASE_URL": "https://env.example.test/v1",
+            "AI_POLICY_EMBEDDING_API_KEY": "env-key",
+            "AI_POLICY_EMBEDDING_MODEL": "env-model",
+            "AI_POLICY_EMBEDDING_TIMEOUT": "3",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config.apply_environment()
+
+            for key, value in env.items():
+                self.assertEqual(os.environ[key], value)
+
     def test_codex_hook_loads_project_config(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

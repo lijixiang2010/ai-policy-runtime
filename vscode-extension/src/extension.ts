@@ -8,6 +8,10 @@ type PolicyConfig = {
   policyRoot?: string;
   autoInstall: boolean;
   embeddingProvider?: string;
+  embeddingBaseUrl?: string;
+  embeddingApiKey?: string;
+  embeddingModel?: string;
+  embeddingTimeout?: string;
 };
 
 type PolicyPaths = {
@@ -16,13 +20,16 @@ type PolicyPaths = {
   effectivePrompt: string;
 };
 
-type PackItem = vscode.QuickPickItem & { label: string };
+type PackItem = vscode.QuickPickItem & {
+  label: string;
+  category: string;
+  tags: string[];
+};
 
 const CONFIG_SECTION = 'aiPolicy';
 const POLICY_CONFIG_FILE = path.join('.policy', 'config.json');
 const EFFECTIVE_PROMPT_FILE = path.join('.policy', 'current', 'effective-prompt.md');
 const DEFAULT_PACKS = ['cpp.safe_generation'];
-const DEFAULT_EMBEDDING_PROVIDER = 'hashing';
 
 const COMMANDS = {
   enable: 'aiPolicy.enable',
@@ -34,13 +41,48 @@ const COMMANDS = {
 } as const;
 
 const KNOWN_PACKS: PackItem[] = [
-  { label: 'cpp.safe_generation', description: 'C++ safety-first code generation' },
-  { label: 'cpp.low_latency', description: 'C++ hot-path and low-latency work' },
-  { label: 'cpp.code_review', description: 'C++ review with safety checks' },
-  { label: 'cpp.library_api_design', description: 'C++ API design and parameter intent' },
-  { label: 'cpp.modernization', description: 'Modern C++ refactoring guidance' },
-  { label: 'cpp.production_refinement', description: 'C++ production polish and safety' },
-  { label: 'generic.production_refinement', description: 'General code quality refinement' }
+  {
+    label: 'cpp.safe_generation',
+    description: 'C++ safety-first code generation',
+    category: 'Recommended',
+    tags: ['C++', 'Safety', 'Generation']
+  },
+  {
+    label: 'cpp.low_latency',
+    description: 'C++ hot-path and low-latency work',
+    category: 'Development',
+    tags: ['C++', 'Performance']
+  },
+  {
+    label: 'cpp.code_review',
+    description: 'C++ review with safety checks',
+    category: 'Review',
+    tags: ['C++', 'Review', 'Safety']
+  },
+  {
+    label: 'cpp.library_api_design',
+    description: 'C++ API design and parameter intent',
+    category: 'Design',
+    tags: ['C++', 'API']
+  },
+  {
+    label: 'cpp.modernization',
+    description: 'Modern C++ refactoring guidance',
+    category: 'Refinement',
+    tags: ['C++', 'Refactor']
+  },
+  {
+    label: 'cpp.production_refinement',
+    description: 'C++ production polish and safety',
+    category: 'Refinement',
+    tags: ['C++', 'Production', 'Safety']
+  },
+  {
+    label: 'generic.production_refinement',
+    description: 'General code quality refinement',
+    category: 'Refinement',
+    tags: ['Generic', 'Production']
+  }
 ];
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -89,20 +131,27 @@ class PolicyWorkspace {
       this.updateSetting('packs', config.packs),
       this.updateSetting('policyRoot', config.policyRoot ?? ''),
       this.updateSetting('autoInstall', config.autoInstall),
-      this.updateSetting('embeddingProvider', config.embeddingProvider ?? 'auto')
+      this.updateSetting('embeddingProvider', config.embeddingProvider ?? ''),
+      this.updateSetting('embeddingBaseUrl', config.embeddingBaseUrl ?? ''),
+      this.updateSetting('embeddingApiKey', config.embeddingApiKey ?? ''),
+      this.updateSetting('embeddingModel', config.embeddingModel ?? ''),
+      this.updateSetting('embeddingTimeout', config.embeddingTimeout ?? '')
     ]);
     await this.syncProjectConfig();
   }
 
   readConfig(): PolicyConfig {
     const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-    const embeddingProvider = config.get<string>('embeddingProvider', DEFAULT_EMBEDDING_PROVIDER);
     return {
       enabled: config.get<boolean>('enabled', false),
       packs: config.get<string[]>('packs', DEFAULT_PACKS),
       policyRoot: cleanOptionalString(config.get<string>('policyRoot', '')),
       autoInstall: config.get<boolean>('autoInstall', true),
-      embeddingProvider: embeddingProvider === 'auto' ? undefined : embeddingProvider
+      embeddingProvider: cleanOptionalString(config.get<string>('embeddingProvider', '')),
+      embeddingBaseUrl: cleanOptionalString(config.get<string>('embeddingBaseUrl', '')),
+      embeddingApiKey: cleanOptionalString(config.get<string>('embeddingApiKey', '')),
+      embeddingModel: cleanOptionalString(config.get<string>('embeddingModel', '')),
+      embeddingTimeout: cleanOptionalString(config.get<string>('embeddingTimeout', ''))
     };
   }
 
@@ -181,7 +230,12 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     const nonce = nonceValue();
     const state = JSON.stringify({
       config,
-      packs: KNOWN_PACKS.map(({ label, description }) => ({ label, description }))
+      packs: KNOWN_PACKS.map(({ label, description, category, tags }) => ({
+        label,
+        description,
+        category,
+        tags
+      }))
     });
     return `<!DOCTYPE html>
 <html lang="en">
@@ -253,12 +307,34 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       display: grid;
       gap: 8px;
     }
+    input[type="password"] {
+      width: 100%;
+      box-sizing: border-box;
+      color: var(--vscode-input-foreground);
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border, transparent);
+      padding: 7px 8px;
+      outline: none;
+    }
+    input[type="password"]:focus {
+      border-color: var(--vscode-focusBorder);
+    }
+    .field {
+      display: grid;
+      gap: 6px;
+    }
     .pack {
       display: grid;
       grid-template-columns: 18px 1fr;
       gap: 8px;
       align-items: start;
-      padding: 7px 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      background: var(--vscode-editorWidget-background);
+    }
+    .pack strong {
+      font-weight: 600;
+      overflow-wrap: anywhere;
     }
     .pack span {
       display: block;
@@ -266,6 +342,12 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       font-size: 12px;
       line-height: 1.35;
       margin-top: 2px;
+    }
+    .empty {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 4px 0;
     }
     .actions {
       display: grid;
@@ -310,21 +392,46 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
   </div>
 
   <div class="section">
-    <label>Packs</label>
+    <div class="row">
+      <label>Packs</label>
+      <span id="selectedCount" class="subtle">0 selected</span>
+    </div>
+    <input id="packSearch" type="text" placeholder="Search packs">
     <div id="packs" class="pack-list"></div>
   </div>
 
   <div class="section">
-    <label for="provider">Embedding provider</label>
-    <select id="provider">
-      <option value="auto">auto</option>
-      <option value="hashing">hashing</option>
-      <option value="disabled">disabled</option>
-      <option value="local">local</option>
-      <option value="openai-compatible">openai-compatible</option>
-    </select>
     <label for="policyRoot">Policy root</label>
     <input id="policyRoot" type="text" placeholder="Codex plugin root">
+  </div>
+
+  <div class="section">
+    <div class="field">
+      <label for="embeddingProvider">Embedding provider</label>
+      <select id="embeddingProvider">
+        <option value="">Auto</option>
+        <option value="openai-compatible">OpenAI-compatible /v1/embeddings</option>
+        <option value="local">Local sentence-transformers</option>
+        <option value="hashing">Hashing matcher</option>
+        <option value="disabled">Disabled</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="embeddingBaseUrl">OpenAI-compatible base URL</label>
+      <input id="embeddingBaseUrl" type="text" placeholder="https://api.openai.com/v1">
+    </div>
+    <div class="field">
+      <label for="embeddingApiKey">Embedding API key</label>
+      <input id="embeddingApiKey" type="password" placeholder="Uses OPENAI_API_KEY when empty">
+    </div>
+    <div class="field">
+      <label for="embeddingModel">Embedding model</label>
+      <input id="embeddingModel" type="text" placeholder="text-embedding-3-small">
+    </div>
+    <div class="field">
+      <label for="embeddingTimeout">Embedding timeout seconds</label>
+      <input id="embeddingTimeout" type="text" placeholder="30">
+    </div>
   </div>
 
   <div class="actions">
@@ -341,27 +448,75 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     const selected = new Set(state.config.packs || []);
     byId('enabled').checked = Boolean(state.config.enabled);
     byId('autoInstall').checked = Boolean(state.config.autoInstall);
-    byId('provider').value = state.config.embeddingProvider || 'auto';
     byId('policyRoot').value = state.config.policyRoot || '';
+    byId('embeddingProvider').value = state.config.embeddingProvider || '';
+    byId('embeddingBaseUrl').value = state.config.embeddingBaseUrl || '';
+    byId('embeddingApiKey').value = state.config.embeddingApiKey || '';
+    byId('embeddingModel').value = state.config.embeddingModel || '';
+    byId('embeddingTimeout').value = state.config.embeddingTimeout || '';
 
     const packs = byId('packs');
-    state.packs.forEach((pack) => {
-      const id = 'pack-' + pack.label.replaceAll('.', '-');
+
+    function packMarkup(pack) {
       const row = document.createElement('label');
       row.className = 'pack';
-      row.innerHTML = '<input type="checkbox" id="' + id + '" value="' + pack.label + '">' +
-        '<div>' + pack.label + '<span>' + pack.description + '</span></div>';
-      packs.appendChild(row);
+      row.innerHTML = '<input type="checkbox" value="' + pack.label + '">' +
+        '<div><strong>' + pack.label + '</strong><span>' + pack.description + '</span></div>';
       row.querySelector('input').checked = selected.has(pack.label);
-    });
+      row.querySelector('input').addEventListener('change', (event) => {
+        if (event.target.checked) {
+          selected.add(pack.label);
+        } else {
+          selected.delete(pack.label);
+        }
+        syncPackInputs();
+        renderSelected();
+      });
+      return row;
+    }
+
+    function renderPacks() {
+      const query = byId('packSearch').value.trim().toLowerCase();
+      packs.innerHTML = '';
+      const matches = state.packs.filter((pack) => {
+        const haystack = [pack.label, pack.description, pack.category].concat(pack.tags).join(' ').toLowerCase();
+        return !query || haystack.includes(query);
+      });
+      matches.forEach((pack) => packs.appendChild(packMarkup(pack)));
+      if (!matches.length) {
+        packs.innerHTML = '<div class="empty">No packs match this search.</div>';
+      }
+    }
+
+    function syncPackInputs() {
+      document.querySelectorAll('input[value]').forEach((item) => {
+        if (state.packs.some((pack) => pack.label === item.value)) {
+          item.checked = selected.has(item.value);
+        }
+      });
+    }
+
+    function renderSelected() {
+      const labels = Array.from(selected);
+      byId('selectedCount').textContent = labels.length + ' selected';
+    }
+
+    renderPacks();
+    renderSelected();
+
+    byId('packSearch').addEventListener('input', renderPacks);
 
     function readConfig() {
       return {
         enabled: byId('enabled').checked,
-        packs: Array.from(document.querySelectorAll('#packs input:checked')).map((item) => item.value),
+        packs: Array.from(selected),
         policyRoot: byId('policyRoot').value.trim() || undefined,
         autoInstall: byId('autoInstall').checked,
-        embeddingProvider: byId('provider').value === 'auto' ? undefined : byId('provider').value
+        embeddingProvider: byId('embeddingProvider').value.trim() || undefined,
+        embeddingBaseUrl: byId('embeddingBaseUrl').value.trim() || undefined,
+        embeddingApiKey: byId('embeddingApiKey').value.trim() || undefined,
+        embeddingModel: byId('embeddingModel').value.trim() || undefined,
+        embeddingTimeout: byId('embeddingTimeout').value.trim() || undefined
       };
     }
 
@@ -387,7 +542,7 @@ class PolicyStatusBar implements vscode.Disposable {
 
   refresh(): void {
     const config = this.workspace.readConfig();
-    this.item.text = config.enabled ? 'AI Policy: On' : 'AI Policy: Off';
+    this.item.text = config.enabled ? 'AI Policy Runtime: On' : 'AI Policy Runtime: Off';
     this.item.tooltip = config.enabled
       ? `Packs: ${config.packs.join(', ') || '(none)'}`
       : 'AI Policy Runtime is disabled';
@@ -421,7 +576,7 @@ async function configurePacks(workspace: PolicyWorkspace): Promise<void> {
     })),
     {
       canPickMany: true,
-      title: 'Select AI Policy packs for Codex'
+      title: 'Select AI Policy Runtime packs for Codex'
     }
   );
   if (!picks) {
@@ -430,7 +585,7 @@ async function configurePacks(workspace: PolicyWorkspace): Promise<void> {
 
   await workspace.updateSetting('packs', picks.map((item) => item.label));
   await workspace.syncProjectConfig();
-  vscode.window.showInformationMessage(`AI Policy packs updated: ${picks.length || 'none'}.`);
+  vscode.window.showInformationMessage(`AI Policy Runtime packs updated: ${picks.length || 'none'}.`);
 }
 
 async function showStatus(workspace: PolicyWorkspace): Promise<void> {
@@ -447,7 +602,9 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
       `Enabled: ${config.enabled}`,
       `Packs: ${config.packs.length ? config.packs.join(', ') : '(none)'}`,
       `Policy root: ${config.policyRoot || '(Codex plugin root)'}`,
-      `Embedding provider: ${config.embeddingProvider || 'auto'}`,
+      `Embedding provider: ${config.embeddingProvider || '(auto)'}`,
+      `Embedding base URL: ${config.embeddingBaseUrl || '(default)'}`,
+      `Embedding model: ${config.embeddingModel || '(default)'}`,
       `Project config: ${paths.config}`,
       `Latest Effective Rules: ${promptExists ? paths.effectivePrompt : '(not generated yet)'}`
     ].join('\n')
@@ -502,7 +659,11 @@ function normalizeConfig(config: PolicyConfig): PolicyConfig {
     packs: Array.isArray(config.packs) ? config.packs.filter(Boolean) : DEFAULT_PACKS,
     policyRoot: cleanOptionalString(config.policyRoot ?? ''),
     autoInstall: Boolean(config.autoInstall),
-    embeddingProvider: config.embeddingProvider
+    embeddingProvider: cleanOptionalString(config.embeddingProvider ?? ''),
+    embeddingBaseUrl: cleanOptionalString(config.embeddingBaseUrl ?? ''),
+    embeddingApiKey: cleanOptionalString(config.embeddingApiKey ?? ''),
+    embeddingModel: cleanOptionalString(config.embeddingModel ?? ''),
+    embeddingTimeout: cleanOptionalString(config.embeddingTimeout ?? '')
   };
 }
 

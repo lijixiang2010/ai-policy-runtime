@@ -1,7 +1,5 @@
 # AI Policy Runtime
 
-![AI Policy Runtime logo](docs/assets/logo.png)
-
 Created and maintained by Miles Li.
 
 Working implementation of the Skill DSL / Policy Runtime described in
@@ -425,6 +423,11 @@ Useful environment variables:
 AI_POLICY_ROOT=<path-to-policy-runtime>
 AI_POLICY_PACKS=cpp.low_latency,cpp.safe_generation
 AI_POLICY_AUTO_INSTALL=0
+AI_POLICY_EMBEDDING_PROVIDER=openai-compatible
+AI_POLICY_EMBEDDING_BASE_URL=https://api.openai.com/v1
+AI_POLICY_EMBEDDING_API_KEY=<key>
+AI_POLICY_EMBEDDING_MODEL=text-embedding-3-small
+AI_POLICY_EMBEDDING_TIMEOUT=30
 ```
 
 The hook also reads project-local configuration from:
@@ -440,7 +443,11 @@ This is the preferred control surface for editor integrations:
   "enabled": true,
   "packs": ["cpp.safe_generation", "cpp.low_latency"],
   "autoInstall": true,
-  "embeddingProvider": "hashing"
+  "embeddingProvider": "openai-compatible",
+  "embeddingBaseUrl": "https://api.openai.com/v1",
+  "embeddingApiKey": "<key>",
+  "embeddingModel": "text-embedding-3-small",
+  "embeddingTimeout": "30"
 }
 ```
 

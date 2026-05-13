@@ -35,7 +35,11 @@ Codex hook.
 - `aiPolicy.packs`: policy packs to activate.
 - `aiPolicy.policyRoot`: optional policy asset root.
 - `aiPolicy.autoInstall`: allow the hook to install missing Python dependencies.
-- `aiPolicy.embeddingProvider`: semantic matching provider.
+- `aiPolicy.embeddingProvider`: optional semantic embedding provider.
+- `aiPolicy.embeddingBaseUrl`: optional OpenAI-compatible embeddings base URL.
+- `aiPolicy.embeddingApiKey`: optional API key for the embeddings endpoint.
+- `aiPolicy.embeddingModel`: optional embedding model.
+- `aiPolicy.embeddingTimeout`: optional embedding request timeout in seconds.
 
 Environment variables such as `AI_POLICY_PACKS` still override project settings
 when both are set.

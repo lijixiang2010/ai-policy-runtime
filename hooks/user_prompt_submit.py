@@ -73,6 +73,10 @@ class ProjectHookConfig:
     policy_root_value: str | Path = PLUGIN_ROOT
     auto_install: bool | None = None
     embedding_provider: str | None = None
+    embedding_base_url: str | None = None
+    embedding_api_key: str | None = None
+    embedding_model: str | None = None
+    embedding_timeout: str | None = None
 
     @classmethod
     def load(cls, project_root: Path) -> "ProjectHookConfig":
@@ -88,6 +92,10 @@ class ProjectHookConfig:
             or PLUGIN_ROOT,
             auto_install=_optional_bool(data.get("autoInstall")),
             embedding_provider=_optional_string(data.get("embeddingProvider")),
+            embedding_base_url=_optional_string(data.get("embeddingBaseUrl")),
+            embedding_api_key=_optional_string(data.get("embeddingApiKey")),
+            embedding_model=_optional_string(data.get("embeddingModel")),
+            embedding_timeout=_optional_string(data.get("embeddingTimeout")),
         )
 
     def policy_root(self, project_root: Path) -> Path:
@@ -97,10 +105,18 @@ class ProjectHookConfig:
         return path.resolve()
 
     def apply_environment(self) -> None:
-        if self.embedding_provider and "AI_POLICY_EMBEDDING_PROVIDER" not in os.environ:
-            os.environ["AI_POLICY_EMBEDDING_PROVIDER"] = self.embedding_provider
+        self._apply_env("AI_POLICY_EMBEDDING_PROVIDER", self.embedding_provider)
+        self._apply_env("AI_POLICY_EMBEDDING_BASE_URL", self.embedding_base_url)
+        self._apply_env("AI_POLICY_EMBEDDING_API_KEY", self.embedding_api_key)
+        self._apply_env("AI_POLICY_EMBEDDING_MODEL", self.embedding_model)
+        self._apply_env("AI_POLICY_EMBEDDING_TIMEOUT", self.embedding_timeout)
         if self.auto_install is not None and "AI_POLICY_AUTO_INSTALL" not in os.environ:
             os.environ["AI_POLICY_AUTO_INSTALL"] = "1" if self.auto_install else "0"
+
+    @staticmethod
+    def _apply_env(name: str, value: str | None) -> None:
+        if value and name not in os.environ:
+            os.environ[name] = value
 
 
 def _resolve_effective_prompt(

@@ -4,6 +4,9 @@
   "description": "Configure AI Policy Runtime for Codex from VS Code.",
   "version": "0.1.0",
   "publisher": "miles-li",
+  "author": {
+    "name": "Miles Li"
+  },
   "license": "Apache-2.0",
   "preview": true,
   "icon": "media/icon.png",
@@ -47,7 +50,7 @@
       "activitybar": [
         {
           "id": "aiPolicy",
-          "title": "AI Policy",
+          "title": "AI Policy Runtime",
           "icon": "media/activity.svg"
         }
       ]
@@ -64,27 +67,27 @@
     "commands": [
       {
         "command": "aiPolicy.enable",
-        "title": "AI Policy: Enable"
+        "title": "AI Policy Runtime: Enable"
       },
       {
         "command": "aiPolicy.disable",
-        "title": "AI Policy: Disable"
+        "title": "AI Policy Runtime: Disable"
       },
       {
         "command": "aiPolicy.configurePacks",
-        "title": "AI Policy: Configure Packs"
+        "title": "AI Policy Runtime: Configure Packs"
       },
       {
         "command": "aiPolicy.showStatus",
-        "title": "AI Policy: Show Status"
+        "title": "AI Policy Runtime: Show Status"
       },
       {
         "command": "aiPolicy.showEffectiveRules",
-        "title": "AI Policy: Show Effective Rules"
+        "title": "AI Policy Runtime: Show Effective Rules"
       },
       {
         "command": "aiPolicy.validateRuntime",
-        "title": "AI Policy: Validate Runtime"
+        "title": "AI Policy Runtime: Validate Runtime"
       }
     ],
     "configuration": {
@@ -117,15 +120,44 @@
         },
         "aiPolicy.embeddingProvider": {
           "type": "string",
+          "default": "",
           "enum": [
-            "auto",
-            "disabled",
-            "hashing",
+            "",
+            "openai-compatible",
+            "openai",
             "local",
-            "openai-compatible"
+            "hashing",
+            "disabled"
           ],
-          "default": "hashing",
-          "description": "Semantic matching provider used by the runtime."
+          "enumDescriptions": [
+            "Automatically choose the best configured semantic provider.",
+            "Use an OpenAI-compatible /v1/embeddings endpoint.",
+            "Alias for OpenAI-compatible /v1/embeddings.",
+            "Use a local sentence-transformers model.",
+            "Use the dependency-free hashing matcher.",
+            "Disable semantic embedding matching."
+          ],
+          "description": "Semantic embedding provider for task analysis."
+        },
+        "aiPolicy.embeddingBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Optional OpenAI-compatible embeddings base URL, such as https://api.openai.com/v1."
+        },
+        "aiPolicy.embeddingApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional API key for the OpenAI-compatible embeddings endpoint. Leave empty to use OPENAI_API_KEY."
+        },
+        "aiPolicy.embeddingModel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional embedding model. Defaults to text-embedding-3-small for OpenAI-compatible endpoints."
+        },
+        "aiPolicy.embeddingTimeout": {
+          "type": "string",
+          "default": "",
+          "description": "Optional embedding request timeout in seconds."
         }
       }
     }
