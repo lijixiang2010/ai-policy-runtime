@@ -1,5 +1,9 @@
 # AI Policy Runtime
 
+![AI Policy Runtime logo](docs/assets/logo.png)
+
+Created and maintained by Miles Li.
+
 Working implementation of the Skill DSL / Policy Runtime described in
 `docs/skill_policy_runtime.md`.
 
@@ -423,6 +427,56 @@ AI_POLICY_PACKS=cpp.low_latency,cpp.safe_generation
 AI_POLICY_AUTO_INSTALL=0
 ```
 
+The hook also reads project-local configuration from:
+
+```text
+.policy/config.json
+```
+
+This is the preferred control surface for editor integrations:
+
+```json
+{
+  "enabled": true,
+  "packs": ["cpp.safe_generation", "cpp.low_latency"],
+  "autoInstall": true,
+  "embeddingProvider": "hashing"
+}
+```
+
+Environment variables still override `.policy/config.json` when both are set.
+
+## Configure Codex from VS Code
+
+A Codex-focused VS Code extension is included under:
+
+```text
+vscode-extension/
+```
+
+The extension does not reimplement the runtime. It writes `.policy/config.json`
+for the current workspace and lets the Codex plugin hook inject Effective Rules
+on each prompt.
+
+Available commands:
+
+```text
+AI Policy: Enable
+AI Policy: Disable
+AI Policy: Configure Packs
+AI Policy: Show Status
+AI Policy: Show Effective Rules
+AI Policy: Validate Runtime
+```
+
+During development, build the extension with:
+
+```powershell
+cd vscode-extension
+npm install
+npm run compile
+```
+
 For local development in this repository, `.codex/config.toml` points Codex at
 the same hook implementation used by the plugin.
 
@@ -430,7 +484,7 @@ After publishing this repository to GitHub, users can add it as a Codex plugin
 marketplace:
 
 ```powershell
-codex plugin marketplace add <owner>/<repo>
+codex plugin marketplace add lkimuk/ai-policy-runtime
 ```
 
 Then install **AI Policy Runtime** from Codex:

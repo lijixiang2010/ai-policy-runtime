@@ -6,7 +6,7 @@
   "interface": {
     "displayName": "AI Policy Runtime",
     "shortDescription": "Generates dynamic coding rules for each Codex prompt.",
-    "developerName": "AI Policy Runtime",
+    "developerName": "Miles Li",
     "category": "Developer Tools",
     "capabilities": ["Read", "Write"]
   }

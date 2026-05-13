@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+from typing import Any
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PATH = Path(".policy") / "config.json"
+FALSE_VALUES = {"0", "false", "no", "off"}
 
 
 def main() -> int:
@@ -17,10 +21,19 @@ def main() -> int:
         return 0
 
     project_root = Path(payload.get("cwd") or ".").resolve()
-    policy_root = Path(os.environ.get("AI_POLICY_ROOT", PLUGIN_ROOT)).resolve()
+    config = ProjectHookConfig.load(project_root)
+    if not config.enabled:
+        return 0
+
+    config.apply_environment()
 
     try:
-        additional_context = _resolve_effective_prompt(prompt, project_root, policy_root)
+        additional_context = _resolve_effective_prompt(
+            prompt,
+            project_root,
+            config.policy_root(project_root),
+            config.packs,
+        )
     except Exception as exc:
         additional_context = (
             "AI Policy Runtime hook could not generate Effective Rules for this turn. "
@@ -51,7 +64,51 @@ def _read_payload() -> dict[str, object]:
     return data
 
 
-def _resolve_effective_prompt(prompt: str, project_root: Path, policy_root: Path) -> str:
+@dataclass(frozen=True)
+class ProjectHookConfig:
+    """Project-local Codex hook configuration with environment overrides."""
+
+    enabled: bool = True
+    packs: tuple[str, ...] = ()
+    policy_root_value: str | Path = PLUGIN_ROOT
+    auto_install: bool | None = None
+    embedding_provider: str | None = None
+
+    @classmethod
+    def load(cls, project_root: Path) -> "ProjectHookConfig":
+        return cls.from_mapping(_load_project_config(project_root))
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "ProjectHookConfig":
+        return cls(
+            enabled=_coerce_enabled(data.get("enabled", True)),
+            packs=_configured_packs(data),
+            policy_root_value=os.environ.get("AI_POLICY_ROOT")
+            or data.get("policyRoot")
+            or PLUGIN_ROOT,
+            auto_install=_optional_bool(data.get("autoInstall")),
+            embedding_provider=_optional_string(data.get("embeddingProvider")),
+        )
+
+    def policy_root(self, project_root: Path) -> Path:
+        path = Path(str(self.policy_root_value))
+        if not path.is_absolute():
+            path = project_root / path
+        return path.resolve()
+
+    def apply_environment(self) -> None:
+        if self.embedding_provider and "AI_POLICY_EMBEDDING_PROVIDER" not in os.environ:
+            os.environ["AI_POLICY_EMBEDDING_PROVIDER"] = self.embedding_provider
+        if self.auto_install is not None and "AI_POLICY_AUTO_INSTALL" not in os.environ:
+            os.environ["AI_POLICY_AUTO_INSTALL"] = "1" if self.auto_install else "0"
+
+
+def _resolve_effective_prompt(
+    prompt: str,
+    project_root: Path,
+    policy_root: Path,
+    packs: tuple[str, ...],
+) -> str:
     _prepare_imports()
 
     from ai_policy_runtime import PolicyRuntime, RuntimeConfig
@@ -62,7 +119,7 @@ def _resolve_effective_prompt(prompt: str, project_root: Path, policy_root: Path
             policy_root=policy_root,
         )
     )
-    result = runtime.resolve(prompt, _configured_packs())
+    result = runtime.resolve(prompt, packs)
     return (result.current / "effective-prompt.md").read_text(encoding="utf-8")
 
 
@@ -107,9 +164,61 @@ def _bootstrap_package() -> None:
     )
 
 
-def _configured_packs() -> tuple[str, ...]:
-    raw = os.environ.get("AI_POLICY_PACKS", "")
-    return tuple(item.strip() for item in raw.split(",") if item.strip())
+def _configured_packs(config: dict[str, Any]) -> tuple[str, ...]:
+    if "AI_POLICY_PACKS" in os.environ:
+        return _split_csv(os.environ.get("AI_POLICY_PACKS", ""))
+
+    packs = config.get("packs", ())
+    if isinstance(packs, str):
+        return _split_csv(packs)
+    if isinstance(packs, list):
+        return tuple(str(item).strip() for item in packs if str(item).strip())
+    return ()
+
+
+def _load_project_config(project_root: Path) -> dict[str, Any]:
+    path = project_root / CONFIG_PATH
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Policy config must be a JSON object: {path}")
+    return data
+
+
+def _coerce_enabled(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() not in FALSE_VALUES
+    return bool(value)
+
+
+def _optional_bool(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() not in FALSE_VALUES
+    return bool(value)
+
+
+def _optional_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _split_csv(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def _enabled(config: dict[str, Any]) -> bool:
+    """Compatibility helper for focused unit tests."""
+
+    return ProjectHookConfig.from_mapping(config).enabled
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ from ai_policy_runtime.services.injector import BEGIN, END, inject_current_promp
 from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_mapping
 from ai_policy_runtime.services.verification import FileVerifier, Violation, verify_rules
+from hooks import user_prompt_submit
 
 
 def _load_fixture(name: str) -> dict[str, object]:
@@ -971,6 +972,42 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(text.count(BEGIN), 1)
         self.assertEqual(text.count(END), 1)
 
+    def test_codex_hook_reads_project_config_packs(self) -> None:
+        config = {"packs": ["cpp.safe_generation", "cpp.low_latency"]}
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                user_prompt_submit._configured_packs(config),
+                ("cpp.safe_generation", "cpp.low_latency"),
+            )
+
+    def test_codex_hook_environment_packs_override_project_config(self) -> None:
+        config = {"packs": ["cpp.safe_generation"]}
+        with patch.dict(os.environ, {"AI_POLICY_PACKS": "cpp.low_latency"}, clear=True):
+            self.assertEqual(
+                user_prompt_submit._configured_packs(config),
+                ("cpp.low_latency",),
+            )
+
+    def test_codex_hook_can_be_disabled_by_project_config(self) -> None:
+        self.assertFalse(user_prompt_submit._enabled({"enabled": False}))
+        self.assertFalse(user_prompt_submit._enabled({"enabled": "off"}))
+        self.assertTrue(user_prompt_submit._enabled({}))
+
+    def test_codex_hook_loads_project_config(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"enabled": True, "packs": ["cpp.safe_generation"]}),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                user_prompt_submit._load_project_config(root),
+                {"enabled": True, "packs": ["cpp.safe_generation"]},
+            )
+
     def test_codex_wrapper_builds_command_with_task_last(self) -> None:
         command = _build_codex_command(
             ("codex",),
@@ -1220,6 +1257,29 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertNotIn(
             "Prefer C++20 concepts and requires-clauses over SFINAE or std::enable_if "
             "when template constraints are part of the public interface.",
+            statements,
+        )
+
+    def test_cpp_production_refinement_extracts_template_for_type_variation(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Refactor these C++20 functions. They have shared C++ logic with small "
+            "variations and similar C++ functions differ only by type, so extract "
+            "a template function if it reduces duplication.",
+            ("cpp.production_refinement",),
+        )
+        statements = _statements(result.structured["effective_rules"])
+
+        self.assertIn(
+            "Extract a template function, template class, constrained overload, or "
+            "policy parameter when similar C++ implementations share most control or "
+            "data flow and differ only by a small number of type or policy decisions.",
+            statements,
+        )
+        self.assertIn(
+            "Avoid introducing a template abstraction when the similarity is incidental, "
+            "variation points are unclear, or the resulting API and diagnostics become "
+            "harder to understand than the specialized implementations.",
             statements,
         )
 

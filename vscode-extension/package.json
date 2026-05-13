@@ -1,0 +1,146 @@
+{
+  "name": "ai-policy-runtime",
+  "displayName": "AI Policy Runtime",
+  "description": "Configure AI Policy Runtime for Codex from VS Code.",
+  "version": "0.1.0",
+  "publisher": "miles-li",
+  "license": "Apache-2.0",
+  "preview": true,
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "miles-li",
+    "codex",
+    "policy",
+    "ai",
+    "agent",
+    "rules",
+    "cpp"
+  ],
+  "homepage": "https://github.com/lkimuk/ai-policy-runtime#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lkimuk/ai-policy-runtime.git",
+    "directory": "vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/lkimuk/ai-policy-runtime/issues"
+  },
+  "activationEvents": [
+    "onCommand:aiPolicy.enable",
+    "onCommand:aiPolicy.disable",
+    "onCommand:aiPolicy.configurePacks",
+    "onCommand:aiPolicy.showStatus",
+    "onCommand:aiPolicy.showEffectiveRules",
+    "onCommand:aiPolicy.validateRuntime",
+    "onView:aiPolicy.config",
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aiPolicy",
+          "title": "AI Policy",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "aiPolicy": [
+        {
+          "id": "aiPolicy.config",
+          "name": "Configuration",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "aiPolicy.enable",
+        "title": "AI Policy: Enable"
+      },
+      {
+        "command": "aiPolicy.disable",
+        "title": "AI Policy: Disable"
+      },
+      {
+        "command": "aiPolicy.configurePacks",
+        "title": "AI Policy: Configure Packs"
+      },
+      {
+        "command": "aiPolicy.showStatus",
+        "title": "AI Policy: Show Status"
+      },
+      {
+        "command": "aiPolicy.showEffectiveRules",
+        "title": "AI Policy: Show Effective Rules"
+      },
+      {
+        "command": "aiPolicy.validateRuntime",
+        "title": "AI Policy: Validate Runtime"
+      }
+    ],
+    "configuration": {
+      "title": "AI Policy Runtime",
+      "properties": {
+        "aiPolicy.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable AI Policy Runtime for Codex in this workspace."
+        },
+        "aiPolicy.packs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "cpp.safe_generation"
+          ],
+          "description": "Policy packs to activate for Codex prompts."
+        },
+        "aiPolicy.policyRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Optional policy asset root. Leave empty to use the installed Codex plugin root."
+        },
+        "aiPolicy.autoInstall": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow the Codex hook to install missing Python dependencies."
+        },
+        "aiPolicy.embeddingProvider": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "disabled",
+            "hashing",
+            "local",
+            "openai-compatible"
+          ],
+          "default": "hashing",
+          "description": "Semantic matching provider used by the runtime."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "20.11.30",
+    "@types/vscode": "1.90.0",
+    "@vscode/vsce": "2.32.0",
+    "typescript": "5.4.5"
+  }
+}

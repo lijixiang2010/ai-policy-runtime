@@ -1,0 +1,35 @@
+<svg width="24" height="24" viewBox="0 0 333 309" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <mask id="k-cutouts" maskUnits="userSpaceOnUse" x="0" y="0" width="333" height="309">
+      <rect x="0" y="0" width="333" height="309" fill="white"/>
+      <path d="M80 96 L112 128" stroke="black" stroke-width="18" stroke-linecap="round"/>
+      <path d="M80 199 L112 166" stroke="black" stroke-width="18" stroke-linecap="round"/>
+      <path d="M154 127 L219 60" stroke="black" stroke-width="18" stroke-linecap="round"/>
+      <path d="M154 169 L219 236" stroke="black" stroke-width="18" stroke-linecap="round"/>
+      <circle cx="126" cy="148" r="11" fill="black"/>
+    </mask>
+  </defs>
+
+  <path fill="currentColor" mask="url(#k-cutouts)" d="
+    M 50 40
+    Q 50 28 62 40
+    L 126 100
+    Q 134 108 142 100
+    L 204 27
+    Q 207 24 212 24
+    L 286 24
+    Q 294 24 288 31
+    L 174 148
+    L 288 270
+    Q 294 277 284 277
+    L 203 277
+    Q 198 277 194 273
+    L 126 194
+    L 62 255
+    Q 50 266 50 254
+    L 50 183
+    L 86 147
+    L 50 111
+    Z
+  "/>
+</svg>

@@ -67,6 +67,27 @@ task_analysis:
         - generic requirements should be explicit
       confidence: 0.82
 
+    - id: detect_cpp_template_abstraction_candidate
+      when_text_matches:
+        - similar C++ functions differ only by type
+        - similar C++ functions differ only by policy
+        - extract template function
+        - extract template class
+        - template abstraction
+        - shared C++ logic with small variations
+        - repeated C++ functions with type variation
+        - policy parameter
+      set:
+        cpp_template_abstraction_candidate: true
+        template_constraints_required: true
+      tags:
+        - templates
+        - refactoring
+      semantic_match:
+        - similar C++ functions share most control flow and differ only by type or policy decisions
+        - repeated C++ class or function structure should become a clear template abstraction when it reduces duplication
+      confidence: 0.84
+
 sources:
   - cpp_core_guidelines:T.10
   - cpp_core_guidelines:T.20
@@ -140,6 +161,37 @@ rules:
       action: recommend
       rationale: >-
         Generic code should fail in ways that help users understand violated requirements.
+
+    - id: cpp.templates.extract_template_for_type_or_policy_variation
+      title: Extract template abstraction for type or policy variation
+      when: language == "cpp" and cpp_template_abstraction_candidate == true
+      should: >-
+        Extract a template function, template class, constrained overload, or
+        policy parameter when similar C++ implementations share most control or
+        data flow and differ only by a small number of type or policy decisions.
+      target: template_abstraction
+      action: recommend
+      require:
+        - Keep variation points explicit and named.
+        - Keep diagnostics understandable near the template interface.
+        - Prefer concepts or requires-clauses in C++20 when constraints are part
+          of the public interface.
+      rationale: >-
+        A well-scoped template abstraction removes duplicated structure while
+        making type and policy variation reviewable.
+
+    - id: cpp.templates.avoid_template_abstraction_for_incidental_similarity
+      title: Avoid template abstraction for incidental similarity
+      when: language == "cpp"
+      should_not: >-
+        Avoid introducing a template abstraction when the similarity is incidental,
+        variation points are unclear, or the resulting API and diagnostics become
+        harder to understand than the specialized implementations.
+      target: template_abstraction
+      action: discourage
+      rationale: >-
+        Template abstraction is useful only when it reduces net complexity without
+        hiding intent or producing confusing errors.
 
   preference:
     - id: cpp.templates.preference_named_concepts
@@ -218,6 +270,20 @@ effective_rule_examples:
           diagnostics near the template interface.
     not_expected:
       - Prefer C++20 concepts for C++17 template constraints.
+  cpp_template_abstraction:
+    task_context:
+      language: cpp
+      standard: 20
+      cpp_template_abstraction_candidate: true
+      template_constraints_required: true
+    effective_rules:
+      soft:
+        - Extract a template function, template class, constrained overload, or
+          policy parameter when similar C++ implementations share most control or
+          data flow and differ only by a small number of type or policy decisions.
+        - Avoid introducing a template abstraction when the similarity is incidental,
+          variation points are unclear, or the resulting API and diagnostics become
+          harder to understand than the specialized implementations.
 
 authoring_notes:
   - Source references are for auditability only; do not mirror C++ Core Guidelines

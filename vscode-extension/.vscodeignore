@@ -1,0 +1,11 @@
+.vscode/**
+.gitignore
+src/**
+node_modules/**
+*.vsix
+tsconfig.json
+package-lock.json
+**/*.map
+**/*.ts
+**/.DS_Store
+**/__pycache__/**

@@ -1,7 +1,7 @@
 {
   "name": "ai-policy-runtime-marketplace",
   "interface": {
-    "displayName": "AI Policy Runtime"
+    "displayName": "AI Policy Runtime by Miles Li"
   },
   "plugins": [
     {

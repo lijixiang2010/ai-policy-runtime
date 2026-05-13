@@ -18,3 +18,12 @@ jobs:
         run: python -m unittest discover -s tests
       - name: Validate DSL
         run: python -m ai_policy_runtime.cli validate
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install VS Code extension dependencies
+        working-directory: vscode-extension
+        run: npm ci
+      - name: Compile VS Code extension
+        working-directory: vscode-extension
+        run: npm run compile
