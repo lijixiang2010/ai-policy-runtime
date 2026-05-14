@@ -20,6 +20,23 @@ Codex hook.
 3. Run `AI Policy: Configure Packs`.
 4. Use Codex normally.
 
+## Local VSIX Install
+
+Build and install the extension from this repository:
+
+```powershell
+cd D:\MilesLi\ai-policy-runtime\vscode-extension
+npm ci
+npm run package
+& "$env:LOCALAPPDATA\Programs\Microsoft VS Code\bin\code.cmd" --install-extension ".\ai-policy-runtime-0.1.0.vsix" --force
+```
+
+Reload VS Code after installing or replacing icon assets:
+
+```text
+Developer: Reload Window
+```
+
 ## Commands
 
 - `AI Policy: Enable`
