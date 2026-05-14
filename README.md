@@ -56,20 +56,58 @@ Example output:
 
 - Language: C++
 - Standard: C++20
+- Selected Standard Is Known: true
 - Refinement Requested: true
+- Artifact Type: code
 - Behavior Preservation Required: true
+- Cpp Template Abstraction Candidate: true
+- Template Constraints Required: true
+- Source Structure: true
+- Type Sensitive: true
+- Domain: cpp
 - Task Type: refactor_code
-- Tags: code-quality, complexity, cpp, cpp20, refactoring, safety
+- Capabilities: refactor_code
+- Tags: code-quality, complexity, cpp, cpp20, refactoring, review, safety, standard-library, templates
 
 ## HARD Rules
 
 - Preserve the existing observable behavior while reducing complexity unless the task explicitly asks for a behavior change.
 - Avoid undefined behavior.
+- Do not use facilities unavailable in the selected C++ standard.
+- Avoid invalid or unsafe casts that bypass type and lifetime safety.
 - Preserve ownership and lifetime safety.
+- Do not introduce resource leaks.
+- Do not use unchecked bounds access unless the valid range is proven by a clear invariant.
+
+## SOFT Rules
+
+- Remove accidental complexity that does not contribute to correctness, extensibility, performance, or clarity.
+- Avoid extracting code only because it looks similar when the duplicated fragments represent different responsibilities or are likely to change independently.
+- Avoid introducing abstractions that increase conceptual overhead without improving reuse, clarity, testability, or extension.
+- Make each component feel complete by clarifying its public contract, expected inputs, outputs, failure behavior, and ownership of important state.
+- Handle important boundary conditions and failure paths explicitly rather than leaving them as implicit assumptions.
+- Keep complexity that represents real domain rules, safety constraints, performance needs, or important extension points.
+- Use language-native constructs that express the operation directly when they preserve clarity, correctness, and maintainability.
+- Keep dependency direction stable and avoid designs where low-level components unexpectedly depend on high-level orchestration details.
+- Group related state, helper functions, and behavior into coherent components with clear responsibilities, names, interfaces, and placement.
+- Avoid creating broad utility or manager components that collect unrelated responsibilities under a vague name.
+- Avoid replacing clear specialized logic with a parameterized abstraction whose many flags or modes make behavior harder to understand.
+- Keep headers self-contained so they can be included independently.
+
+## Preferences
+
+- Prefer safety over performance.
+- Prefer standard vocabulary type over ad hoc convention.
+- Prefer effective complexity over accidental complexity.
+- Prefer clear call chain over hidden cross layer coupling.
+- Prefer cohesive component over scattered helper logic.
+- Prefer clarity over cleverness.
 
 ## Verification Requirements
 
 - Verify behavior preservation.
+- Verify no new ownership, lifetime, resource, bounds, or undefined-behavior risks were introduced.
+- Verify recommendations use facilities available in the selected C++ standard.
 - Verify the refactoring reduced accidental complexity without introducing over-abstraction.
 ```
 
