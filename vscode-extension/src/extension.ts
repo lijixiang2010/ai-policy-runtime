@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 
 type PolicyConfig = {
   enabled: boolean;
+  agents: AgentTarget[];
   packs: string[];
   policyRoot?: string;
   autoInstall: boolean;
@@ -16,6 +17,8 @@ type PolicyConfig = {
   postRefinePacks: string[];
   verifyTarget?: string;
 };
+
+type AgentTarget = 'codex' | 'claude';
 
 type PolicyPaths = {
   root: string;
@@ -32,6 +35,7 @@ type PackItem = vscode.QuickPickItem & {
 const CONFIG_SECTION = 'aiPolicy';
 const POLICY_CONFIG_FILE = path.join('.policy', 'config.json');
 const EFFECTIVE_PROMPT_FILE = path.join('.policy', 'current', 'effective-prompt.md');
+const DEFAULT_AGENTS: AgentTarget[] = ['codex'];
 const DEFAULT_PACKS = ['cpp.safe_generation'];
 const DEFAULT_POST_REFINE_PACKS = ['cpp.production_refinement'];
 
@@ -134,6 +138,7 @@ class PolicyWorkspace {
   async saveConfig(config: PolicyConfig): Promise<void> {
     await Promise.all([
       this.updateSetting('enabled', config.enabled),
+      this.updateSetting('agents', config.agents),
       this.updateSetting('packs', config.packs),
       this.updateSetting('policyRoot', config.policyRoot ?? ''),
       this.updateSetting('autoInstall', config.autoInstall),
@@ -153,6 +158,7 @@ class PolicyWorkspace {
     const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
     return {
       enabled: config.get<boolean>('enabled', false),
+      agents: normalizeAgents(config.get<string[]>('agents', DEFAULT_AGENTS)),
       packs: config.get<string[]>('packs', DEFAULT_PACKS),
       policyRoot: cleanOptionalString(config.get<string>('policyRoot', '')),
       autoInstall: config.get<boolean>('autoInstall', true),
@@ -304,6 +310,13 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       justify-content: space-between;
       gap: 10px;
     }
+    .check-row {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 8px;
+      align-items: center;
+      font-weight: 400;
+    }
     label {
       font-weight: 600;
     }
@@ -399,7 +412,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
 <body>
   <div class="mast">
     <h1>AI Policy Runtime</h1>
-    <div class="subtle">Codex prompt policy for this workspace.</div>
+    <div class="subtle">Agent prompt policy for this workspace.</div>
   </div>
 
   <div class="section">
@@ -414,11 +427,23 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
   </div>
 
   <div class="section">
+    <label>Agents</label>
+    <label class="check-row" for="agentCodex">
+      <input id="agentCodex" type="checkbox" value="codex">
+      <span>Codex</span>
+    </label>
+    <label class="check-row" for="agentClaude">
+      <input id="agentClaude" type="checkbox" value="claude">
+      <span>Claude Code</span>
+    </label>
+  </div>
+
+  <div class="section">
     <div class="row">
       <label for="postRefineEnabled">Post-refinement</label>
       <input id="postRefineEnabled" type="checkbox">
     </div>
-    <p class="switch-note">Continue once before Codex ends a turn to compress structure, remove accidental complexity, and run practical checks.</p>
+    <p class="switch-note">Continue once before a supported agent ends a turn to compress structure, remove accidental complexity, and run practical checks.</p>
     <div class="field">
       <label for="postRefine">Mode</label>
       <select id="postRefine">
@@ -444,7 +469,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
 
   <div class="section">
     <label for="policyRoot">Policy root</label>
-    <input id="policyRoot" type="text" placeholder="Codex plugin root">
+    <input id="policyRoot" type="text" placeholder="Agent plugin or policy asset root">
   </div>
 
   <div class="section">
@@ -488,8 +513,11 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     const state = ${state};
     const byId = (id) => document.getElementById(id);
     const selected = new Set(state.config.packs || []);
+    const agents = new Set(state.config.agents || ['codex']);
     byId('enabled').checked = Boolean(state.config.enabled);
     byId('autoInstall').checked = Boolean(state.config.autoInstall);
+    byId('agentCodex').checked = agents.has('codex');
+    byId('agentClaude').checked = agents.has('claude');
     byId('postRefineEnabled').checked = (state.config.postRefine || 'off') !== 'off';
     byId('postRefine').value = state.config.postRefine && state.config.postRefine !== 'off'
       ? state.config.postRefine
@@ -564,6 +592,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
         : 'off';
       return {
         enabled: byId('enabled').checked,
+        agents: ['codex', 'claude'].filter((agent) => byId('agent' + agent.charAt(0).toUpperCase() + agent.slice(1)).checked),
         packs: Array.from(selected),
         policyRoot: byId('policyRoot').value.trim() || undefined,
         autoInstall: byId('autoInstall').checked,
@@ -602,7 +631,7 @@ class PolicyStatusBar implements vscode.Disposable {
     const config = this.workspace.readConfig();
     this.item.text = config.enabled ? 'AI Policy Runtime: On' : 'AI Policy Runtime: Off';
     this.item.tooltip = config.enabled
-      ? `Packs: ${config.packs.join(', ') || '(none)'}; post-refine: ${config.postRefine}`
+      ? `Agents: ${config.agents.join(', ') || '(none)'}; packs: ${config.packs.join(', ') || '(none)'}; post-refine: ${config.postRefine}`
       : 'AI Policy Runtime is disabled';
     this.item.show();
   }
@@ -650,7 +679,7 @@ async function configurePacks(workspace: PolicyWorkspace): Promise<void> {
     })),
     {
       canPickMany: true,
-      title: 'Select AI Policy Runtime packs for Codex'
+      title: 'Select AI Policy Runtime packs'
     }
   );
   if (!picks) {
@@ -674,8 +703,9 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
     language: 'plaintext',
     content: [
       `Enabled: ${config.enabled}`,
+      `Agents: ${config.agents.length ? config.agents.join(', ') : '(none)'}`,
       `Packs: ${config.packs.length ? config.packs.join(', ') : '(none)'}`,
-      `Policy root: ${config.policyRoot || '(Codex plugin root)'}`,
+      `Policy root: ${config.policyRoot || '(agent plugin root)'}`,
       `Embedding provider: ${config.embeddingProvider || '(auto)'}`,
       `Embedding base URL: ${config.embeddingBaseUrl || '(default)'}`,
       `Embedding model: ${config.embeddingModel || '(default)'}`,
@@ -733,6 +763,7 @@ async function exists(filePath: string): Promise<boolean> {
 function normalizeConfig(config: PolicyConfig): PolicyConfig {
   return {
     enabled: Boolean(config.enabled),
+    agents: normalizeAgents(config.agents),
     packs: Array.isArray(config.packs) ? config.packs.filter(Boolean) : DEFAULT_PACKS,
     policyRoot: cleanOptionalString(config.policyRoot ?? ''),
     autoInstall: Boolean(config.autoInstall),
@@ -747,6 +778,14 @@ function normalizeConfig(config: PolicyConfig): PolicyConfig {
       : DEFAULT_POST_REFINE_PACKS,
     verifyTarget: cleanOptionalString(config.verifyTarget ?? '')
   };
+}
+
+function normalizeAgents(value: unknown): AgentTarget[] {
+  if (!Array.isArray(value)) {
+    return DEFAULT_AGENTS;
+  }
+  const agents = value.filter((item): item is AgentTarget => item === 'codex' || item === 'claude');
+  return agents.length ? Array.from(new Set(agents)) : DEFAULT_AGENTS;
 }
 
 function normalizePostRefineMode(value: string): PolicyConfig['postRefine'] {

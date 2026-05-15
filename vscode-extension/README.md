@@ -2,25 +2,26 @@
 
 By Miles Li.
 
-Configure AI Policy Runtime for Codex without editing environment variables by
-hand. The extension writes workspace settings to `.policy/config.json`; the
-Codex plugin hook reads that file before resolving Effective Rules for each
-prompt.
+Configure AI Policy Runtime for AI coding agents without editing environment
+variables by hand. The extension writes workspace settings to
+`.policy/config.json`; supported agent hooks and wrappers read that file before
+resolving Effective Rules for each prompt.
 
 ## Requirements
 
-Install and enable the AI Policy Runtime Codex plugin first. This VS Code
-extension is the configuration surface for that plugin; it does not replace the
-Codex hook.
+Install and enable the relevant AI Policy Runtime agent integration first. This
+VS Code extension is the configuration surface for those integrations; it does
+not replace agent hooks or wrappers.
 
 ## Quick Start
 
 1. Open a workspace in VS Code.
 2. Run `AI Policy: Enable`.
-3. Run `AI Policy: Enable Post-Task Refinement` when Codex should continue
-   once before ending a turn for production refinement.
+3. Run `AI Policy: Enable Post-Task Refinement` when a supported agent should
+   continue once before ending a turn for production refinement.
 4. Run `AI Policy: Configure Packs`.
-5. Use Codex normally.
+5. Select Codex, Claude Code, or both in the side-bar configuration view.
+6. Use your agent normally.
 
 ## Local VSIX Install
 
@@ -51,18 +52,19 @@ Developer: Reload Window
 
 ## Settings
 
-- `aiPolicy.enabled`: enable or disable the Codex hook for this workspace.
+- `aiPolicy.enabled`: enable or disable AI Policy Runtime for this workspace.
+- `aiPolicy.agents`: agent integrations that should use this workspace policy.
 - `aiPolicy.packs`: policy packs to activate.
 - `aiPolicy.policyRoot`: optional policy asset root.
-- `aiPolicy.autoInstall`: allow the hook to install missing Python dependencies.
+- `aiPolicy.autoInstall`: allow agent hooks to install missing Python dependencies.
 - `aiPolicy.embeddingProvider`: optional semantic embedding provider.
 - `aiPolicy.embeddingBaseUrl`: optional OpenAI-compatible embeddings base URL.
 - `aiPolicy.embeddingApiKey`: optional API key for the embeddings endpoint.
 - `aiPolicy.embeddingModel`: optional embedding model.
 - `aiPolicy.embeddingTimeout`: optional embedding request timeout in seconds.
-- `aiPolicy.postRefine`: Codex Stop-hook post-task refinement mode.
+- `aiPolicy.postRefine`: agent Stop-hook post-task refinement mode.
 - `aiPolicy.postRefinePacks`: packs added for the refinement continuation.
-- `aiPolicy.verifyTarget`: optional target Codex should verify during strict
+- `aiPolicy.verifyTarget`: optional target agents should verify during strict
   refinement.
 
 Environment variables such as `AI_POLICY_PACKS` still override project settings

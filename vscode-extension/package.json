@@ -1,7 +1,7 @@
 {
   "name": "ai-policy-runtime",
   "displayName": "AI Policy Runtime",
-  "description": "Configure AI Policy Runtime for Codex from VS Code.",
+  "description": "Configure AI Policy Runtime for AI coding agents from VS Code.",
   "version": "0.1.0",
   "publisher": "cppmore",
   "author": {
@@ -19,6 +19,7 @@
   "keywords": [
     "miles-li",
     "codex",
+    "claude-code",
     "policy",
     "ai",
     "agent",
@@ -101,7 +102,21 @@
         "aiPolicy.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable AI Policy Runtime for Codex in this workspace."
+          "description": "Enable AI Policy Runtime for this workspace."
+        },
+        "aiPolicy.agents": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude"
+            ]
+          },
+          "default": [
+            "codex"
+          ],
+          "description": "AI coding agents that should use this workspace policy configuration."
         },
         "aiPolicy.packs": {
           "type": "array",
@@ -111,17 +126,17 @@
           "default": [
             "cpp.safe_generation"
           ],
-          "description": "Policy packs to activate for Codex prompts."
+          "description": "Policy packs to activate for agent prompts."
         },
         "aiPolicy.policyRoot": {
           "type": "string",
           "default": "",
-          "description": "Optional policy asset root. Leave empty to use the installed Codex plugin root."
+          "description": "Optional policy asset root. Leave empty to use the installed agent plugin root."
         },
         "aiPolicy.autoInstall": {
           "type": "boolean",
           "default": true,
-          "description": "Allow the Codex hook to install missing Python dependencies."
+          "description": "Allow agent hooks to install missing Python dependencies."
         },
         "aiPolicy.embeddingProvider": {
           "type": "string",
@@ -174,12 +189,12 @@
             "strict"
           ],
           "enumDescriptions": [
-            "Do not ask Codex to continue with a refinement pass.",
+            "Do not ask supported agents to continue with a refinement pass.",
             "Ask for a light review-oriented refinement continuation.",
-            "Ask Codex to continue once with a production refinement pass.",
-            "Ask Codex to continue once with a stricter release-quality refinement pass."
+            "Ask a supported agent to continue once with a production refinement pass.",
+            "Ask a supported agent to continue once with a stricter release-quality refinement pass."
           ],
-          "description": "Codex Stop-hook post-task refinement mode."
+          "description": "Agent Stop-hook post-task refinement mode."
         },
         "aiPolicy.postRefinePacks": {
           "type": "array",
@@ -189,12 +204,12 @@
           "default": [
             "cpp.production_refinement"
           ],
-          "description": "Policy packs added for the Codex Stop-hook post-task refinement continuation."
+          "description": "Policy packs added for the agent post-task refinement continuation."
         },
         "aiPolicy.verifyTarget": {
           "type": "string",
           "default": "",
-          "description": "Optional file or directory Codex should verify during strict post-task refinement."
+          "description": "Optional file or directory agents should verify during strict post-task refinement."
         }
       }
     }
