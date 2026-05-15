@@ -175,12 +175,15 @@ policy-claude `
 ```
 
 Use this repository as a Codex plugin to resolve each submitted prompt through
-the runtime hook. The plugin files live in:
+the runtime hooks. `UserPromptSubmit` injects task-scoped Effective Rules, and
+the optional `Stop` hook can ask Codex to continue once with a post-refinement
+prompt before the turn ends. The plugin files live in:
 
 ```text
 .codex-plugin/plugin.json
 hooks/hooks.json
 hooks/user_prompt_submit.py
+hooks/stop_refinement.py
 ```
 
 A VS Code extension is also included in `vscode-extension/`. It writes

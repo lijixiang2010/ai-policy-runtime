@@ -5,9 +5,10 @@ follows a working implementation. Its purpose is to keep effective complexity
 and remove accidental complexity after the agent has already completed the
 requested change.
 
-This workflow belongs in the agent wrapper layer because only the wrapper knows
-whether the first agent command ran, whether it succeeded, and whether a dry run
-was requested. The core runtime remains focused on deterministic policy
+This workflow can run in two places. Agent wrappers can run an explicit second
+agent command because they own the process execution. The Codex plugin can use
+the `Stop` hook to block turn completion once and ask Codex to continue with a
+refinement prompt. The core runtime remains focused on deterministic policy
 resolution, injection, and verification.
 
 ## Goals
@@ -48,6 +49,11 @@ after the refinement pass.
 If the first agent command fails, the refinement pass is skipped and the result
 records the skip reason. If `--no-exec` is used, the wrapper can still resolve
 and inject refinement context, but it will not execute an agent command.
+
+For the Codex plugin, `postRefine` uses the same mode names. `light` is treated
+as a continuation that asks for review-oriented refinement without broad edits,
+while `standard` and `strict` ask Codex to continue with a production refinement
+pass before the turn is allowed to end.
 
 ## CLI Usage
 
@@ -95,6 +101,18 @@ policy-claude `
   "Implement a C++20 matching-engine API."
 ```
 
+For Codex plugin usage, configure the project-local `.policy/config.json`:
+
+```json
+{
+  "enabled": true,
+  "packs": ["cpp.safe_generation", "cpp.low_latency"],
+  "postRefine": "strict",
+  "postRefinePacks": ["cpp.production_refinement"],
+  "verifyTarget": "src"
+}
+```
+
 ## Execution Order
 
 The wrapper performs:
@@ -117,6 +135,19 @@ as it will be left for the user. The default `strict` expectation is therefore:
 ```text
 first implementation pass -> refinement pass -> deterministic verification
 ```
+
+For Codex plugin usage, the hook order is:
+
+```text
+UserPromptSubmit resolves and injects Effective Rules for the user's prompt
+Codex performs the implementation turn
+Stop checks .policy/config.json before Codex ends the turn
+Stop returns decision:block once when postRefine is enabled
+Codex receives the refinement reason as a continuation prompt
+the next Stop sees stop_hook_active and allows the turn to end
+```
+
+The `stop_hook_active` guard prevents an infinite refinement loop.
 
 ## Result Shape
 

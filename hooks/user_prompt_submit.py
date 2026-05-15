@@ -11,7 +11,10 @@ from typing import Any
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = Path(".policy") / "config.json"
+HOOK_STATE_PATH = Path(".policy") / "current" / "codex-hook-state.json"
 FALSE_VALUES = {"0", "false", "no", "off"}
+POST_REFINE_PACK_ID = "cpp.production_refinement"
+POST_REFINE_MODES = {"off", "light", "standard", "strict"}
 
 
 def main() -> int:
@@ -34,6 +37,7 @@ def main() -> int:
             config.policy_root(project_root),
             config.packs,
         )
+        _write_turn_state(project_root, payload, prompt, config)
     except Exception as exc:
         additional_context = (
             "AI Policy Runtime hook could not generate Effective Rules for this turn. "
@@ -77,6 +81,9 @@ class ProjectHookConfig:
     embedding_api_key: str | None = None
     embedding_model: str | None = None
     embedding_timeout: str | None = None
+    post_refine_mode: str = "off"
+    post_refine_pack_ids: tuple[str, ...] = (POST_REFINE_PACK_ID,)
+    verify_target: str | None = None
 
     @classmethod
     def load(cls, project_root: Path) -> "ProjectHookConfig":
@@ -96,6 +103,10 @@ class ProjectHookConfig:
             embedding_api_key=_optional_string(data.get("embeddingApiKey")),
             embedding_model=_optional_string(data.get("embeddingModel")),
             embedding_timeout=_optional_string(data.get("embeddingTimeout")),
+            post_refine_mode=_configured_post_refine_mode(data),
+            post_refine_pack_ids=_configured_post_refine_packs(data),
+            verify_target=_optional_string(os.environ.get("AI_POLICY_VERIFY_TARGET"))
+            or _optional_string(data.get("verifyTarget")),
         )
 
     def policy_root(self, project_root: Path) -> Path:
@@ -202,6 +213,25 @@ def _load_project_config(project_root: Path) -> dict[str, Any]:
     return data
 
 
+def _write_turn_state(
+    project_root: Path,
+    payload: dict[str, object],
+    prompt: str,
+    config: ProjectHookConfig,
+) -> None:
+    state_path = project_root / HOOK_STATE_PATH
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state = {
+        "turn_id": payload.get("turn_id"),
+        "session_id": payload.get("session_id"),
+        "prompt": prompt,
+        "post_refine_mode": config.post_refine_mode,
+        "post_refine_pack_ids": list(config.post_refine_pack_ids),
+        "verify_target": config.verify_target,
+    }
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _coerce_enabled(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -229,6 +259,32 @@ def _optional_string(value: Any) -> str | None:
 
 def _split_csv(value: str) -> tuple[str, ...]:
     return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def _configured_post_refine_mode(config: dict[str, Any]) -> str:
+    value = os.environ.get("AI_POLICY_POST_REFINE", config.get("postRefine", "off"))
+    if isinstance(value, bool):
+        mode = "standard" if value else "off"
+    else:
+        mode = str(value).strip().lower() or "off"
+    if mode not in POST_REFINE_MODES:
+        allowed = ", ".join(sorted(POST_REFINE_MODES))
+        raise ValueError(f"postRefine must be one of: {allowed}")
+    return mode
+
+
+def _configured_post_refine_packs(config: dict[str, Any]) -> tuple[str, ...]:
+    if "AI_POLICY_POST_REFINE_PACKS" in os.environ:
+        packs = _split_csv(os.environ.get("AI_POLICY_POST_REFINE_PACKS", ""))
+    else:
+        configured = config.get("postRefinePacks", ())
+        if isinstance(configured, str):
+            packs = _split_csv(configured)
+        elif isinstance(configured, list):
+            packs = tuple(str(item).strip() for item in configured if str(item).strip())
+        else:
+            packs = ()
+    return packs if packs else (POST_REFINE_PACK_ID,)
 
 
 def _enabled(config: dict[str, Any]) -> bool:

@@ -308,7 +308,9 @@ policy-codex --pack cpp.low_latency --codex-arg "--approval-mode" --codex-arg "n
 
 This repository is also shaped as a Codex plugin. The plugin registers a
 `UserPromptSubmit` hook that resolves the current user prompt into Effective
-Rules and injects the rendered rules as Codex `additionalContext`.
+Rules and injects the rendered rules as Codex `additionalContext`. It also
+registers a `Stop` hook that can ask Codex to continue once with a
+post-refinement prompt before the turn ends.
 
 Plugin files:
 
@@ -316,6 +318,7 @@ Plugin files:
 .codex-plugin/plugin.json
 hooks/hooks.json
 hooks/user_prompt_submit.py
+hooks/stop_refinement.py
 ```
 
 The hook bootstraps the Python package from this repository on first use:
@@ -339,6 +342,9 @@ AI_POLICY_EMBEDDING_BASE_URL=https://api.openai.com/v1
 AI_POLICY_EMBEDDING_API_KEY=<key>
 AI_POLICY_EMBEDDING_MODEL=text-embedding-3-small
 AI_POLICY_EMBEDDING_TIMEOUT=30
+AI_POLICY_POST_REFINE=standard
+AI_POLICY_POST_REFINE_PACKS=cpp.production_refinement
+AI_POLICY_VERIFY_TARGET=src
 ```
 
 The hook also reads project-local configuration from:
@@ -358,11 +364,20 @@ This is the preferred control surface for editor integrations:
   "embeddingBaseUrl": "https://api.openai.com/v1",
   "embeddingApiKey": "<key>",
   "embeddingModel": "text-embedding-3-small",
-  "embeddingTimeout": "30"
+  "embeddingTimeout": "30",
+  "postRefine": "standard",
+  "postRefinePacks": ["cpp.production_refinement"],
+  "verifyTarget": "src"
 }
 ```
 
 Environment variables still override `.policy/config.json` when both are set.
+
+`postRefine` accepts `off`, `light`, `standard`, or `strict`. When enabled, the
+`Stop` hook uses Codex's continuation mechanism once per turn: it returns
+`decision: block` with a refinement prompt, then allows the next stop event when
+Codex reports that the stop hook is already active. This prevents an infinite
+refinement loop.
 
 ## Configure Codex from VS Code
 

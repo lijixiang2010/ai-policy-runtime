@@ -40,7 +40,7 @@ from ai_policy_runtime.services.injector import BEGIN, END, inject_current_promp
 from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_mapping
 from ai_policy_runtime.services.verification import FileVerifier, Violation, verify_rules
-from hooks import user_prompt_submit
+from hooks import stop_refinement, user_prompt_submit
 
 
 def _load_fixture(name: str) -> dict[str, object]:
@@ -993,6 +993,46 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertFalse(user_prompt_submit._enabled({"enabled": False}))
         self.assertFalse(user_prompt_submit._enabled({"enabled": "off"}))
         self.assertTrue(user_prompt_submit._enabled({}))
+
+    def test_codex_hook_config_reads_post_refinement_options(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            config = user_prompt_submit.ProjectHookConfig.from_mapping(
+                {
+                    "postRefine": "strict",
+                    "postRefinePacks": ["cpp.production_refinement"],
+                    "verifyTarget": "src",
+                }
+            )
+
+        self.assertEqual(config.post_refine_mode, "strict")
+        self.assertEqual(config.post_refine_pack_ids, ("cpp.production_refinement",))
+        self.assertEqual(config.verify_target, "src")
+
+    def test_stop_hook_allows_second_stop_to_prevent_loop(self) -> None:
+        response = stop_refinement.build_stop_response({"stop_hook_active": True})
+
+        self.assertEqual(response, {"continue": True})
+
+    def test_stop_hook_blocks_once_for_configured_refinement(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"postRefine": "standard"}),
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                stop_refinement,
+                "build_refinement_continuation_prompt",
+                return_value="Refine once.",
+            ):
+                response = stop_refinement.build_stop_response(
+                    {"cwd": str(root), "stop_hook_active": False}
+                )
+
+        self.assertEqual(response, {"decision": "block", "reason": "Refine once."})
 
     def test_codex_hook_applies_openai_compatible_embedding_config(self) -> None:
         config = user_prompt_submit.ProjectHookConfig.from_mapping(

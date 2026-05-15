@@ -11,6 +11,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/stop_refinement.py",
+            "timeout": 30,
+            "statusMessage": "Checking post-task refinement"
+          }
+        ]
+      }
     ]
   }
 }
