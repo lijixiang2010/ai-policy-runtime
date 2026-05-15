@@ -1,0 +1,289 @@
+# Skill: C++23 Best Practices
+# File: skills/domain/cpp/standard/cpp23_best_practices.skill.yaml
+
+skill:
+  id: cpp.standard.cpp23.best_practices
+  name: C++23 Best Practices
+  version: 1.0.0
+  status: stable
+  description: >-
+    C++23 idiom skill for standard library modules, print facilities, C++23
+    range views, bind_back, unreachable, and expanded constexpr use.
+
+  level: domain
+  domain: cpp
+  category: standard
+  priority: 88
+
+  tags:
+    - cpp
+    - cpp23
+    - modernization
+    - standard-library
+    - modules
+    - ranges
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+    - modernization
+
+  activation:
+    when:
+      language: cpp
+      standard: '>=23'
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - modernize_code
+
+  dependencies:
+    - cpp.standard.cpp20.best_practices
+    - cpp.standard.standard_availability
+    - cpp.source_structure.source_file_organization
+    - cpp.safety.undefined_behavior
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_cpp23_standard
+      when_text_matches:
+        - c++23
+        - cpp23
+        - cxx23
+      set:
+        standard: 23
+        selected_standard_is_known: true
+      tags:
+        - cpp23
+      confidence: 0.95
+
+    - id: detect_cpp23_modules_task
+      when_text_matches:
+        - import std
+        - standard library module
+        - module interface
+        - exported overload
+      set:
+        source_structure: true
+        module_interface: true
+      tags:
+        - modules
+        - source_structure
+      semantic_match:
+        - use C++23 standard library modules
+        - design a module interface
+        - review exported overload consistency
+      confidence: 0.84
+
+    - id: detect_cpp23_print_task
+      when_text_matches:
+        - std::print
+        - std::println
+        - <print>
+        - iostream
+        - printf
+      set:
+        formatting_output: true
+      tags:
+        - standard-library
+      semantic_match:
+        - modernize formatted output in C++23
+        - replace printf or iostream formatting
+      confidence: 0.78
+
+    - id: detect_cpp23_range_views_task
+      when_text_matches:
+        - zip_view
+        - enumerate
+        - chunk_view
+        - slide_view
+        - adjacent_view
+        - stride_view
+        - ranges
+      set:
+        range_operation: true
+      tags:
+        - ranges
+        - standard-library
+      semantic_match:
+        - use C++23 range views to express range logic
+      confidence: 0.78
+
+    - id: detect_cpp23_callable_binding_task
+      when_text_matches:
+        - bind_back
+        - std::bind
+        - std::function
+        - callable binding
+      set:
+        callable_binding_required: true
+      tags:
+        - standard-library
+      semantic_match:
+        - bind trailing arguments for a callable
+      confidence: 0.74
+
+sources:
+  - jason_turner_cpp23_best_practices:30
+  - jason_turner_cpp23_best_practices:31
+  - jason_turner_cpp23_best_practices:42
+  - jason_turner_cpp23_best_practices:43
+  - jason_turner_cpp23_best_practices:48
+  - jason_turner_cpp23_best_practices:53
+  - jason_turner_cpp23_best_practices:59
+
+source_notes:
+  - Source references are traceability anchors only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp23.prefer_import_std_when_modules_are_available
+      title: Prefer import std when C++23 standard library modules are available
+      when: language == "cpp" and standard >= 23 and module_interface == true
+      should: >-
+        Prefer C++23 standard library modules, such as import std, when the
+        project toolchain supports them.
+      target: source_structure
+      action: recommend
+      unless: modules_unavailable == true or legacy_include_model_required == true
+      require:
+        - If modules are not used in C++23 code, explain the toolchain, build,
+          portability, or legacy include constraint.
+      rationale: >-
+        Standard library modules reduce repeated parsing and make module-based
+        interfaces practical when toolchain support is present.
+
+    - id: cpp23.export_module_overloads_consistently
+      title: Export module overload sets consistently
+      when: language == "cpp" and standard >= 23 and module_interface == true
+      should: >-
+        Export overload sets consistently from module interfaces so visible
+        overload resolution matches the intended API.
+      target: source_structure
+      action: recommend
+      rationale: >-
+        Partially exported overload sets can silently select a different overload
+        from the one callers would expect.
+
+    - id: cpp23.prefer_print_for_formatted_output
+      title: Prefer std::print and std::println for formatted output
+      when: language == "cpp" and standard >= 23 and formatting_output == true
+      should: >-
+        Prefer std::print or std::println for formatted output in C++23 when
+        formatted output is needed.
+      target: standard_availability
+      action: recommend
+      unless: logging_framework_required == true or low_level_io_boundary == true
+      require:
+        - If printf, iostream formatting, or a framework-specific output path is
+          used, keep the choice consistent with the project output policy.
+      rationale: >-
+        The C++23 print facilities provide standard, type-safe formatted output.
+
+    - id: cpp23.prefer_standard_range_views_when_clear
+      title: Prefer C++23 range views when they directly express the operation
+      when: language == "cpp" and standard >= 23 and range_operation == true
+      should: >-
+        Prefer C++23 standard range views when they directly express the range
+        operation without obscuring lifetime, complexity, or performance.
+      target: standard_availability
+      action: recommend
+      rationale: >-
+        Views such as zip, enumerate, chunk, slide, adjacent, and stride can
+        replace hand-written indexing when their semantics match the task.
+
+    - id: cpp23.use_unreachable_only_with_proven_invariant
+      title: Use std::unreachable only with a proven invariant
+      when: language == "cpp" and standard >= 23
+      should_not: >-
+        Avoid std::unreachable unless execution is proven impossible by a clear
+        invariant.
+      target: undefined_behavior
+      action: discourage
+      require:
+        - State the invariant that makes the path unreachable.
+        - Prefer compiler warnings, exhaustive handling, or explicit error handling
+          when reachability is uncertain.
+      rationale: >-
+        std::unreachable invokes undefined behavior if control reaches it.
+
+    - id: cpp23.consider_bind_back_over_bind_for_simple_binding
+      title: Consider std::bind_back for simple trailing argument binding
+      when: language == "cpp" and standard >= 23 and callable_binding_required == true
+      should: >-
+        Consider std::bind_back for simple trailing argument binding, while
+        preferring lambdas when they express captures and argument order more
+        clearly.
+      target: standard_availability
+      action: recommend
+      rationale: >-
+        bind_back is a narrower C++23 facility than std::bind, but lambdas often
+        remain clearer and more optimizable.
+
+  preference:
+    - id: cpp23.preference_precise_modern_facility
+      title: Prefer the most precise C++23 facility available
+      when: language == "cpp" and standard >= 23
+      prefer: precise_cxx23_facility
+      over:
+        - legacy_idiom
+        - ad_hoc_convention
+      target: standard_availability
+      action: prefer
+
+exceptions:
+  - id: cpp23.exception_toolchain_or_portability
+    when: modules_unavailable == true or legacy_include_model_required == true
+    allow:
+      - legacy_include_model
+      - pre_cpp23_output_idiom
+    require:
+      - Explain the toolchain, portability, build, or legacy constraint.
+      - Keep C++23-specific assumptions out of portable boundaries.
+
+verification:
+  llm_self_check:
+    - id: cpp.standard.cpp23.best_practices.verify.standard_version_idiom_review
+      type: llm_self_check
+      applies_to:
+        - standard_availability
+        - source_structure
+        - undefined_behavior
+      severity: advisory
+      prompt: >-
+        Review whether the C++23 facility is available in the selected toolchain
+        and whether a version-specific fallback or exception is needed.
+
+    - id: cpp.standard.cpp23.best_practices.verify_module_export_review
+      type: llm_self_check
+      applies_to:
+        - source_structure
+      severity: advisory
+      prompt: >-
+        Check module interfaces for partially exported overload sets or hidden
+        declarations that could alter overload resolution for callers.
+
+effective_rule_examples:
+  cpp23_module_api:
+    task_context:
+      language: cpp
+      standard: 23
+      module_interface: true
+    effective_rules:
+      soft:
+        - Prefer import std when the project toolchain supports C++23 standard
+          library modules.
+        - Export overload sets consistently from module interfaces.
+
+authoring_notes:
+  - Keep this skill limited to C++23-specific facilities and C++23-specific
+    standard-library idioms.
+  - General API, safety, allocation, and template guidance belongs in the
+    corresponding domain skills.

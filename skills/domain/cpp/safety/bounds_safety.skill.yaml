@@ -50,6 +50,8 @@ task_analysis:
         - array
         - contiguous range
         - span
+        - view
+        - ranges
       set:
         parameter_kind: contiguous_range
         ownership_required: false
@@ -66,6 +68,10 @@ sources:
   - cpp_core_guidelines:Bounds.2
   - cpp_core_guidelines:Bounds.3
   - cpp_core_guidelines:F.24
+  - jason_turner_cpp23_best_practices:48
+  - jason_turner_cpp23_best_practices:49
+  - jason_turner_cpp23_best_practices:50
+  - jason_turner_cpp23_best_practices:51
 
 source_notes:
   - Source references are for traceability only; rules are reconstructed into
@@ -102,7 +108,8 @@ rules:
       when: language == "cpp" and standard >= 20 and parameter_kind == "contiguous_range"
         and ownership_required == false
       should: >-
-        Prefer std::span for non-owning contiguous range input in C++20 and later.
+        Use std::span to keep pointer and extent together for non-owning
+        contiguous range access in C++20 and later.
       target: contiguous_range_parameter
       action: recommend
       rationale: >-
@@ -127,6 +134,30 @@ rules:
         - If raw pointer arithmetic is used, state the bounds invariant and keep
           the operation localized.
         - Use range-aware abstractions outside the justified low-level section.
+
+    - id: cpp.bounds.prefer_algorithms_or_views_for_range_logic
+      title: Prefer algorithms or views for range logic when they fit
+      when: language == "cpp" and range_operation == true
+      should: >-
+        Prefer standard algorithms, ranges, or views when they directly express
+        the range logic and preserve clear lifetime and complexity.
+      target: bounds_safety
+      action: recommend
+      rationale: >-
+        Algorithms and views often remove hand-written indexing and boundary
+        checks while making intent reviewable.
+
+    - id: cpp.bounds.do_not_reuse_stateful_views_when_source_can_change
+      title: Do not reuse stateful views when the source can change
+      when: language == "cpp" and range_operation == true
+      should_not: >-
+        Avoid reusing range views across source mutations or lifetime changes
+        unless the view's state, caching, and invalidation behavior are proven.
+      target: bounds_safety
+      action: discourage
+      rationale: >-
+        Views can hold state or cached iterators, so reuse can produce surprising
+        results or dangling access when the underlying range changes.
 
   preference:
     - id: cpp.bounds.preference_range_intent
@@ -189,6 +220,8 @@ effective_rule_examples:
     effective_rules:
       soft:
         - Prefer std::span for non-owning contiguous range input.
+        - Prefer algorithms or views for range logic when they directly express
+          the operation.
 
 authoring_notes:
   - This skill covers bounds safety; string-like input is handled separately by

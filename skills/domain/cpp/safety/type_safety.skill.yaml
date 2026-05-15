@@ -50,6 +50,9 @@ task_analysis:
         - conversion
         - enum
         - type-safe
+        - strong type
+        - boolean argument
+        - swappable parameters
       set:
         type_sensitive: true
       tags:
@@ -64,6 +67,8 @@ sources:
   - cpp_core_guidelines:Type.2
   - cpp_core_guidelines:ES.46
   - cpp_core_guidelines:Enum.3
+  - jason_turner_cpp23_best_practices:28
+  - jason_turner_cpp23_best_practices:54
 
 source_notes:
   - Source references are for traceability only; rules are reconstructed into
@@ -126,6 +131,30 @@ rules:
       rationale: >-
         Scoped enums avoid implicit integer conversions and name leakage.
 
+    - id: cpp.type.avoid_boolean_trap_parameters
+      title: Avoid boolean trap parameters in interfaces
+      when: language == "cpp" and designing_api == true
+      should_not: >-
+        Avoid boolean parameters whose meaning is unclear at the call site or
+        easy to swap with another boolean.
+      target: interface_intent
+      action: discourage
+      rationale: >-
+        Scoped enums, named option types, or domain-specific types make calls
+        more self-documenting and harder to misuse.
+
+    - id: cpp.type.prevent_easily_swappable_parameters
+      title: Prevent easily swappable same-type parameters
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Use stronger domain types or grouped value objects when adjacent
+        same-typed parameters are easy to pass in the wrong order.
+      target: interface_intent
+      action: recommend
+      rationale: >-
+        Stronger types make accidental parameter transposition visible to the
+        compiler or at the call site.
+
   preference:
     - id: cpp.type.preference_domain_types
       title: Prefer domain-specific types over primitive conventions
@@ -184,6 +213,8 @@ effective_rule_examples:
     effective_rules:
       soft:
         - Avoid narrowing conversions unless explicit and justified.
+        - Prefer domain-specific types over primitive conventions when values
+          have distinct meanings.
 
 authoring_notes:
   - Treat casts as design pressure; prefer making the intended type relationship

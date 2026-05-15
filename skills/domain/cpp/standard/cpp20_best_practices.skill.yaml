@@ -96,7 +96,8 @@ rules:
       when: language == "cpp" and standard >= 20 and parameter_kind == "contiguous_range"
         and ownership_required == false
       should: >-
-        Prefer std::span for non-owning contiguous range input in C++20 and later.
+        Treat std::span as the C++20 standard vocabulary type for non-owning
+        contiguous range input.
       target: contiguous_range_parameter
       action: recommend
       unless: abi_boundary == true or c_api_boundary == true or legacy_interface_required
@@ -124,8 +125,8 @@ rules:
       title: Prefer std::jthread for owned thread lifetime
       when: language == "cpp" and standard >= 20 and creates_owned_thread == true
       should: >-
-        Prefer std::jthread for owned thread lifetime in C++20 when cooperative
-        cancellation or scoped joining is useful.
+        Treat std::jthread as the C++20 standard thread owner when scoped
+        joining or cooperative cancellation is useful.
       target: thread_lifetime
       action: recommend
       rationale: >-

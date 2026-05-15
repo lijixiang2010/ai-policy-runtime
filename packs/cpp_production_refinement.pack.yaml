@@ -16,6 +16,7 @@ extends:
 includes:
   - cpp.standard.cpp17.best_practices
   - cpp.standard.cpp20.best_practices
+  - cpp.standard.cpp23.best_practices
   - cpp.api_design.parameter_passing
   - cpp.api_design.ownership_in_interfaces
   - cpp.source_structure.source_file_organization

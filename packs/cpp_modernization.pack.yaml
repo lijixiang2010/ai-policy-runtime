@@ -10,11 +10,14 @@ includes:
   - cpp.core.baseline
   - cpp.standard.cpp17.best_practices
   - cpp.standard.cpp20.best_practices
+  - cpp.standard.cpp23.best_practices
   - cpp.standard.standard_availability
   - cpp.api_design.interface_intent
   - cpp.api_design.parameter_passing
   - cpp.resource_management.raii
   - cpp.templates.generic_constraints
+  - cpp.verification.tooling
+  - cpp.verification.execution
 
 excludes: []
 overrides: []

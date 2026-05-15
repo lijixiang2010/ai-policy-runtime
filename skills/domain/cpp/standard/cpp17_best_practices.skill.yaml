@@ -115,8 +115,8 @@ rules:
       when: language == "cpp" and standard >= 17 and parameter_kind == "read_only_string"
         and ownership_required == false
       should: >-
-        Prefer std::string_view for non-owning read-only string-like input in
-        C++17 and later.
+        Treat std::string_view as the C++17 standard vocabulary type for
+        non-owning read-only string-like input.
       target: string_parameter
       action: recommend
       unless: abi_boundary == true or c_api_boundary == true or null_terminated_required
@@ -178,7 +178,7 @@ rules:
     - id: cpp17.preference_modern_vocabulary_types
       title: Prefer C++17 vocabulary types over ad-hoc conventions
       when: language == "cpp" and standard >= 17
-      prefer: standard_vocabulary_type
+      prefer: cxx17_vocabulary_type
       over:
         - ad_hoc_convention
       target: api_design

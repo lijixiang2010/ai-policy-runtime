@@ -39,6 +39,7 @@ The reconstructed structure is organized around execution semantics:
 - templates
 - standard-version idioms
 - source structure
+- verification tooling
 
 This grouping matches how an AI coding agent needs guidance: what context
 activates a skill, what behavior is required or recommended, what exceptions are
@@ -65,12 +66,32 @@ C++17 and C++20 guidance is separated from hard standard availability:
   `std::filesystem`, and if/switch initializers.
 - C++20: `std::span`, concepts, `std::jthread`, `starts_with`/`ends_with`, and
   constexpr-capable facilities.
+- C++23: standard library modules, `std::print`/`std::println`, C++23 range
+  views, `std::bind_back`, `std::unreachable`, and expanded constexpr use.
 - Standard availability: hard guardrails prevent recommending or using
   unavailable facilities for the selected standard.
 
 Important semantic distinction: `std::string_view` is for non-owning
 string-like input; `std::span` is for non-owning contiguous ranges. `std::span`
 is not the general replacement for `const char*` string parameters.
+
+C++23 guidance remains limited to version-specific facilities. General lessons
+from C++23-era practice, such as stronger API types, RAII, bounds safety,
+allocation control, and template constraints, belong in their execution-semantic
+skills rather than in the C++23 standard-version skill.
+
+Verification tooling is split into two cross-cutting skills:
+
+- `cpp.verification.tooling` owns the verification capability inventory: tests,
+  compiler warnings, static analysis, sanitizers, fuzzing, CI matrices, multiple
+  compilers, and build/package tooling.
+- `cpp.verification.execution` owns agent execution behavior: discovering
+  project verification entrypoints, running proportionate local checks after
+  code changes, reporting commands and results, and explaining checks that were
+  not run.
+
+Semantic skills may still name specific verification hooks, but they do not own
+the overall verification strategy or the agent's verification execution workflow.
 
 ## Effective Rules
 

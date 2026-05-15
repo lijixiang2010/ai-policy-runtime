@@ -46,6 +46,9 @@ task_analysis:
         - ub
         - invalid lifetime
         - invalid cast
+        - uninitialized
+        - unreachable
+        - null reference
       set:
         safety_critical: true
       tags:
@@ -61,6 +64,11 @@ sources:
   - cpp_core_guidelines:ES.65
   - cpp_core_guidelines:ES.100
   - cpp_core_guidelines:Type.4
+  - jason_turner_cpp23_best_practices:11
+  - jason_turner_cpp23_best_practices:12
+  - jason_turner_cpp23_best_practices:13
+  - jason_turner_cpp23_best_practices:46
+  - jason_turner_cpp23_best_practices:53
 
 source_notes:
   - Source references are for traceability only; rules are reconstructed into
@@ -105,6 +113,17 @@ rules:
         - Do not use low-level casts to bypass ownership, lifetime, or aliasing
           rules.
 
+    - id: cpp.ub.no_null_this_or_reference_checks
+      title: Do not rely on null this or null reference checks
+      when: language == "cpp"
+      must_not: >-
+        Do not rely on checks for this being null or a reference denoting null.
+      target: undefined_behavior
+      action: forbid
+      rationale: >-
+        Calling a member on a null object or forming a null reference is already
+        outside the valid object model; optimizers may remove such checks.
+
   soft:
     - id: cpp.ub.guard_signed_overflow
       title: Guard signed integer overflow when it can occur
@@ -128,6 +147,29 @@ rules:
       rationale: >-
         Moved-from objects should be reassigned, destroyed, or used only through
         documented valid operations.
+
+    - id: cpp.ub.initialize_non_const_non_auto_values
+      title: Initialize non-const non-auto values
+      when: language == "cpp"
+      should: >-
+        Initialize non-const, non-auto local values before use.
+      target: undefined_behavior
+      action: recommend
+      rationale: >-
+        Reading an uninitialized object can invoke undefined behavior and may be
+        missed by compilers without the right warnings or optimization level.
+
+    - id: cpp.ub.avoid_default_switch_when_exhaustiveness_matters
+      title: Avoid default switch labels when exhaustiveness should be checked
+      when: language == "cpp" and enum_exhaustiveness_required == true
+      should_not: >-
+        Avoid a default label in switches over closed enumerations when compiler
+        diagnostics should catch newly added enumerators.
+      target: undefined_behavior
+      action: discourage
+      rationale: >-
+        Omitting default lets compiler warnings report unhandled enumeration
+        values while explicit fallbacks can remain visible after the switch.
 
   preference:
     - id: cpp.ub.preference_safety_first
@@ -201,6 +243,7 @@ effective_rule_examples:
     effective_rules:
       hard:
         - Avoid undefined behavior and invalid object lifetime access.
+        - Do not rely on null this or null reference checks.
 
 authoring_notes:
   - Keep this skill strict; exceptions belong at low-level boundaries with explicit

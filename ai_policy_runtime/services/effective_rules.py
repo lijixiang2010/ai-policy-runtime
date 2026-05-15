@@ -233,6 +233,23 @@ class PromptRuleSelector:
                     ),
                 }
             )
+        if any(
+            "verification entrypoints" in _rule_text(item)
+            or "verification commands" in _rule_text(item)
+            or "low-cost tests" in _rule_text(item)
+            or "checks that were not run" in _rule_text(item)
+            for item in items
+        ):
+            checks.append(
+                {
+                    "id": "verify.prompt.execution_verification",
+                    "type": "review_check",
+                    "statement": (
+                        "Verify relevant local checks were run when practical, "
+                        "and report commands, results, and skipped checks."
+                    ),
+                }
+            )
         return checks[:limit]
 
     def _collapse(self, rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -324,6 +341,21 @@ class PromptRuleSelector:
                 score += 15
         if source.startswith("cpp.source_structure"):
             score += 20
+        if target == "verification":
+            score += 70
+            for needle in (
+                "test",
+                "warning",
+                "static analysis",
+                "sanitizer",
+                "fuzz",
+                "ci",
+                "compiler",
+                "build",
+                "package",
+            ):
+                if needle in text:
+                    score += 10
         return score
 
     def _preference_score(self, rule: dict[str, Any]) -> int:
@@ -354,6 +386,15 @@ class PromptRuleSelector:
             "standard",
             "abstraction",
             "api",
+            "test",
+            "warning",
+            "static analysis",
+            "sanitizer",
+            "fuzz",
+            "ci",
+            "compiler",
+            "build",
+            "package",
         ):
             if needle in text:
                 score += 30

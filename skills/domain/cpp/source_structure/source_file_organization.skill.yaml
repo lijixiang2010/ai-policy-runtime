@@ -47,6 +47,9 @@ task_analysis:
         - include
         - source file
         - translation unit
+        - module
+        - module interface
+        - inline constexpr
       set:
         source_structure: true
       tags:
@@ -62,6 +65,10 @@ sources:
   - cpp_core_guidelines:SF.8
   - cpp_core_guidelines:SF.10
   - cpp_core_guidelines:I.22
+  - jason_turner_cpp23_best_practices:30
+  - jason_turner_cpp23_best_practices:31
+  - jason_turner_cpp23_best_practices:43
+  - jason_turner_cpp23_best_practices:44
 
 source_notes:
   - Source references are for traceability only; rules are reconstructed into
@@ -131,6 +138,45 @@ rules:
       rationale: >-
         Initialization order dependencies are fragile across translation units.
 
+    - id: cpp.source.prefer_module_interfaces_when_project_supports_modules
+      title: Prefer module interfaces when the project supports modules
+      when: language == "cpp" and standard >= 20 and module_interface == true
+      should: >-
+        Prefer module interfaces for exported C++ APIs when the project build
+        and toolchain support modules.
+      target: source_structure
+      action: recommend
+      unless: modules_unavailable == true or legacy_include_model_required == true
+      require:
+        - If headers remain the interface form, explain the build, toolchain,
+          portability, or legacy constraint.
+      rationale: >-
+        Modules can reduce repeated parsing and make exported API surfaces more
+        explicit when available.
+
+    - id: cpp.source.use_inline_constexpr_for_header_globals
+      title: Use inline constexpr for header global constants
+      when: language == "cpp" and standard >= 17 and header_global_constant == true
+      should: >-
+        Prefer inline constexpr for global constants defined in headers.
+      target: source_structure
+      action: recommend
+      rationale: >-
+        inline constexpr avoids per-translation-unit static duplicates while
+        keeping immutable header constants explicit.
+
+    - id: cpp.source.place_constexpr_interfaces_where_consumers_can_use_them
+      title: Place constexpr interfaces where consumers can use them
+      when: language == "cpp" and compile_time_evaluation_intended == true
+      should: >-
+        Place constexpr-capable pure interface functions in the visible interface
+        unit when consumers are expected to use them in constant evaluation.
+      target: source_structure
+      action: recommend
+      rationale: >-
+        Constant-evaluation APIs must be visible to consumers while preserving
+        source organization and build boundaries.
+
   preference:
     - id: cpp.source.preference_minimal_dependency
       title: Prefer minimal source dependencies
@@ -176,6 +222,7 @@ effective_rule_examples:
     effective_rules:
       soft:
         - Keep headers self-contained and avoid unnecessary includes.
+        - Prefer module interfaces when the project supports modules.
 
 authoring_notes:
   - Source structure rules should remain recommendations unless they affect correctness

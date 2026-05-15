@@ -69,6 +69,7 @@ sources:
   - cpp_core_guidelines:R.30
   - cpp_core_guidelines:R.32
   - cpp_core_guidelines:R.34
+  - jason_turner_cpp23_best_practices:33
 
 source_notes:
   - Source references are for traceability only; rules are reconstructed into
@@ -125,6 +126,26 @@ rules:
           responsibility at the boundary.
         - Prefer non-owning raw pointers or references only when ownership is
           not transferred.
+
+    - id: cpp.api.owner.avoid_raw_pointer_returns
+      title: Avoid raw pointer returns with unclear ownership
+      when: language == "cpp" and designing_api == true
+      should_not: >-
+        Avoid returning raw pointers when ownership, optionality, array extent,
+        or cleanup responsibility would be unclear to the caller.
+      target: ownership
+      action: discourage
+      rationale: >-
+        Return values, references, optional-like results, smart pointers, or
+        explicit non-owning wrappers make ownership and nullability easier to
+        review.
+      unless: abi_boundary == true or c_api_boundary == true or legacy_interface_required
+        == true
+      require:
+        - If a raw pointer return is required at a boundary, state whether it is
+          owning, borrowed, nullable, single-object, or range-like.
+        - Keep boundary raw pointers localized behind clearer internal APIs when
+          practical.
 
     - id: cpp.api.owner.encode_nullability
       title: Document or encode nullability
@@ -198,6 +219,7 @@ effective_rule_examples:
     effective_rules:
       soft:
         - Use unique_ptr only when exclusive ownership transfer is intended.
+        - Avoid raw pointer returns with unclear ownership.
 
 authoring_notes:
   - This skill handles ownership in signatures; lifetime safety remains enforced

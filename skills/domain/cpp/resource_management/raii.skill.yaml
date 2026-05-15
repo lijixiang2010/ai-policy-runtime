@@ -66,6 +66,9 @@ sources:
   - cpp_core_guidelines:R.5
   - cpp_core_guidelines:R.11
   - cpp_core_guidelines:E.6
+  - jason_turner_cpp23_best_practices:39
+  - jason_turner_cpp23_best_practices:40
+  - jason_turner_cpp23_best_practices:58
 
 source_notes:
   - Source references are for traceability only; rules are reconstructed into
@@ -74,11 +77,11 @@ source_notes:
 rules:
   hard:
     - id: cpp.raii.no_leaked_owned_resource
-      title: Do not leak owned resources
+      title: Require deterministic release for acquired resources
       when: language == "cpp"
       must_not: >-
-        Do not leak owned resources; every acquired resource must have a clear
-        exception-safe release path.
+        Do not acquire resources without binding them to a deterministic owner
+        or release path.
       target: resource_lifetime
       action: forbid
       rationale: >-
@@ -135,6 +138,45 @@ rules:
       target: resource_lifetime
       action: recommend
       rationale: Error paths must not bypass cleanup.
+
+    - id: cpp.raii.prefer_rule_of_zero
+      title: Prefer the rule of zero
+      when: language == "cpp"
+      should: >-
+        Prefer the rule of zero by composing standard owners and value types
+        instead of writing special member functions.
+      target: resource_lifetime
+      action: recommend
+      rationale: >-
+        Types without custom ownership logic are easier to move, copy, destroy,
+        and audit for exception safety.
+
+    - id: cpp.raii.follow_rule_of_five_for_manual_resources
+      title: Follow the rule of five for manual resource owners
+      when: language == "cpp" and manual_lifetime_control == true
+      should: >-
+        Define or delete the relevant copy, move, and destructor operations when
+        a type must manually manage a resource.
+      target: resource_lifetime
+      action: recommend
+      require:
+        - Explain why manual resource management is required.
+        - Preserve exception-safe cleanup and clear ownership transfer.
+      rationale: >-
+        Manual resource owners must make copy and move behavior explicit to avoid
+        leaks, double release, or dangling access.
+
+    - id: cpp.raii.prefer_make_unique_or_make_shared
+      title: Prefer make_unique or make_shared for dynamic ownership
+      when: language == "cpp" and ownership_required == true
+      should: >-
+        Prefer std::make_unique for exclusive dynamic ownership and std::make_shared
+        only when shared ownership is genuinely required.
+      target: ownership
+      action: recommend
+      rationale: >-
+        Factory helpers make ownership construction explicit and reduce naked
+        allocation sites.
 
   preference:
     - id: cpp.raii.preference_single_owner
@@ -200,6 +242,7 @@ effective_rule_examples:
     effective_rules:
       soft:
         - Prefer RAII and standard owners over manual cleanup.
+        - Prefer the rule of zero unless the type must manually own a resource.
 
 authoring_notes:
   - RAII is a resource rule, not only a memory rule; apply it to files, locks,

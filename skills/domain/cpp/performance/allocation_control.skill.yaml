@@ -47,6 +47,9 @@ task_analysis:
         - reserve
         - heap
         - dynamic allocation
+        - pmr
+        - allocator
+        - container
         - 分配
         - 堆分配
       set:
@@ -59,6 +62,11 @@ sources:
   - cpp_core_guidelines:Per.14
   - cpp_core_guidelines:Per.15
   - cpp_core_guidelines:SL.con.2
+  - jason_turner_cpp23_best_practices:32
+  - jason_turner_cpp23_best_practices:34
+  - jason_turner_cpp23_best_practices:35
+  - jason_turner_cpp23_best_practices:59
+  - jason_turner_cpp23_best_practices:60
 
 source_notes:
   - Source references are for traceability only; rules are reconstructed into
@@ -84,19 +92,19 @@ rules:
           reason.
         - Keep allocator-specific code localized behind a clear abstraction.
 
-    - id: cpp.alloc.prefer_stack_or_contiguous_container
-      title: Prefer stack allocation or contiguous containers where appropriate
+    - id: cpp.alloc.prefer_automatic_storage_when_lifetime_is_local
+      title: Prefer automatic storage when lifetime is local
       when: >
         language == "cpp" and
         (allocation_sensitive == true or hot_path == true or performance_critical == true)
       should: >-
-        Prefer stack storage or contiguous standard containers when lifetime and
-        size make them appropriate.
+        Prefer automatic storage for local objects when lifetime and size make
+        it appropriate.
       target: allocation
       action: recommend
       rationale: >-
-        Local objects and standard containers usually simplify ownership and improve
-        locality.
+        Local automatic objects simplify ownership and give optimizers more
+        opportunity to remove unnecessary storage.
 
     - id: cpp.alloc.reserve_when_size_known
       title: Reserve capacity when size is known
@@ -106,6 +114,59 @@ rules:
       target: allocation
       action: recommend
       rationale: Reserving can avoid repeated reallocations.
+
+    - id: cpp.alloc.prefer_array_or_vector_for_locality
+      title: Prefer array or vector for contiguous storage
+      when: >
+        language == "cpp" and
+        (allocation_sensitive == true or hot_path == true or performance_critical == true)
+      should: >-
+        Prefer std::array for fixed-size data and std::vector for dynamic
+        contiguous data when their semantics fit.
+      target: allocation
+      action: recommend
+      rationale: >-
+        Contiguous storage is cache-friendly, optimizer-friendly, and easier to
+        reason about than node-based storage in many hot or allocation-sensitive
+        paths.
+
+    - id: cpp.alloc.localize_custom_allocation_strategy
+      title: Localize custom allocation strategies
+      when: language == "cpp" and custom_allocator_required == true
+      should: >-
+        Keep PMR or custom allocator usage localized behind a clear ownership
+        and lifetime boundary.
+      target: allocation
+      action: recommend
+      rationale: >-
+        Custom allocation can be valuable in hotspots, but spreading allocation
+        policy through ordinary code increases coupling and lifetime risk.
+
+    - id: cpp.alloc.avoid_initializer_list_for_non_trivial_hot_data
+      title: Avoid initializer_list for non-trivial allocation-sensitive data
+      when: >
+        language == "cpp" and
+        (allocation_sensitive == true or hot_path == true or performance_critical == true)
+      should_not: >-
+        Avoid std::initializer_list construction for non-trivial or move-only
+        element types when copies, moves, or allocations matter.
+      target: allocation
+      action: discourage
+      rationale: >-
+        initializer_list elements are const, which can force copies or prevent
+        moving for non-trivial element types.
+
+    - id: cpp.alloc.avoid_unnecessary_type_erasure_in_hot_paths
+      title: Avoid unnecessary type erasure in hot paths
+      when: language == "cpp" and hot_path == true
+      should_not: >-
+        Avoid unnecessary std::function or similar type-erased call wrappers in
+        hot paths unless their allocation and dispatch costs are acceptable.
+      target: hot_path
+      action: discourage
+      rationale: >-
+        Type erasure can add indirect calls, larger objects, and possible dynamic
+        allocation in latency-sensitive code.
 
     - id: cpp.alloc.avoid_premature_optimization
       title: Avoid premature optimization outside hot paths
@@ -123,7 +184,7 @@ rules:
     - id: cpp.alloc.preference_clarity_outside_hot_path
       title: Prefer clarity outside hot paths
       when: language == "cpp" and allocation_sensitive == true and hot_path != true
-      prefer: clarity
+      prefer: maintainability
       over:
         - micro_optimization
       target: allocation
@@ -165,6 +226,8 @@ effective_rule_examples:
     effective_rules:
       soft:
         - Avoid unnecessary dynamic allocation.
+        - Prefer std::array for fixed-size data and std::vector for dynamic
+          contiguous data when their semantics fit.
 
 authoring_notes:
   - Allocation guidance should be stricter in hot paths and more conservative

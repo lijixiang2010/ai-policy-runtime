@@ -13,6 +13,7 @@ includes:
   - cpp.api_design.ownership_in_interfaces
   - cpp.standard.cpp17.best_practices
   - cpp.standard.cpp20.best_practices
+  - cpp.standard.cpp23.best_practices
   - cpp.standard.standard_availability
   - cpp.safety.ownership_and_lifetime
 

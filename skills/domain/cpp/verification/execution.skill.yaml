@@ -1,0 +1,226 @@
+# Skill: C++ Verification Execution
+# File: skills/domain/cpp/verification/execution.skill.yaml
+
+skill:
+  id: cpp.verification.execution
+  name: C++ Verification Execution
+  version: 1.0.0
+  status: stable
+  description: >-
+    Execution workflow for discovering, running, and reporting proportionate C++
+    verification after code changes.
+
+  level: domain
+  domain: cpp
+  category: verification
+  priority: 82
+
+  tags:
+    - cpp
+    - verification
+    - execution
+    - testing
+
+  capabilities:
+    - code_generation
+    - refactor_code
+    - modernization
+    - code_review
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - refactor_code
+      - modernize_code
+      - review_code
+
+  dependencies:
+    - cpp.verification.tooling
+
+  incompatibilities: []
+
+sources:
+  - jason_turner_cpp23_best_practices:14
+  - jason_turner_cpp23_best_practices:15
+  - jason_turner_cpp23_best_practices:16
+  - jason_turner_cpp23_best_practices:17
+  - jason_turner_cpp23_best_practices:19
+  - jason_turner_cpp23_best_practices:22
+
+source_notes:
+  - Source references are traceability anchors only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.verify.execution.discover_verification_entrypoints
+      title: Discover project verification entrypoints
+      when: language == "cpp" and task_type in ["write_code", "refactor_code", "modernize_code"]
+      should: >-
+        Discover the project-supported build, test, and verification entrypoints
+        before choosing validation commands for a C++ code change.
+      target: verification_execution
+      action: recommend
+      verification:
+        - verification_entrypoints_discovered
+      rationale: >-
+        Project scripts, CMake presets, ctest, CI files, and documentation often
+        define the correct validation path more accurately than ad-hoc commands.
+
+    - id: cpp.verify.execution.run_relevant_low_cost_checks
+      title: Run relevant low-cost checks after code changes
+      when: language == "cpp" and task_type in ["write_code", "refactor_code", "modernize_code"]
+      should: >-
+        Run the most relevant low-cost tests or build checks after a C++ code
+        change when the local environment supports them.
+      target: verification_execution
+      action: recommend
+      verification:
+        - relevant_checks_run
+      rationale: >-
+        Targeted verification catches regressions without turning every small
+        change into a full CI run.
+
+    - id: cpp.verify.execution.report_commands_and_results
+      title: Report verification commands and results
+      when: language == "cpp" and task_type in ["write_code", "refactor_code", "modernize_code", "review_code"]
+      should: >-
+        Report which verification commands were run, their outcomes, and any
+        important limitations.
+      target: verification_execution
+      action: recommend
+      verification:
+        - verification_results_reported
+      rationale: >-
+        Users need to know what was actually verified, not only what would be
+        useful to verify.
+
+    - id: cpp.verify.execution.explain_unrun_checks
+      title: Explain checks that could not be run
+      when: language == "cpp" and task_type in ["write_code", "refactor_code", "modernize_code", "review_code"]
+      should: >-
+        Explain any relevant verification checks that were not run because of
+        missing tools, missing configuration, excessive cost, sandbox limits, or
+        platform constraints.
+      target: verification_execution
+      action: recommend
+      verification:
+        - unrun_checks_explained
+      rationale: >-
+        Clear non-execution reasons preserve trust and identify follow-up work.
+
+    - id: cpp.verify.execution.prioritize_targeted_tests_for_risky_changes
+      title: Prioritize targeted tests for risky changes
+      when: >-
+        language == "cpp" and task_type in ["write_code", "refactor_code", "modernize_code"]
+        and (safety_critical == true or hot_path == true or performance_critical == true
+        or lifetime_sensitive == true or concurrent == true)
+      should: >-
+        Prioritize targeted tests or focused build checks for risky C++ changes
+        before broader or more expensive verification.
+      target: verification_execution
+      action: recommend
+      verification:
+        - risky_change_targeted_tests
+      rationale: >-
+        Risky changes need direct feedback near the affected behavior before
+        spending time on broad matrices.
+
+    - id: cpp.verify.execution.use_sanitizer_or_static_analysis_for_memory_risk
+      title: Use sanitizer or static analysis for memory and UB risk
+      when: >-
+        language == "cpp" and task_type in ["write_code", "refactor_code", "modernize_code"]
+        and (safety_critical == true or lifetime_sensitive == true or parameter_kind == "contiguous_range"
+        or concurrent == true)
+      should: >-
+        Prefer an available sanitizer, static analysis, or warning-based check
+        when the change touches lifetime, bounds, concurrency, or undefined
+        behavior risk.
+      target: verification_execution
+      action: recommend
+      verification:
+        - memory_risk_tool_check
+      rationale: >-
+        Memory and UB risks are easy to miss in normal tests and benefit from
+        instrumentation or static analysis.
+
+    - id: cpp.verify.execution.inspect_fuzzing_for_untrusted_inputs
+      title: Inspect fuzzing path for untrusted input changes
+      when: >-
+        language == "cpp" and task_type in ["write_code", "refactor_code", "modernize_code", "review_code"]
+        and (untrusted_input == true or parser_like_input == true)
+      should: >-
+        Check whether a fuzzing harness or malformed-input test path exists, and
+        run it when it is local, relevant, and reasonably bounded.
+      target: verification_execution
+      action: recommend
+      verification:
+        - fuzzing_path_checked
+      rationale: >-
+        Parser-like and untrusted-input code benefits disproportionately from
+        fuzzing, especially with sanitizers enabled.
+
+  preference:
+    - id: cpp.verify.execution.preference_targeted_before_full_matrix
+      title: Prefer targeted verification before full matrices
+      when: language == "cpp" and task_type in ["write_code", "refactor_code", "modernize_code"]
+      prefer: targeted_verification
+      over:
+        - full_matrix_by_default
+      target: verification_execution
+      action: prefer
+      rationale: >-
+        Local agent work should run focused checks first and reserve full
+        matrices for high-risk, release, CI, or explicitly requested validation.
+
+exceptions:
+  - id: cpp.verify.execution.exception_unavailable_or_too_expensive
+    when: tool_unavailable == true or platform_constraint == true or verification_cost_excessive == true
+    allow:
+      - verification_not_run
+    require:
+      - Explain why the check was not run.
+      - Report the closest lower-cost or available check that was run instead.
+
+verification:
+  llm_self_check:
+    - id: cpp.verification.execution.verify.execution_report_review
+      type: llm_self_check
+      applies_to:
+        - verification_execution
+      severity: advisory
+      prompt: >-
+        Check that final output reports actual verification commands, results,
+        skipped checks, and reasons proportionate to the C++ change risk.
+
+effective_rule_examples:
+  cpp_change:
+    task_context:
+      language: cpp
+      task_type: write_code
+    effective_rules:
+      soft:
+        - Discover project-supported verification entrypoints before choosing
+          validation commands.
+        - Run relevant low-cost tests or build checks when the local environment
+          supports them.
+
+  risky_cpp_change:
+    task_context:
+      language: cpp
+      task_type: refactor_code
+      safety_critical: true
+      parameter_kind: contiguous_range
+    effective_rules:
+      soft:
+        - Prioritize targeted tests or focused build checks for risky C++ changes.
+        - Prefer an available sanitizer, static analysis, or warning-based check
+          for lifetime, bounds, concurrency, or UB risk.
+
+authoring_notes:
+  - This skill owns agent execution behavior for verification after code changes.
+  - It does not require every tool on every task; verification must be proportional
+    to risk, local availability, and user intent.
+  - Tool capability inventory remains in cpp.verification.tooling.

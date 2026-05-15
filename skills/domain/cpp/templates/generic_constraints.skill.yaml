@@ -57,6 +57,9 @@ task_analysis:
         - enable_if
         - generic constraint
         - constrained template
+        - if constexpr
+        - template bloat
+        - de-template
       set:
         template_constraints_required: true
       tags:
@@ -92,6 +95,9 @@ sources:
   - cpp_core_guidelines:T.10
   - cpp_core_guidelines:T.20
   - cpp_core_guidelines:T.24
+  - jason_turner_cpp23_best_practices:36
+  - jason_turner_cpp23_best_practices:55
+  - jason_turner_cpp23_best_practices:56
 
 source_notes:
   - Source references are traceability anchors only; rules are reconstructed into
@@ -193,6 +199,31 @@ rules:
         Template abstraction is useful only when it reduces net complexity without
         hiding intent or producing confusing errors.
 
+    - id: cpp.templates.prefer_if_constexpr_over_sfinae_for_internal_branching
+      title: Prefer if constexpr over SFINAE for internal compile-time branching
+      when: language == "cpp" and standard >= 17 and template_constraints_required
+        == true
+      should: >-
+        Prefer if constexpr for internal compile-time branching when overload
+        participation does not need to be constrained.
+      target: template_constraints
+      action: recommend
+      rationale: >-
+        if constexpr keeps compile-time branching local and more readable than
+        substitution-based control flow.
+
+    - id: cpp.templates.factor_parameter_independent_code
+      title: Factor parameter-independent code out of templates
+      when: language == "cpp" and cpp_template_abstraction_candidate == true
+      should: >-
+        Move code that does not depend on template parameters out of templates
+        when doing so preserves clarity and reduces compile-time or binary cost.
+      target: template_abstraction
+      action: recommend
+      rationale: >-
+        Shared non-template helpers can reduce repeated instantiation while still
+        allowing the optimizer to inline when profitable.
+
   preference:
     - id: cpp.templates.preference_named_concepts
       title: Prefer named semantic concepts over repeated ad-hoc requires expressions
@@ -284,6 +315,8 @@ effective_rule_examples:
         - Avoid introducing a template abstraction when the similarity is incidental,
           variation points are unclear, or the resulting API and diagnostics become
           harder to understand than the specialized implementations.
+        - Factor parameter-independent code out of templates when it preserves
+          clarity and reduces repeated instantiation.
 
 authoring_notes:
   - Source references are for auditability only; do not mirror C++ Core Guidelines

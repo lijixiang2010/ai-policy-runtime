@@ -82,6 +82,9 @@ sources:
   - cpp_core_guidelines:I.11
   - cpp_core_guidelines:F.16
   - cpp_core_guidelines:F.21
+  - jason_turner_cpp23_best_practices:25
+  - jason_turner_cpp23_best_practices:26
+  - jason_turner_cpp23_best_practices:29
 
 source_notes:
   - Source references are for traceability only; rules are reconstructed into
@@ -89,6 +92,30 @@ source_notes:
 
 rules:
   soft:
+    - id: cpp.api.intent.make_interfaces_hard_to_misuse
+      title: Make interfaces hard to misuse
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Shape public interfaces so common misuse is difficult or visible at the
+        call site.
+      target: api_design
+      action: recommend
+      rationale: >-
+        A good interface prevents callers from accidentally choosing invalid
+        argument order, ownership, lifetime, or failure-handling semantics.
+
+    - id: cpp.api.intent.avoid_misuse_that_invokes_ub
+      title: Avoid APIs where ordinary misuse invokes undefined behavior
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Prefer API shapes where likely misuse is rejected, visible, or recoverable
+        instead of immediately invoking undefined behavior.
+      target: api_design
+      action: recommend
+      rationale: >-
+        Public and internal callers both benefit when invalid inputs are modeled
+        by types, checked contracts, or explicit preconditions.
+
     - id: cpp.api.intent.express_with_types
       title: Express interface intent through types
       when: language == "cpp" and designing_api == true
@@ -129,6 +156,19 @@ rules:
           the ABI requirement.
         - Keep boundary-specific forms localized and convert to clearer internal
           types when practical.
+
+    - id: cpp.api.intent.use_nodiscard_for_non_error_important_results
+      title: Use nodiscard for important non-error results
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Use [[nodiscard]] on non-error functions, result types, or constructors
+        whose ignored value likely indicates a bug or resource misuse.
+      target: interface_intent
+      action: recommend
+      rationale: >-
+        General API results that carry important non-error intent should not be
+        silently discarded; error-bearing results are handled by the error model
+        skill.
 
   preference:
     - id: cpp.api.intent.preference_explicit_semantics
@@ -174,6 +214,7 @@ effective_rule_examples:
       designing_api: true
     effective_rules:
       soft:
+        - Make public interfaces hard to misuse.
         - Express ownership, borrowing, mutation, and lifetime intent through
           types.
 

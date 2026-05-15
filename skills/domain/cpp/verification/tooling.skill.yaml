@@ -1,0 +1,226 @@
+# Skill: C++ Verification Tooling
+# File: skills/domain/cpp/verification/tooling.skill.yaml
+
+skill:
+  id: cpp.verification.tooling
+  name: C++ Verification Tooling
+  version: 1.0.0
+  status: stable
+  description: >-
+    Verification skill for C++ tests, warnings, static analysis, sanitizers,
+    fuzzing, CI matrices, multiple compilers, and build/package tooling.
+
+  level: domain
+  domain: cpp
+  category: verification
+  priority: 74
+
+  tags:
+    - cpp
+    - verification
+    - testing
+    - tooling
+    - ci
+
+  capabilities:
+    - code_review
+    - refactor_code
+    - code_generation
+    - modernization
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+      - design_api
+
+  dependencies:
+    - cpp.standard.standard_availability
+
+  incompatibilities: []
+
+sources:
+  - jason_turner_cpp23_best_practices:14
+  - jason_turner_cpp23_best_practices:15
+  - jason_turner_cpp23_best_practices:16
+  - jason_turner_cpp23_best_practices:17
+  - jason_turner_cpp23_best_practices:18
+  - jason_turner_cpp23_best_practices:19
+  - jason_turner_cpp23_best_practices:20
+  - jason_turner_cpp23_best_practices:21
+  - jason_turner_cpp23_best_practices:22
+  - jason_turner_cpp23_best_practices:23
+  - jason_turner_cpp23_best_practices:24
+
+source_notes:
+  - Source references are traceability anchors only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.verify.require_single_test_command
+      title: Require a single test command
+      when: language == "cpp" and task_type == "review_code"
+      should: >-
+        Provide or preserve a single command that runs the relevant C++ test
+        suite.
+      target: verification
+      action: recommend
+      verification:
+        - test_command_available
+      rationale: >-
+        Tests that require ad-hoc manual steps are less likely to be run during
+        implementation, review, or CI.
+
+    - id: cpp.verify.enable_compiler_warnings
+      title: Enable actionable compiler warnings
+      when: language == "cpp" and task_type == "review_code"
+      should: >-
+        Enable actionable compiler warnings appropriate for the selected compiler
+        and standard mode.
+      target: verification
+      action: recommend
+      verification:
+        - compiler_warnings_enabled
+      rationale: >-
+        Compiler warnings are the first static analysis layer and often catch
+        real portability, lifetime, and initialization bugs.
+
+    - id: cpp.verify.use_static_analysis
+      title: Use static analysis for enforceable checks
+      when: language == "cpp" and task_type == "review_code"
+      should: >-
+        Use static analysis tools such as clang-tidy, cppcheck, CodeQL, or
+        project-specific checks for enforceable C++ risks.
+      target: verification
+      action: recommend
+      verification:
+        - static_analysis_configured
+      rationale: >-
+        Static analysis turns recurring code review findings into repeatable
+        checks.
+
+    - id: cpp.verify.use_sanitizers_for_memory_and_ub
+      title: Use sanitizers for memory and UB risks
+      when: language == "cpp" and task_type == "review_code"
+      should: >-
+        Run sanitizer builds for memory, lifetime, undefined behavior, and
+        concurrency risks when supported by the toolchain.
+      target: verification
+      action: recommend
+      verification:
+        - sanitizer_builds_configured
+      rationale: >-
+        ASan, UBSan, TSan, and related tools expose failures that ordinary unit
+        tests and static checks may miss.
+
+    - id: cpp.verify.cover_debug_release_and_sanitizer_modes
+      title: Cover debug, release, and sanitizer modes
+      when: language == "cpp" and task_type == "review_code"
+      should: >-
+        Cover Debug, Release, and sanitizer-enabled configurations when risk or
+        platform support justifies the matrix cost.
+      target: verification
+      action: recommend
+      verification:
+        - build_matrix_review
+      rationale: >-
+        Optimizers can expose or hide different classes of undefined behavior,
+        and sanitizer instrumentation changes runtime behavior.
+
+    - id: cpp.verify.use_multiple_compilers_when_portability_matters
+      title: Use multiple compilers when portability matters
+      when: language == "cpp" and task_type == "review_code"
+      should: >-
+        Test with more than one supported compiler when portability, standard
+        conformance, or cross-platform behavior matters.
+      target: verification
+      action: recommend
+      verification:
+        - compiler_matrix_review
+      rationale: >-
+        Different compilers diagnose different issues and exercise different
+        interpretations of the standard.
+
+    - id: cpp.verify.add_fuzzing_for_untrusted_or_parser_inputs
+      title: Add fuzzing for untrusted or parser-like inputs
+      when: language == "cpp" and task_type == "review_code"
+      should: >-
+        Add fuzzing or mutation-style testing for parsers, binary inputs,
+        protocol inputs, or public APIs that consume malformed or untrusted data.
+      target: verification
+      action: recommend
+      verification:
+        - fuzzing_review
+      rationale: >-
+        Fuzzing explores input combinations humans are unlikely to write by hand,
+        especially when paired with sanitizers.
+
+    - id: cpp.verify.use_build_generators_and_package_managers
+      title: Use build generators and package managers deliberately
+      when: language == "cpp" and task_type == "review_code"
+      should: >-
+        Use build generators and package managers deliberately to make build,
+        dependency, and CI behavior reproducible.
+      target: verification
+      action: recommend
+      verification:
+        - build_dependency_tooling_review
+      rationale: >-
+        CMake, Meson, Bazel, vcpkg, Conan, or CPM-style tooling can reduce
+        platform-specific drift when managed as part of the project contract.
+
+  preference:
+    - id: cpp.verify.preference_repeatable_tooling
+      title: Prefer repeatable tooling over manual verification
+      when: language == "cpp" and task_type == "review_code"
+      prefer: repeatable_tooling
+      over:
+        - manual_verification
+      target: verification
+      action: prefer
+      rationale: >-
+        Repeatable tool commands make verification observable, automatable, and
+        reviewable.
+
+exceptions:
+  - id: cpp.verify.exception_tool_unavailable
+    when: tool_unavailable == true or platform_constraint == true
+    allow:
+      - reduced_verification_matrix
+    require:
+      - Explain which tool or platform constraint prevents the check.
+      - Keep the closest available verification path documented.
+
+verification:
+  llm_self_check:
+    - id: cpp.verification.tooling.verify.tooling_plan_review
+      type: llm_self_check
+      applies_to:
+        - verification
+      severity: advisory
+      prompt: >-
+        Review whether tests, warnings, static analysis, sanitizers, and CI
+        coverage are proportionate to the task risk and selected C++ standard.
+
+effective_rule_examples:
+  verification_task:
+    task_context:
+      language: cpp
+      task_type: review_code
+    effective_rules:
+      soft:
+        - Provide or preserve a single command that runs the relevant C++ test
+          suite.
+        - Run sanitizer builds for memory, lifetime, undefined behavior, and
+          concurrency risks when supported by the toolchain.
+
+authoring_notes:
+  - This skill owns cross-cutting verification strategy only.
+  - Concrete safety, lifetime, bounds, and resource risks remain owned by their
+    semantic skills.
+  - Do not put API design or implementation style preferences in this skill.

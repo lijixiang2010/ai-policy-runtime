@@ -48,6 +48,8 @@ task_analysis:
         - exception
         - expected
         - error code
+        - nodiscard
+        - lippincott
       set:
         error_handling_required: true
       tags:
@@ -61,6 +63,8 @@ sources:
   - cpp_core_guidelines:E.2
   - cpp_core_guidelines:E.3
   - cpp_core_guidelines:E.6
+  - jason_turner_cpp23_best_practices:29
+  - jason_turner_cpp23_best_practices:57
 
 source_notes:
   - Source references are for traceability only; rules are reconstructed into
@@ -101,12 +105,36 @@ rules:
       title: Keep cleanup exception-safe
       when: language == "cpp"
       should: >-
-        Ensure cleanup remains exception-safe and does not rely on fragile manual
-        release paths.
+        Keep failure paths exception-safe and preserve resource invariants under
+        the selected error model.
       target: resource_lifetime
       action: recommend
       rationale: >-
         Error paths must preserve invariants and resource ownership.
+
+    - id: cpp.error.mark_recoverable_results_nodiscard
+      title: Mark recoverable result values nodiscard
+      when: language == "cpp" and designing_api == true
+      should: >-
+        Mark recoverable result, status, or error-bearing return values as
+        [[nodiscard]] when ignoring them would likely lose a failure signal.
+      target: error_propagation
+      action: recommend
+      rationale: >-
+        Error results are part of the API contract and should not be silently
+        discarded.
+
+    - id: cpp.error.centralize_repeated_exception_translation
+      title: Centralize repeated exception translation
+      when: language == "cpp" and error_handling_required == true
+      should: >-
+        Centralize repeated exception translation or catch-policy code when the
+        same handling appears at multiple boundaries.
+      target: error_propagation
+      action: recommend
+      rationale: >-
+        A shared exception translation function keeps boundary behavior
+        consistent and reduces duplicated catch logic.
 
   preference:
     - id: cpp.error.preference_local_recovery
@@ -155,6 +183,8 @@ effective_rule_examples:
     effective_rules:
       soft:
         - Make recoverable failure visible to callers.
+        - Mark recoverable result values nodiscard when ignored errors would be
+          bugs.
 
 authoring_notes:
   - This skill does not mandate exceptions; it mandates an explicit and consistent

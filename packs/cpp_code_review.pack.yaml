@@ -21,6 +21,9 @@ includes:
   - cpp.concurrency.thread_lifetime
   - cpp.source_structure.source_file_organization
   - cpp.standard.standard_availability
+  - cpp.standard.cpp23.best_practices
+  - cpp.verification.tooling
+  - cpp.verification.execution
 
 excludes: []
 overrides: []
