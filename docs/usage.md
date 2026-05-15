@@ -358,6 +358,7 @@ This is the preferred control surface for editor integrations:
 ```json
 {
   "enabled": true,
+  "agents": ["codex"],
   "packs": ["cpp.safe_generation", "cpp.low_latency"],
   "autoInstall": true,
   "embeddingProvider": "openai-compatible",
@@ -371,27 +372,29 @@ This is the preferred control surface for editor integrations:
 }
 ```
 
-Environment variables still override `.policy/config.json` when both are set.
+Use `"agents": ["codex", "claude"]` when the same workspace should be active for
+both Codex and Claude Code. Environment variables still override
+`.policy/config.json` when both are set.
 
 `postRefine` accepts `off`, `light`, `standard`, or `strict`. When enabled, the
-`Stop` hook uses Codex's continuation mechanism once per turn: it returns
+`Stop` hook uses the agent continuation mechanism once per turn: it returns
 `decision: block` with a refinement prompt, then allows the next stop event when
-Codex reports that the stop hook is already active. This prevents an infinite
-refinement loop.
+the agent reports that the stop hook is already active. This prevents an
+infinite refinement loop.
 
-## Configure Codex from VS Code
+## Configure Agents from VS Code
 
-A Codex-focused VS Code extension is included under:
+An agent-focused VS Code extension is included under:
 
 ```text
 vscode-extension/
 ```
 
 The extension does not reimplement the runtime. It writes `.policy/config.json`
-for the current workspace and lets the Codex plugin hook inject Effective Rules
-on each prompt. The configuration view includes a one-click Post-refinement
-switch that enables the Codex `Stop` continuation workflow by writing
-`postRefine` and `postRefinePacks`.
+for the current workspace and lets Codex / Claude Code integrations inject
+Effective Rules on each prompt. The configuration view includes target-agent
+selection and a one-click Post-refinement switch that enables the `Stop`
+continuation workflow by writing `postRefine` and `postRefinePacks`.
 
 Available commands:
 
@@ -479,6 +482,35 @@ Pass Claude Code CLI options before the task with repeated `--claude-arg`:
 ```powershell
 policy-claude --pack cpp.low_latency --claude-arg "--dangerously-skip-permissions" "帮我写一个 C++20 低延迟队列"
 ```
+
+## Use as a Claude Code Plugin
+
+This repository is also shaped as a Claude Code plugin following Claude Code's
+official plugin and hook layout. The plugin manifest points Claude Code at a
+Claude-specific hook configuration, while the hook scripts reuse the same
+runtime logic as the Codex integration.
+
+Plugin files:
+
+```text
+.claude-plugin/plugin.json
+hooks/claude-hooks.json
+hooks/claude_user_prompt_submit.py
+hooks/claude_stop_refinement.py
+```
+
+Enable Claude Code in the workspace config:
+
+```json
+{
+  "enabled": true,
+  "agents": ["claude"],
+  "packs": ["cpp.safe_generation"]
+}
+```
+
+Use `"agents": ["codex", "claude"]` when the same workspace should be active
+for both supported plugin integrations.
 
 ## Verify Outputs
 

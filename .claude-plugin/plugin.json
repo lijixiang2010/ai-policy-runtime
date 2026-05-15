@@ -1,0 +1,9 @@
+{
+  "name": "ai-policy-runtime",
+  "version": "0.1.0",
+  "description": "Inject task-specific Effective Rules into Claude Code prompts.",
+  "author": {
+    "name": "Miles Li"
+  },
+  "hooks": "./hooks/claude-hooks.json"
+}

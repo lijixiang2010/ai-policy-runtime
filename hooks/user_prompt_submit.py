@@ -11,10 +11,12 @@ from typing import Any
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = Path(".policy") / "config.json"
-HOOK_STATE_PATH = Path(".policy") / "current" / "codex-hook-state.json"
+HOOK_STATE_PATH = Path(".policy") / "current" / "agent-hook-state.json"
 FALSE_VALUES = {"0", "false", "no", "off"}
 POST_REFINE_PACK_ID = "cpp.production_refinement"
 POST_REFINE_MODES = {"off", "light", "standard", "strict"}
+DEFAULT_AGENT = "codex"
+SUPPORTED_AGENTS = {"codex", "claude"}
 
 
 def main() -> int:
@@ -24,8 +26,9 @@ def main() -> int:
         return 0
 
     project_root = Path(payload.get("cwd") or ".").resolve()
+    agent = _current_agent()
     config = ProjectHookConfig.load(project_root)
-    if not config.enabled:
+    if not config.enabled_for(agent):
         return 0
 
     config.apply_environment()
@@ -70,9 +73,10 @@ def _read_payload() -> dict[str, object]:
 
 @dataclass(frozen=True)
 class ProjectHookConfig:
-    """Project-local Codex hook configuration with environment overrides."""
+    """Project-local agent hook configuration with environment overrides."""
 
     enabled: bool = True
+    agents: tuple[str, ...] = (DEFAULT_AGENT,)
     packs: tuple[str, ...] = ()
     policy_root_value: str | Path = PLUGIN_ROOT
     auto_install: bool | None = None
@@ -93,6 +97,7 @@ class ProjectHookConfig:
     def from_mapping(cls, data: dict[str, Any]) -> "ProjectHookConfig":
         return cls(
             enabled=_coerce_enabled(data.get("enabled", True)),
+            agents=_configured_agents(data),
             packs=_configured_packs(data),
             policy_root_value=os.environ.get("AI_POLICY_ROOT")
             or data.get("policyRoot")
@@ -114,6 +119,9 @@ class ProjectHookConfig:
         if not path.is_absolute():
             path = project_root / path
         return path.resolve()
+
+    def enabled_for(self, agent: str) -> bool:
+        return self.enabled and agent in self.agents
 
     def apply_environment(self) -> None:
         self._apply_env("AI_POLICY_EMBEDDING_PROVIDER", self.embedding_provider)
@@ -203,6 +211,20 @@ def _configured_packs(config: dict[str, Any]) -> tuple[str, ...]:
     return ()
 
 
+def _configured_agents(config: dict[str, Any]) -> tuple[str, ...]:
+    configured = config.get("agents")
+    if configured is None:
+        return (DEFAULT_AGENT,)
+    if isinstance(configured, str):
+        agents = _split_csv(configured)
+    elif isinstance(configured, list):
+        agents = tuple(str(item).strip() for item in configured if str(item).strip())
+    else:
+        agents = ()
+    filtered = tuple(dict.fromkeys(agent for agent in agents if agent in SUPPORTED_AGENTS))
+    return filtered if filtered else (DEFAULT_AGENT,)
+
+
 def _load_project_config(project_root: Path) -> dict[str, Any]:
     path = project_root / CONFIG_PATH
     if not path.exists():
@@ -224,6 +246,7 @@ def _write_turn_state(
     state = {
         "turn_id": payload.get("turn_id"),
         "session_id": payload.get("session_id"),
+        "agent": _current_agent(),
         "prompt": prompt,
         "post_refine_mode": config.post_refine_mode,
         "post_refine_pack_ids": list(config.post_refine_pack_ids),
@@ -291,6 +314,17 @@ def _enabled(config: dict[str, Any]) -> bool:
     """Compatibility helper for focused unit tests."""
 
     return ProjectHookConfig.from_mapping(config).enabled
+
+
+def _enabled_for(config: dict[str, Any], agent: str) -> bool:
+    """Compatibility helper for focused unit tests."""
+
+    return ProjectHookConfig.from_mapping(config).enabled_for(agent)
+
+
+def _current_agent() -> str:
+    agent = os.environ.get("AI_POLICY_AGENT", DEFAULT_AGENT).strip().lower()
+    return agent if agent in SUPPORTED_AGENTS else DEFAULT_AGENT
 
 
 if __name__ == "__main__":

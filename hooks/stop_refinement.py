@@ -13,6 +13,7 @@ if str(PLUGIN_ROOT) not in sys.path:
 from hooks.user_prompt_submit import (
     HOOK_STATE_PATH,
     ProjectHookConfig,
+    _current_agent,
     _prepare_imports,
     _read_payload,
 )
@@ -40,14 +41,14 @@ def main() -> int:
 
 
 def build_stop_response(payload: dict[str, object]) -> dict[str, object]:
-    """Return the Codex Stop-hook response for optional refinement continuation."""
+    """Return the agent Stop-hook response for optional refinement continuation."""
 
     if bool(payload.get("stop_hook_active")):
         return {"continue": True}
 
     project_root = Path(payload.get("cwd") or ".").resolve()
     config = ProjectHookConfig.load(project_root)
-    if not config.enabled or config.post_refine_mode == "off":
+    if not config.enabled_for(_current_agent()) or config.post_refine_mode == "off":
         return {"continue": True}
 
     prompt = _original_prompt(project_root, payload)
@@ -101,7 +102,7 @@ def _original_prompt(project_root: Path, payload: dict[str, object]) -> str:
     prompt = _state_prompt_for_turn(state, payload)
     if prompt:
         return prompt
-    return "the just-completed Codex task"
+    return "the just-completed agent task"
 
 
 def _load_turn_state(project_root: Path) -> dict[str, Any]:

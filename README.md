@@ -186,10 +186,14 @@ hooks/user_prompt_submit.py
 hooks/stop_refinement.py
 ```
 
+The same repository can also be installed as a Claude Code plugin. The Claude
+plugin manifest lives in `.claude-plugin/plugin.json` and uses Claude-specific
+hook entry points that share the same runtime logic.
+
 A VS Code extension is also included in `vscode-extension/`. It writes
-workspace configuration to `.policy/config.json` so the Codex hook can enable
-or disable packs and one-click post-task refinement without hand-editing
-environment variables.
+workspace configuration to `.policy/config.json` so Codex and Claude Code
+integrations can enable or disable packs, select target agents, and configure
+one-click post-task refinement without hand-editing environment variables.
 
 ## Programmatic Use
 
@@ -261,7 +265,7 @@ ai_policy_runtime/
 skills/            Skill DSL files
 packs/             reusable policy packs
 schemas/           JSON Schemas for Skills, packs, and Effective Rules
-hooks/             Codex plugin hook
+hooks/             Codex and Claude Code plugin hooks
 vscode-extension/  VS Code configuration surface
 docs/              design and usage documentation
 ```

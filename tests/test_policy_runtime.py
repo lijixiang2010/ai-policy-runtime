@@ -994,6 +994,16 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertFalse(user_prompt_submit._enabled({"enabled": "off"}))
         self.assertTrue(user_prompt_submit._enabled({}))
 
+    def test_hook_defaults_to_codex_agent(self) -> None:
+        self.assertTrue(user_prompt_submit._enabled_for({}, "codex"))
+        self.assertFalse(user_prompt_submit._enabled_for({}, "claude"))
+
+    def test_hook_config_filters_by_agent(self) -> None:
+        config = {"enabled": True, "agents": ["claude"]}
+
+        self.assertFalse(user_prompt_submit._enabled_for(config, "codex"))
+        self.assertTrue(user_prompt_submit._enabled_for(config, "claude"))
+
     def test_codex_hook_config_reads_post_refinement_options(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             config = user_prompt_submit.ProjectHookConfig.from_mapping(
@@ -1033,6 +1043,22 @@ class PolicyRuntimeTests(unittest.TestCase):
                 )
 
         self.assertEqual(response, {"decision": "block", "reason": "Refine once."})
+
+    def test_stop_hook_respects_agent_filter(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"agents": ["claude"], "postRefine": "standard"}),
+                encoding="utf-8",
+            )
+
+            response = stop_refinement.build_stop_response(
+                {"cwd": str(root), "stop_hook_active": False}
+            )
+
+        self.assertEqual(response, {"continue": True})
 
     def test_codex_hook_applies_openai_compatible_embedding_config(self) -> None:
         config = user_prompt_submit.ProjectHookConfig.from_mapping(

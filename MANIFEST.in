@@ -6,3 +6,4 @@ recursive-include packs *.yaml *.yml *.json
 recursive-include schemas *.json
 recursive-include hooks *.py *.json
 recursive-include .codex-plugin *.json
+recursive-include .claude-plugin *.json
