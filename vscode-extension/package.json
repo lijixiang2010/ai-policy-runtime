@@ -3,7 +3,7 @@
   "displayName": "AI Policy Runtime",
   "description": "Configure AI Policy Runtime for Codex from VS Code.",
   "version": "0.1.0",
-  "publisher": "miles-li",
+  "publisher": "cppmore",
   "author": {
     "name": "Miles Li"
   },
