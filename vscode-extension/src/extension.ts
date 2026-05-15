@@ -12,6 +12,9 @@ type PolicyConfig = {
   embeddingApiKey?: string;
   embeddingModel?: string;
   embeddingTimeout?: string;
+  postRefine: 'off' | 'light' | 'standard' | 'strict';
+  postRefinePacks: string[];
+  verifyTarget?: string;
 };
 
 type PolicyPaths = {
@@ -30,10 +33,12 @@ const CONFIG_SECTION = 'aiPolicy';
 const POLICY_CONFIG_FILE = path.join('.policy', 'config.json');
 const EFFECTIVE_PROMPT_FILE = path.join('.policy', 'current', 'effective-prompt.md');
 const DEFAULT_PACKS = ['cpp.safe_generation'];
+const DEFAULT_POST_REFINE_PACKS = ['cpp.production_refinement'];
 
 const COMMANDS = {
   enable: 'aiPolicy.enable',
   disable: 'aiPolicy.disable',
+  enablePostRefine: 'aiPolicy.enablePostRefine',
   configurePacks: 'aiPolicy.configurePacks',
   showStatus: 'aiPolicy.showStatus',
   showEffectiveRules: 'aiPolicy.showEffectiveRules',
@@ -95,6 +100,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(PolicyConfigViewProvider.viewType, panel),
     vscode.commands.registerCommand(COMMANDS.enable, () => setEnabled(workspace, status, true)),
     vscode.commands.registerCommand(COMMANDS.disable, () => setEnabled(workspace, status, false)),
+    vscode.commands.registerCommand(COMMANDS.enablePostRefine, () => enablePostRefine(workspace, status, panel)),
     vscode.commands.registerCommand(COMMANDS.configurePacks, () => configurePacks(workspace)),
     vscode.commands.registerCommand(COMMANDS.showStatus, () => showStatus(workspace)),
     vscode.commands.registerCommand(COMMANDS.showEffectiveRules, () => showEffectiveRules(workspace)),
@@ -135,7 +141,10 @@ class PolicyWorkspace {
       this.updateSetting('embeddingBaseUrl', config.embeddingBaseUrl ?? ''),
       this.updateSetting('embeddingApiKey', config.embeddingApiKey ?? ''),
       this.updateSetting('embeddingModel', config.embeddingModel ?? ''),
-      this.updateSetting('embeddingTimeout', config.embeddingTimeout ?? '')
+      this.updateSetting('embeddingTimeout', config.embeddingTimeout ?? ''),
+      this.updateSetting('postRefine', config.postRefine),
+      this.updateSetting('postRefinePacks', config.postRefinePacks),
+      this.updateSetting('verifyTarget', config.verifyTarget ?? '')
     ]);
     await this.syncProjectConfig();
   }
@@ -151,7 +160,10 @@ class PolicyWorkspace {
       embeddingBaseUrl: cleanOptionalString(config.get<string>('embeddingBaseUrl', '')),
       embeddingApiKey: cleanOptionalString(config.get<string>('embeddingApiKey', '')),
       embeddingModel: cleanOptionalString(config.get<string>('embeddingModel', '')),
-      embeddingTimeout: cleanOptionalString(config.get<string>('embeddingTimeout', ''))
+      embeddingTimeout: cleanOptionalString(config.get<string>('embeddingTimeout', '')),
+      postRefine: normalizePostRefineMode(config.get<string>('postRefine', 'off')),
+      postRefinePacks: config.get<string[]>('postRefinePacks', DEFAULT_POST_REFINE_PACKS),
+      verifyTarget: cleanOptionalString(config.get<string>('verifyTarget', ''))
     };
   }
 
@@ -224,6 +236,10 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       return;
     }
     this.view.webview.html = this.html(this.view.webview, this.workspace.readConfig());
+  }
+
+  refresh(): void {
+    this.render();
   }
 
   private html(webview: vscode.Webview, config: PolicyConfig): string {
@@ -323,6 +339,12 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       display: grid;
       gap: 6px;
     }
+    .switch-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
     .pack {
       display: grid;
       grid-template-columns: 18px 1fr;
@@ -393,6 +415,26 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
 
   <div class="section">
     <div class="row">
+      <label for="postRefineEnabled">Post-refinement</label>
+      <input id="postRefineEnabled" type="checkbox">
+    </div>
+    <p class="switch-note">Continue once before Codex ends a turn to compress structure, remove accidental complexity, and run practical checks.</p>
+    <div class="field">
+      <label for="postRefine">Mode</label>
+      <select id="postRefine">
+        <option value="standard">Standard</option>
+        <option value="light">Light</option>
+        <option value="strict">Strict</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="verifyTarget">Verify target</label>
+      <input id="verifyTarget" type="text" placeholder="src">
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="row">
       <label>Packs</label>
       <span id="selectedCount" class="subtle">0 selected</span>
     </div>
@@ -448,6 +490,11 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     const selected = new Set(state.config.packs || []);
     byId('enabled').checked = Boolean(state.config.enabled);
     byId('autoInstall').checked = Boolean(state.config.autoInstall);
+    byId('postRefineEnabled').checked = (state.config.postRefine || 'off') !== 'off';
+    byId('postRefine').value = state.config.postRefine && state.config.postRefine !== 'off'
+      ? state.config.postRefine
+      : 'standard';
+    byId('verifyTarget').value = state.config.verifyTarget || '';
     byId('policyRoot').value = state.config.policyRoot || '';
     byId('embeddingProvider').value = state.config.embeddingProvider || '';
     byId('embeddingBaseUrl').value = state.config.embeddingBaseUrl || '';
@@ -505,8 +552,16 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     renderSelected();
 
     byId('packSearch').addEventListener('input', renderPacks);
+    byId('postRefineEnabled').addEventListener('change', () => {
+      if (byId('postRefineEnabled').checked && byId('postRefine').value === 'off') {
+        byId('postRefine').value = 'standard';
+      }
+    });
 
     function readConfig() {
+      const postRefine = byId('postRefineEnabled').checked
+        ? byId('postRefine').value
+        : 'off';
       return {
         enabled: byId('enabled').checked,
         packs: Array.from(selected),
@@ -516,7 +571,10 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
         embeddingBaseUrl: byId('embeddingBaseUrl').value.trim() || undefined,
         embeddingApiKey: byId('embeddingApiKey').value.trim() || undefined,
         embeddingModel: byId('embeddingModel').value.trim() || undefined,
-        embeddingTimeout: byId('embeddingTimeout').value.trim() || undefined
+        embeddingTimeout: byId('embeddingTimeout').value.trim() || undefined,
+        postRefine,
+        postRefinePacks: ${JSON.stringify(DEFAULT_POST_REFINE_PACKS)},
+        verifyTarget: byId('verifyTarget').value.trim() || undefined
       };
     }
 
@@ -544,7 +602,7 @@ class PolicyStatusBar implements vscode.Disposable {
     const config = this.workspace.readConfig();
     this.item.text = config.enabled ? 'AI Policy Runtime: On' : 'AI Policy Runtime: Off';
     this.item.tooltip = config.enabled
-      ? `Packs: ${config.packs.join(', ') || '(none)'}`
+      ? `Packs: ${config.packs.join(', ') || '(none)'}; post-refine: ${config.postRefine}`
       : 'AI Policy Runtime is disabled';
     this.item.show();
   }
@@ -565,6 +623,22 @@ async function setEnabled(
   vscode.window.showInformationMessage(
     `AI Policy Runtime is ${enabled ? 'enabled' : 'disabled'} for this workspace.`
   );
+}
+
+async function enablePostRefine(
+  workspace: PolicyWorkspace,
+  status: PolicyStatusBar,
+  panel: PolicyConfigViewProvider
+): Promise<void> {
+  await Promise.all([
+    workspace.updateSetting('enabled', true),
+    workspace.updateSetting('postRefine', 'standard'),
+    workspace.updateSetting('postRefinePacks', DEFAULT_POST_REFINE_PACKS)
+  ]);
+  await workspace.syncProjectConfig();
+  status.refresh();
+  panel.refresh();
+  vscode.window.showInformationMessage('AI Policy Runtime post-task refinement is enabled for this workspace.');
 }
 
 async function configurePacks(workspace: PolicyWorkspace): Promise<void> {
@@ -605,6 +679,9 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
       `Embedding provider: ${config.embeddingProvider || '(auto)'}`,
       `Embedding base URL: ${config.embeddingBaseUrl || '(default)'}`,
       `Embedding model: ${config.embeddingModel || '(default)'}`,
+      `Post-refinement: ${config.postRefine}`,
+      `Post-refinement packs: ${config.postRefinePacks.join(', ') || '(none)'}`,
+      `Verify target: ${config.verifyTarget || '(not configured)'}`,
       `Project config: ${paths.config}`,
       `Latest Effective Rules: ${promptExists ? paths.effectivePrompt : '(not generated yet)'}`
     ].join('\n')
@@ -663,8 +740,20 @@ function normalizeConfig(config: PolicyConfig): PolicyConfig {
     embeddingBaseUrl: cleanOptionalString(config.embeddingBaseUrl ?? ''),
     embeddingApiKey: cleanOptionalString(config.embeddingApiKey ?? ''),
     embeddingModel: cleanOptionalString(config.embeddingModel ?? ''),
-    embeddingTimeout: cleanOptionalString(config.embeddingTimeout ?? '')
+    embeddingTimeout: cleanOptionalString(config.embeddingTimeout ?? ''),
+    postRefine: normalizePostRefineMode(config.postRefine ?? 'off'),
+    postRefinePacks: Array.isArray(config.postRefinePacks)
+      ? config.postRefinePacks.filter(Boolean)
+      : DEFAULT_POST_REFINE_PACKS,
+    verifyTarget: cleanOptionalString(config.verifyTarget ?? '')
   };
+}
+
+function normalizePostRefineMode(value: string): PolicyConfig['postRefine'] {
+  if (value === 'light' || value === 'standard' || value === 'strict') {
+    return value;
+  }
+  return 'off';
 }
 
 function nonceValue(): string {

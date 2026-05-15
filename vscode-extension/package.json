@@ -37,6 +37,7 @@
   "activationEvents": [
     "onCommand:aiPolicy.enable",
     "onCommand:aiPolicy.disable",
+    "onCommand:aiPolicy.enablePostRefine",
     "onCommand:aiPolicy.configurePacks",
     "onCommand:aiPolicy.showStatus",
     "onCommand:aiPolicy.showEffectiveRules",
@@ -72,6 +73,10 @@
       {
         "command": "aiPolicy.disable",
         "title": "AI Policy Runtime: Disable"
+      },
+      {
+        "command": "aiPolicy.enablePostRefine",
+        "title": "AI Policy Runtime: Enable Post-Task Refinement"
       },
       {
         "command": "aiPolicy.configurePacks",
@@ -158,6 +163,38 @@
           "type": "string",
           "default": "",
           "description": "Optional embedding request timeout in seconds."
+        },
+        "aiPolicy.postRefine": {
+          "type": "string",
+          "default": "off",
+          "enum": [
+            "off",
+            "light",
+            "standard",
+            "strict"
+          ],
+          "enumDescriptions": [
+            "Do not ask Codex to continue with a refinement pass.",
+            "Ask for a light review-oriented refinement continuation.",
+            "Ask Codex to continue once with a production refinement pass.",
+            "Ask Codex to continue once with a stricter release-quality refinement pass."
+          ],
+          "description": "Codex Stop-hook post-task refinement mode."
+        },
+        "aiPolicy.postRefinePacks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "cpp.production_refinement"
+          ],
+          "description": "Policy packs added for the Codex Stop-hook post-task refinement continuation."
+        },
+        "aiPolicy.verifyTarget": {
+          "type": "string",
+          "default": "",
+          "description": "Optional file or directory Codex should verify during strict post-task refinement."
         }
       }
     }

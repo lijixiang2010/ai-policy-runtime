@@ -17,8 +17,10 @@ Codex hook.
 
 1. Open a workspace in VS Code.
 2. Run `AI Policy: Enable`.
-3. Run `AI Policy: Configure Packs`.
-4. Use Codex normally.
+3. Run `AI Policy: Enable Post-Task Refinement` when Codex should continue
+   once before ending a turn for production refinement.
+4. Run `AI Policy: Configure Packs`.
+5. Use Codex normally.
 
 ## Local VSIX Install
 
@@ -41,6 +43,7 @@ Developer: Reload Window
 
 - `AI Policy: Enable`
 - `AI Policy: Disable`
+- `AI Policy: Enable Post-Task Refinement`
 - `AI Policy: Configure Packs`
 - `AI Policy: Show Status`
 - `AI Policy: Show Effective Rules`
@@ -57,6 +60,10 @@ Developer: Reload Window
 - `aiPolicy.embeddingApiKey`: optional API key for the embeddings endpoint.
 - `aiPolicy.embeddingModel`: optional embedding model.
 - `aiPolicy.embeddingTimeout`: optional embedding request timeout in seconds.
+- `aiPolicy.postRefine`: Codex Stop-hook post-task refinement mode.
+- `aiPolicy.postRefinePacks`: packs added for the refinement continuation.
+- `aiPolicy.verifyTarget`: optional target Codex should verify during strict
+  refinement.
 
 Environment variables such as `AI_POLICY_PACKS` still override project settings
 when both are set.

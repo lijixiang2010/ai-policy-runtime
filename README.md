@@ -188,7 +188,8 @@ hooks/stop_refinement.py
 
 A VS Code extension is also included in `vscode-extension/`. It writes
 workspace configuration to `.policy/config.json` so the Codex hook can enable
-or disable packs without hand-editing environment variables.
+or disable packs and one-click post-task refinement without hand-editing
+environment variables.
 
 ## Programmatic Use
 

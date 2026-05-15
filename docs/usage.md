@@ -389,13 +389,16 @@ vscode-extension/
 
 The extension does not reimplement the runtime. It writes `.policy/config.json`
 for the current workspace and lets the Codex plugin hook inject Effective Rules
-on each prompt.
+on each prompt. The configuration view includes a one-click Post-refinement
+switch that enables the Codex `Stop` continuation workflow by writing
+`postRefine` and `postRefinePacks`.
 
 Available commands:
 
 ```text
 AI Policy: Enable
 AI Policy: Disable
+AI Policy: Enable Post-Task Refinement
 AI Policy: Configure Packs
 AI Policy: Show Status
 AI Policy: Show Effective Rules
