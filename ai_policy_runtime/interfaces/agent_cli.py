@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Protocol
 
+from ai_policy_runtime.adapters.agent import POST_REFINE_PACK_ID
+
 
 class JsonResult(Protocol):
     """Protocol for CLI results that can be serialized and return an exit code."""
@@ -70,6 +72,26 @@ def _build_parser(spec: AgentCliSpec) -> argparse.ArgumentParser:
     )
     parser.add_argument("--no-exec", action="store_true", help=spec.no_exec_help)
     parser.add_argument("--verify-target", default=None, help="File or directory to verify after agent.")
+    parser.add_argument(
+        "--post-refine",
+        action="store_true",
+        help="Run a standard post-task refinement pass after a successful agent command.",
+    )
+    parser.add_argument(
+        "--post-refine-mode",
+        choices=("off", "light", "standard", "strict"),
+        default="off",
+        help=(
+            "Post-task refinement mode. off disables the pass; light only refreshes refinement "
+            "context; standard and strict run a second agent pass after success."
+        ),
+    )
+    parser.add_argument(
+        "--post-refine-pack",
+        action="append",
+        default=[],
+        help=f"Pack id used for the post-task refinement pass. Defaults to {POST_REFINE_PACK_ID}.",
+    )
     return parser
 
 
@@ -77,3 +99,18 @@ def optional_path(value: str | None) -> Path | None:
     """Convert an optional path string into a Path."""
 
     return Path(value) if value else None
+
+
+def post_refine_mode(args: argparse.Namespace) -> str:
+    """Return the effective post-refinement mode from shared CLI args."""
+
+    if args.post_refine and args.post_refine_mode == "off":
+        return "standard"
+    return str(args.post_refine_mode)
+
+
+def post_refine_packs(args: argparse.Namespace) -> tuple[str, ...]:
+    """Return post-refinement packs, including the default when none are provided."""
+
+    packs = tuple(args.post_refine_pack)
+    return packs if packs else (POST_REFINE_PACK_ID,)

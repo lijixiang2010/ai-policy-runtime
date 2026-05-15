@@ -25,6 +25,7 @@ from ai_policy_runtime.task_analysis.embeddings import (
 )
 from ai_policy_runtime.task_analysis.lexicon import LexiconRule, TaskLexicon
 from ai_policy_runtime.task_analysis.semantic_index import SemanticTaskIndex
+from ai_policy_runtime.adapters.agent import build_post_refinement_task, merge_pack_ids
 from ai_policy_runtime.adapters.codex.wrapper import _build_codex_command
 from ai_policy_runtime.adapters.claude.wrapper import _build_claude_command
 from ai_policy_runtime.interfaces.cli import CommandDispatcher
@@ -1088,6 +1089,25 @@ class PolicyRuntimeTests(unittest.TestCase):
                 "--dangerously-skip-permissions",
                 "帮我写一个 C++20 低延迟队列",
             ),
+        )
+
+    def test_post_refinement_task_preserves_scope_and_behavior(self) -> None:
+        task = build_post_refinement_task("Refactor the matching engine API.", "standard")
+
+        self.assertIn("Preserve observable behavior", task)
+        self.assertIn("remove accidental complexity", task)
+        self.assertIn("Do not broaden scope", task)
+        self.assertIn("Refactor the matching engine API.", task)
+
+    def test_post_refinement_pack_merge_preserves_order_and_deduplicates(self) -> None:
+        pack_ids = merge_pack_ids(
+            ("cpp.low_latency", "cpp.production_refinement"),
+            ("cpp.production_refinement", "cpp.safe_generation"),
+        )
+
+        self.assertEqual(
+            pack_ids,
+            ("cpp.low_latency", "cpp.production_refinement", "cpp.safe_generation"),
         )
 
     def test_effective_rules_renderer_matches_output_spec(self) -> None:

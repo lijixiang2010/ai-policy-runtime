@@ -155,6 +155,17 @@ policy-codex `
   "Refactor this C++20 code so it is not just working. Reduce complexity and preserve safety."
 ```
 
+Add a second, behavior-preserving refinement pass after the first successful
+agent run:
+
+```powershell
+policy-codex `
+  --pack cpp.low_latency `
+  --post-refine `
+  --verify-target src `
+  "Implement a C++20 matching-engine API."
+```
+
 Run Claude Code through the policy wrapper:
 
 ```powershell
@@ -259,6 +270,8 @@ docs/              design and usage documentation
   concepts.
 - [Automation Strategy](docs/policy_runtime_automation_strategy.md): agent
   integration lifecycle and injection strategy.
+- [Post-Task Refinement Workflow](docs/post_task_refinement_workflow.md):
+  wrapper-level automation for behavior-preserving production refinement.
 - [Skill DSL Syntax](docs/skill_dsl_syntax_specification.md): Skill file format.
 - [Effective Rules Output](docs/effective_rules_output_specification.md):
   generated rule output contract.

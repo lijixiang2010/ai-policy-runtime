@@ -4,7 +4,13 @@ import argparse
 from pathlib import Path
 
 from ai_policy_runtime.adapters.claude import ClaudeWrapperOptions, run_claude_policy_wrapper
-from ai_policy_runtime.interfaces.agent_cli import AgentCliSpec, optional_path, run_agent_cli
+from ai_policy_runtime.interfaces.agent_cli import (
+    AgentCliSpec,
+    optional_path,
+    post_refine_mode,
+    post_refine_packs,
+    run_agent_cli,
+)
 
 
 SPEC = AgentCliSpec(
@@ -37,6 +43,8 @@ def _options_from_args(args: argparse.Namespace) -> ClaudeWrapperOptions:
         claude_args=tuple(args.claude_arg),
         execute=not args.no_exec,
         verify_target=args.verify_target,
+        post_refine_mode=post_refine_mode(args),
+        post_refine_pack_ids=post_refine_packs(args),
     )
 
 

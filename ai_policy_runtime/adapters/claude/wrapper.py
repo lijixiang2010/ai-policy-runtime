@@ -7,6 +7,7 @@ from typing import Sequence
 from ai_policy_runtime.adapters.agent import (
     AgentWrapperOptions,
     AgentWrapperResult,
+    POST_REFINE_PACK_ID,
     build_agent_command,
     run_policy_agent_wrapper,
 )
@@ -26,6 +27,8 @@ class ClaudeWrapperOptions:
     claude_args: tuple[str, ...] = ()
     execute: bool = True
     verify_target: str | Path | None = None
+    post_refine_mode: str = "off"
+    post_refine_pack_ids: tuple[str, ...] = (POST_REFINE_PACK_ID,)
 
     def to_agent_options(self) -> AgentWrapperOptions:
         """Return generic wrapper options for the Claude Code adapter."""
@@ -42,6 +45,8 @@ class ClaudeWrapperOptions:
             command_args=self.claude_args,
             execute=self.execute,
             verify_target=self.verify_target,
+            post_refine_mode=self.post_refine_mode,
+            post_refine_pack_ids=self.post_refine_pack_ids,
         )
 
 

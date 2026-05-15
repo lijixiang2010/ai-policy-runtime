@@ -263,6 +263,29 @@ The wrapper performs:
 resolve -> inject AGENTS.md -> codex "<task>"
 ```
 
+Add `--post-refine` when the first successful agent run should be followed by a
+second, behavior-preserving production refinement pass:
+
+```powershell
+policy-codex --pack cpp.low_latency --post-refine "帮我写一个 C++20 低延迟队列"
+```
+
+Use an explicit mode when the workflow needs to be lighter or stricter:
+
+```powershell
+policy-codex --pack cpp.low_latency --post-refine-mode light "帮我写一个 C++20 低延迟队列"
+policy-codex --pack cpp.low_latency --post-refine-mode strict --verify-target src "帮我写一个 C++20 低延迟队列"
+```
+
+Post-refinement modes are:
+
+```text
+off       preserve existing behavior
+light     resolve and inject refinement context only
+standard  run a second agent pass after a successful first pass
+strict    run a second agent pass and pair it with --verify-target for release-quality checks
+```
+
 For dry runs that only refresh `AGENTS.md`:
 
 ```powershell
@@ -413,6 +436,12 @@ The wrapper performs:
 
 ```text
 resolve -> inject CLAUDE.md -> claude "<task>"
+```
+
+The shared post-refinement flags also work with Claude Code:
+
+```powershell
+policy-claude --pack cpp.low_latency --post-refine "帮我写一个 C++20 低延迟队列"
 ```
 
 For dry runs that only refresh `CLAUDE.md`:
