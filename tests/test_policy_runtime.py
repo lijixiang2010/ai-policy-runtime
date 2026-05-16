@@ -222,21 +222,6 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(analysis.needs_review)
         self.assertLess(analysis.confidence, 0.72)
 
-    def test_task_analyzer_does_not_treat_plugin_status_as_refactor(self) -> None:
-        analysis = analyze("请检查当前项目，并说明 AI Policy Runtime 是否通过 Claude Code plugin 启用了。")
-
-        self.assertEqual(analysis.task.domain, "general")
-        self.assertEqual(analysis.task.task_type, "unknown")
-        self.assertNotIn("artifact_type", analysis.task.context)
-        self.assertNotIn("refinement_requested", analysis.task.context)
-
-    def test_task_analyzer_does_not_treat_greeting_as_code_task(self) -> None:
-        analysis = analyze("hello")
-
-        self.assertEqual(analysis.task.domain, "general")
-        self.assertEqual(analysis.task.task_type, "unknown")
-        self.assertEqual(analysis.task.tags, ())
-
     def test_task_analyzer_uses_embedding_semantics_for_rephrased_intent(self) -> None:
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
@@ -1149,6 +1134,18 @@ class PolicyRuntimeTests(unittest.TestCase):
             runtime = PolicyRuntime(RuntimeConfig.from_values(root=tmp, policy_root="."))
 
             result = runtime.resolve_if_applicable("hello", ("cpp.safe_generation",))
+
+            self.assertFalse(result.applicable)
+            self.assertFalse((Path(tmp) / ".policy" / "current").exists())
+
+    def test_resolve_if_applicable_skips_status_query_without_writing_current(self) -> None:
+        with TemporaryDirectory() as tmp:
+            runtime = PolicyRuntime(RuntimeConfig.from_values(root=tmp, policy_root="."))
+
+            result = runtime.resolve_if_applicable(
+                "请检查当前项目，并说明 AI Policy Runtime 是否通过 Claude Code plugin 启用了。",
+                ("cpp.safe_generation",),
+            )
 
             self.assertFalse(result.applicable)
             self.assertFalse((Path(tmp) / ".policy" / "current").exists())
