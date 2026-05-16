@@ -191,7 +191,8 @@ plugin manifest lives in `.claude-plugin/plugin.json` and uses Claude-specific
 hook entry points that share the same runtime logic.
 For Claude for Windows / Desktop Code sessions, `tools/configure_claude_desktop.py`
 can prepare a workspace-local Claude settings file and register the local plugin
-marketplace.
+marketplace. It can also report status and toggle the runtime, plugin, and
+post-refinement settings without hand-editing JSON.
 
 A VS Code extension is also included in `vscode-extension/`. It writes
 workspace configuration to `.policy/config.json` so Codex and Claude Code

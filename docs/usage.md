@@ -526,17 +526,41 @@ python tools/configure_claude_desktop.py `
   --plugin-root D:\MilesLi\ai-policy-runtime
 ```
 
-The script updates:
+Enable one-pass post-refinement during the same setup when the desktop client
+should ask Claude to continue once after an applicable coding task:
+
+```powershell
+python tools/configure_claude_desktop.py `
+  --root D:\work\target-project `
+  --plugin-root D:\MilesLi\ai-policy-runtime `
+  --post-refine standard
+```
+
+Query or change the same workspace later without editing JSON:
+
+```powershell
+python tools/configure_claude_desktop.py --root D:\work\target-project --status
+python tools/configure_claude_desktop.py --root D:\work\target-project --disable
+python tools/configure_claude_desktop.py --root D:\work\target-project --enable-plugin
+python tools/configure_claude_desktop.py --root D:\work\target-project --disable-plugin
+python tools/configure_claude_desktop.py --root D:\work\target-project --post-refine off
+```
+
+Depending on the command, the script updates:
 
 ```text
 D:\work\target-project\.policy\config.json
 D:\work\target-project\.claude\settings.local.json
 ```
 
-It enables `agents: ["claude"]`, registers this repository as a local Claude
-plugin marketplace, and enables `ai-policy-runtime@ai-policy-runtime` for that
-workspace. Use `--scope project` to write `.claude/settings.json` instead, or
-`--scope user` to write `%USERPROFILE%\.claude\settings.json`.
+The base setup command enables `agents: ["claude"]`, registers this repository
+as a local Claude plugin marketplace, and enables
+`ai-policy-runtime@ai-policy-runtime` for that workspace. Plugin-only toggles
+only update Claude settings. `--post-refine standard` writes `postRefine` and
+`postRefinePacks` so the Stop hook can perform the second pass; `--post-refine
+off` only disables that second pass. Use `--scope project` to write
+`.claude/settings.json` instead, or `--scope user` to write
+`%USERPROFILE%\.claude\settings.json`.
 
 When the Claude CLI is available, add `--install` to also run Claude's plugin
 commands:

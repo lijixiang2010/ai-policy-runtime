@@ -1,6 +1,6 @@
 """Minimal Skill / Policy Runtime package."""
 
-from .application.runtime import ExplainResult, PolicyRuntime
+from .application.runtime import ExplainResult, NonApplicableTaskError, PolicyRuntime
 from .domain.config import RuntimeConfig, RuntimePaths
 from .domain.rule import EffectiveRules, Rule
 from .domain.skill import Skill
@@ -12,6 +12,7 @@ from .task_analysis import TaskAnalysis, TaskAnalyzer, TaskSignals
 __all__ = [
     "EffectiveRules",
     "ExplainResult",
+    "NonApplicableTaskError",
     "PolicyEngine",
     "PolicyRuntime",
     "Rule",

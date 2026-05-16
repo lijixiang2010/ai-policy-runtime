@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import json
+import argparse
+import io
 import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -12,7 +14,7 @@ from unittest.mock import patch
 os.environ["AI_POLICY_EMBEDDING_PROVIDER"] = "local"
 
 from ai_policy_runtime import PolicyEngine, Skill, SkillRegistry, TaskContext
-from ai_policy_runtime.application.runtime import PolicyRuntime
+from ai_policy_runtime.application.runtime import NonApplicableTaskError, PolicyRuntime
 from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.domain.pack import PackRegistry, SkillPack
 from ai_policy_runtime.domain.rule import RuleAction
@@ -44,7 +46,10 @@ from hooks import stop_refinement, user_prompt_submit
 from tools.configure_claude_desktop import (
     PLUGIN_ID,
     configure_claude_settings,
+    DEFAULT_POST_REFINE_PACK,
+    main as configure_claude_desktop_main,
     configure_policy,
+    status as claude_desktop_status,
 )
 
 
@@ -1037,6 +1042,18 @@ class PolicyRuntimeTests(unittest.TestCase):
                 json.dumps({"postRefine": "standard"}),
                 encoding="utf-8",
             )
+            state_path = root / user_prompt_submit.HOOK_STATE_PATH
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "turn_id": "turn-1",
+                        "session_id": "session-1",
+                        "prompt": "Refactor this C++20 code.",
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             with patch.object(
                 stop_refinement,
@@ -1044,10 +1061,86 @@ class PolicyRuntimeTests(unittest.TestCase):
                 return_value="Refine once.",
             ):
                 response = stop_refinement.build_stop_response(
-                    {"cwd": str(root), "stop_hook_active": False}
+                    {
+                        "cwd": str(root),
+                        "stop_hook_active": False,
+                        "turn_id": "turn-1",
+                        "session_id": "session-1",
+                    }
                 )
 
         self.assertEqual(response, {"decision": "block", "reason": "Refine once."})
+
+    def test_stop_hook_does_not_reuse_stale_turn_state_without_matching_payload_id(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"postRefine": "standard"}),
+                encoding="utf-8",
+            )
+            state_path = root / user_prompt_submit.HOOK_STATE_PATH
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "turn_id": "old-turn",
+                        "session_id": "old-session",
+                        "prompt": "Refactor this C++20 code.",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            response = stop_refinement.build_stop_response(
+                {"cwd": str(root), "stop_hook_active": False}
+            )
+
+        self.assertEqual(response, {"continue": True})
+
+    def test_stop_hook_allows_legacy_turn_state_without_ids(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"postRefine": "standard"}),
+                encoding="utf-8",
+            )
+            state_path = root / user_prompt_submit.HOOK_STATE_PATH
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(
+                json.dumps({"prompt": "Refactor this C++20 code."}),
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                stop_refinement,
+                "build_refinement_continuation_prompt",
+                return_value="Refine legacy turn.",
+            ):
+                response = stop_refinement.build_stop_response(
+                    {"cwd": str(root), "stop_hook_active": False}
+                )
+
+        self.assertEqual(response, {"decision": "block", "reason": "Refine legacy turn."})
+
+    def test_stop_hook_skips_refinement_without_applicable_turn_state(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"postRefine": "standard"}),
+                encoding="utf-8",
+            )
+
+            response = stop_refinement.build_stop_response(
+                {"cwd": str(root), "stop_hook_active": False, "turn_id": "turn-1"}
+            )
+
+        self.assertEqual(response, {"continue": True})
 
     def test_stop_hook_respects_agent_filter(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -1150,6 +1243,125 @@ class PolicyRuntimeTests(unittest.TestCase):
             self.assertFalse(result.applicable)
             self.assertFalse((Path(tmp) / ".policy" / "current").exists())
 
+    def test_resolve_if_applicable_requires_prompt_task_before_project_policy(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "CMakeLists.txt").write_text(
+                "cmake_minimum_required(VERSION 3.24)\n"
+                "project(docs LANGUAGES CXX)\n"
+                "set(CMAKE_CXX_STANDARD 20)\n",
+                encoding="utf-8",
+            )
+            runtime = PolicyRuntime(RuntimeConfig.from_values(root=root, policy_root="."))
+
+            result = runtime.resolve_if_applicable(
+                "阅读一下文档中的设计思想，看看有没有破坏原有的流程，流程是否还连贯。只分析，不改",
+                ("cpp.safe_generation",),
+            )
+
+            self.assertFalse(result.applicable)
+            self.assertFalse(result.task_analysis["activation_ready"])
+            self.assertNotIn(
+                "semantic_skill_matches",
+                result.task_analysis["task"]["context"],
+            )
+            self.assertFalse((root / ".policy" / "current").exists())
+
+    def test_resolve_rejects_non_applicable_task_without_writing_current(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "CMakeLists.txt").write_text(
+                "project(docs LANGUAGES CXX)\n"
+                "set(CMAKE_CXX_STANDARD 20)\n",
+                encoding="utf-8",
+            )
+            runtime = PolicyRuntime(RuntimeConfig.from_values(root=root, policy_root="."))
+
+            with self.assertRaises(NonApplicableTaskError) as raised:
+                runtime.resolve("阅读文档，只分析不改", ("cpp.safe_generation",))
+
+            self.assertFalse(raised.exception.task_analysis["activation_ready"])
+            self.assertFalse((root / ".policy" / "current").exists())
+
+    def test_cli_resolve_reports_non_applicable_without_writing_current(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "CMakeLists.txt").write_text(
+                "project(docs LANGUAGES CXX)\n"
+                "set(CMAKE_CXX_STANDARD 20)\n",
+                encoding="utf-8",
+            )
+
+            output, exit_code = CommandDispatcher().dispatch(
+                argparse.Namespace(
+                    command="resolve",
+                    root=str(root),
+                    policy_root=".",
+                    skills="skills",
+                    packs="packs",
+                    task="阅读文档，只分析不改",
+                    pack=["cpp.safe_generation"],
+                    format="json",
+                )
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertFalse(output["applicable"])
+            self.assertFalse((root / ".policy" / "current").exists())
+
+    def test_pack_does_not_activate_unknown_task_from_project_context(self) -> None:
+        base = Skill.from_mapping(
+            {
+                "skill": {
+                    "id": "cpp.base",
+                    "name": "Base",
+                    "version": "1.0.0",
+                    "level": "domain",
+                    "domain": "cpp",
+                    "priority": 10,
+                    "activation": {
+                        "when": {"language": "cpp"},
+                        "triggers": ["write_code"],
+                    },
+                    "capabilities": ["code_generation"],
+                },
+                "rules": {
+                    "hard": [
+                        {"id": "base_rule", "must": "modern_cpp", "target": "base"}
+                    ]
+                },
+            }
+        )
+        packs = PackRegistry(
+            [
+                SkillPack.from_mapping(
+                    {
+                        "pack": {"id": "cpp.safe", "name": "Safe"},
+                        "includes": ["cpp.base"],
+                        "overrides": [
+                            {
+                                "id": "pack_preference",
+                                "prefer": "safety",
+                                "over": "speed",
+                                "target": "tradeoff",
+                            }
+                        ],
+                    }
+                )
+            ]
+        )
+        task = TaskContext(
+            domain="cpp",
+            task_type="unknown",
+            capabilities=(),
+            context={"language": "cpp", "standard": 20},
+        )
+
+        effective = PolicyEngine(SkillRegistry([base], packs)).evaluate(task, ("cpp.safe",))
+
+        self.assertFalse(effective.hard)
+        self.assertFalse(effective.preferences)
+
     def test_codex_wrapper_builds_command_with_task_last(self) -> None:
         command = _build_codex_command(
             ("codex",),
@@ -1207,6 +1419,186 @@ class PolicyRuntimeTests(unittest.TestCase):
             settings["extraKnownMarketplaces"]["ai-policy-runtime"]["source"]["path"],
             str(plugin_root),
         )
+
+    def test_configure_claude_desktop_can_enable_post_refinement(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path(tmp) / "plugin"
+
+            policy_path = configure_policy(
+                root,
+                plugin_root,
+                post_refine="standard",
+            )
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(policy["postRefine"], "standard")
+        self.assertEqual(policy["postRefinePacks"], [DEFAULT_POST_REFINE_PACK])
+
+    def test_configure_claude_desktop_uses_custom_post_refinement_packs(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path(tmp) / "plugin"
+
+            policy_path = configure_policy(
+                root,
+                plugin_root,
+                post_refine="strict",
+                post_refine_packs=("cpp.production_refinement", "project.refinement"),
+            )
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(policy["postRefine"], "strict")
+        self.assertEqual(
+            policy["postRefinePacks"],
+            ["cpp.production_refinement", "project.refinement"],
+        )
+
+    def test_configure_claude_desktop_can_disable_runtime_and_plugin(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path(tmp) / "plugin"
+
+            policy_path = configure_policy(root, plugin_root, enabled=False)
+            settings_path = configure_claude_settings(
+                root,
+                plugin_root,
+                "local",
+                enabled=False,
+            )
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+
+        self.assertFalse(policy["enabled"])
+        self.assertFalse(settings["enabledPlugins"][PLUGIN_ID])
+
+    def test_configure_claude_desktop_status_reports_current_features(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path(tmp) / "plugin"
+            configure_policy(root, plugin_root, post_refine="standard")
+            configure_claude_settings(root, plugin_root, "local")
+
+            current = claude_desktop_status(root, plugin_root, "local")
+
+        self.assertTrue(current["runtime_enabled"])
+        self.assertTrue(current["claude_agent_enabled"])
+        self.assertTrue(current["plugin_enabled"])
+        self.assertTrue(current["marketplace_registered"])
+        self.assertEqual(current["post_refine"], "standard")
+        self.assertEqual(current["post_refine_packs"], [DEFAULT_POST_REFINE_PACK])
+
+    def test_configure_claude_desktop_plugin_only_update_preserves_policy(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path(tmp) / "plugin"
+            policy_path = configure_policy(root, plugin_root, post_refine="strict")
+
+            configure_policy(
+                root,
+                plugin_root,
+                enabled=False,
+                configure_runtime=False,
+            )
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(policy["enabled"])
+        self.assertEqual(policy["postRefine"], "strict")
+
+    def test_configure_claude_desktop_cli_plugin_only_does_not_create_policy(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+
+            with patch("sys.stdout", new=io.StringIO()):
+                exit_code = configure_claude_desktop_main(
+                    ["--root", str(root), "--enable-plugin"]
+                )
+
+            settings = json.loads(
+                (root / ".claude" / "settings.local.json").read_text(encoding="utf-8")
+            )
+            policy_exists = (root / ".policy" / "config.json").exists()
+
+        self.assertEqual(exit_code, 0)
+        self.assertFalse(policy_exists)
+        self.assertTrue(settings["enabledPlugins"][PLUGIN_ID])
+
+    def test_configure_claude_desktop_post_refine_only_preserves_disabled_runtime(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path(tmp) / "plugin"
+            policy_path = configure_policy(root, plugin_root, enabled=False, post_refine="strict")
+
+            configure_policy(
+                root,
+                plugin_root,
+                post_refine="off",
+                configure_runtime=False,
+            )
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+
+        self.assertFalse(policy["enabled"])
+        self.assertEqual(policy["postRefine"], "off")
+        self.assertEqual(policy["postRefinePacks"], [])
+
+    def test_configure_claude_desktop_cli_post_refine_only_preserves_settings(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path(tmp) / "plugin"
+            policy_path = configure_policy(root, plugin_root, enabled=False)
+            settings_path = configure_claude_settings(root, plugin_root, "local", enabled=False)
+            before_settings = settings_path.read_text(encoding="utf-8")
+
+            with patch("sys.stdout", new=io.StringIO()):
+                exit_code = configure_claude_desktop_main(
+                    ["--root", str(root), "--post-refine", "standard"]
+                )
+
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+            after_settings = settings_path.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertFalse(policy["enabled"])
+        self.assertEqual(policy["postRefine"], "standard")
+        self.assertEqual(after_settings, before_settings)
+
+    def test_configure_claude_desktop_cli_post_refine_off_does_not_enable_new_project(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+
+            with patch("sys.stdout", new=io.StringIO()):
+                exit_code = configure_claude_desktop_main(
+                    ["--root", str(root), "--post-refine", "off"]
+                )
+
+            policy = json.loads(
+                (root / ".policy" / "config.json").read_text(encoding="utf-8")
+            )
+            settings_exists = (root / ".claude" / "settings.local.json").exists()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(policy, {"postRefine": "off", "postRefinePacks": []})
+        self.assertFalse(settings_exists)
+
+    def test_configure_claude_desktop_cli_reports_invalid_option_combinations(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+
+            with patch("sys.stderr", new=io.StringIO()) as stderr:
+                with self.assertRaises(SystemExit) as raised:
+                    configure_claude_desktop_main(
+                        [
+                            "--root",
+                            str(root),
+                            "--post-refine-pack",
+                            "cpp.production_refinement",
+                        ]
+                    )
+
+            message = stderr.getvalue()
+
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("--post-refine-pack requires --post-refine", message)
 
     def test_post_refinement_task_preserves_scope_and_behavior(self) -> None:
         task = build_post_refinement_task("Refactor the matching engine API.", "standard")

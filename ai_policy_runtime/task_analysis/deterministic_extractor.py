@@ -67,21 +67,33 @@ class DeterministicTaskExtractor:
         self,
         text: str,
         state: ExtractionState,
-        gate: TaskGate,
+        gate: TaskGate | None,
     ) -> None:
         if self._semantic_index is None:
+            return
+        if gate is None:
             return
         scope = self._lexicon.semantic_scope(gate)
         if not scope:
             return
+        if gate.task_type is None:
+            for match in self._semantic_index.search_scoped(text, scope=scope):
+                if match.rule.field == "task_type":
+                    state.apply_rule(match.rule, match.evidence())
+            gated = self._semantic_gate(state)
+            if gated is None or gated.task_type is None:
+                return
+            scope = self._lexicon.semantic_scope(gated)
         for match in self._semantic_index.search_scoped(text, scope=scope):
             state.apply_rule(match.rule, match.evidence())
 
-    def _semantic_gate(self, state: ExtractionState) -> TaskGate:
+    def _semantic_gate(self, state: ExtractionState) -> TaskGate | None:
         """Build the first-stage gate from exact evidence and nonsemantic signals."""
 
         domain = state.best_value("domain", "")
         task_type = state.best_value("task_type", "")
+        if not domain and (not task_type or task_type == "unknown"):
+            return None
         return TaskGate(
             domain=domain or None,
             task_type=task_type if task_type != "unknown" else None,

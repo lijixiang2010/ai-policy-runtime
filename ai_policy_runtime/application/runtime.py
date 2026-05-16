@@ -36,6 +36,21 @@ from ai_policy_runtime.task_analysis import (
 from ai_policy_runtime.task_analysis.analyzer import optional_sentence_transformer_provider
 
 
+class NonApplicableTaskError(RuntimeError):
+    """Raised when a task does not activate any task-scoped policy."""
+
+    def __init__(self, task_analysis: dict[str, Any]) -> None:
+        super().__init__("Task did not produce applicable Effective Rules.")
+        self.task_analysis = task_analysis
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "applicable": False,
+            "result": None,
+            "task_analysis": self.task_analysis,
+        }
+
+
 @dataclass(frozen=True)
 class ResolveResult:
     """Result of resolving a task into Effective Rules."""
@@ -109,6 +124,8 @@ class PolicyRuntime:
             task_text,
             pack_ids,
         )
+        if not analysis.activation_ready or not _has_policy_content(effective_rules):
+            raise NonApplicableTaskError(analysis.to_dict())
         return self._write_resolved_state(
             task_text,
             analysis,
@@ -127,7 +144,7 @@ class PolicyRuntime:
             task_text,
             pack_ids,
         )
-        if not _has_policy_content(effective_rules):
+        if not analysis.activation_ready or not _has_policy_content(effective_rules):
             return ResolveApplicabilityResult(
                 applicable=False,
                 resolve_result=None,

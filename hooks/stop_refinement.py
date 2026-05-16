@@ -52,6 +52,8 @@ def build_stop_response(payload: dict[str, object]) -> dict[str, object]:
         return {"continue": True}
 
     prompt = _original_prompt(project_root, payload)
+    if prompt is None:
+        return {"continue": True}
     reason = build_refinement_continuation_prompt(prompt, project_root, config)
     return {
         "decision": "block",
@@ -97,12 +99,9 @@ def _resolve_refinement_effective_prompt(
     return (result.current / "effective-prompt.md").read_text(encoding="utf-8")
 
 
-def _original_prompt(project_root: Path, payload: dict[str, object]) -> str:
+def _original_prompt(project_root: Path, payload: dict[str, object]) -> str | None:
     state = _load_turn_state(project_root)
-    prompt = _state_prompt_for_turn(state, payload)
-    if prompt:
-        return prompt
-    return "the just-completed agent task"
+    return _state_prompt_for_turn(state, payload)
 
 
 def _load_turn_state(project_root: Path) -> dict[str, Any]:
@@ -117,12 +116,20 @@ def _state_prompt_for_turn(
     state: dict[str, Any],
     payload: dict[str, object],
 ) -> str | None:
-    state_turn_id = state.get("turn_id")
-    payload_turn_id = payload.get("turn_id")
-    if state_turn_id and payload_turn_id and state_turn_id != payload_turn_id:
+    if not _same_optional_id(state.get("turn_id"), payload.get("turn_id")):
+        return None
+    if not _same_optional_id(state.get("session_id"), payload.get("session_id")):
         return None
     prompt = state.get("prompt")
     return str(prompt).strip() if prompt else None
+
+
+def _same_optional_id(state_value: object, payload_value: object) -> bool:
+    """Return whether a stored turn/session id can be trusted for this payload."""
+
+    if state_value is None:
+        return True
+    return payload_value is not None and state_value == payload_value
 
 
 def _verification_instruction(verify_target: str | None) -> str:

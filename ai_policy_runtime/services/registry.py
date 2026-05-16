@@ -60,7 +60,11 @@ class SkillRegistry:
     ) -> tuple[list[Skill], tuple[Rule, ...]]:
         activation = ActivationSet(self._skills)
         activation.add(skill for skill in self._skills.values() if self._matches(skill, task))
-        pack_overrides = self._apply_packs(activation, pack_ids)
+        pack_overrides = (
+            self._apply_packs(activation, pack_ids)
+            if _pack_activation_allowed(task)
+            else []
+        )
         activation.include_dependencies()
         return activation.filtered(), tuple(pack_overrides)
 
@@ -126,6 +130,16 @@ def _tags_match(skill_tags: tuple[str, ...], task_tags: tuple[str, ...]) -> bool
     if not meaningful_skill_tags:
         return True
     return bool(meaningful_skill_tags.intersection(task_tags))
+
+
+def _pack_activation_allowed(task: TaskContext) -> bool:
+    """Packs refine an identified task; they must not create one from context alone."""
+
+    if task.task_type == "unknown":
+        return False
+    if task.domain != "general":
+        return True
+    return task.context.get("artifact_type") == "code" or bool(task.context.get("language"))
 
 
 class ActivationSet:

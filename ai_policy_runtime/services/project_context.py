@@ -13,7 +13,11 @@ except ImportError:  # pragma: no cover - exercised when optional dependency is 
     yaml = None
 
 from ai_policy_runtime.domain.task import TaskContext
-from ai_policy_runtime.task_analysis.schema import ExtractionEvidence, TaskAnalysis
+from ai_policy_runtime.task_analysis.schema import (
+    ExtractionEvidence,
+    TaskAnalysis,
+    is_activation_ready,
+)
 
 
 PROJECT_CONFIDENCE_THRESHOLD = 0.7
@@ -390,6 +394,7 @@ class ProjectContextMerger:
             confidence=confidence,
             evidence=tuple(evidence),
             needs_review=confidence < PROJECT_CONFIDENCE_THRESHOLD,
+            activation_ready=is_activation_ready(merged_task),
         )
 
     @property

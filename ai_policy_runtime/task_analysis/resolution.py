@@ -6,7 +6,7 @@ from typing import Any, Iterable
 from ai_policy_runtime.domain.task import TaskContext
 
 from .lexicon import LexiconRule, TaskLexicon
-from .schema import ExtractionEvidence, TaskAnalysis
+from .schema import ExtractionEvidence, TaskAnalysis, is_activation_ready
 
 
 GENERAL_DOMAIN = "general"
@@ -88,6 +88,7 @@ class ExtractionState:
             confidence=confidence,
             evidence=tuple(self.evidence),
             needs_review=confidence < REVIEW_CONFIDENCE_THRESHOLD,
+            activation_ready=is_activation_ready(task),
         )
 
 

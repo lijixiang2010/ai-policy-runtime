@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from ai_policy_runtime.adapters.agent import POST_REFINE_PACK_ID
+from ai_policy_runtime.application.runtime import NonApplicableTaskError
 
 
 class JsonResult(Protocol):
@@ -41,7 +42,11 @@ def run_agent_cli(
 
     parser = _build_parser(spec)
     args = parser.parse_args()
-    result = run_wrapper(make_options(args))
+    try:
+        result = run_wrapper(make_options(args))
+    except NonApplicableTaskError as exc:
+        print(json.dumps(exc.to_dict(), indent=2))
+        return
     print(json.dumps(result.to_dict(), indent=2))
     if result.exit_code:
         raise SystemExit(result.exit_code)

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ai_policy_runtime.application.runtime import PolicyRuntime
+from ai_policy_runtime.application.runtime import NonApplicableTaskError, PolicyRuntime
 from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.infrastructure.schema_loader import SchemaLoader
 from ai_policy_runtime.services.local_models import LocalModelManager
@@ -150,6 +150,8 @@ class CommandDispatcher:
         }
         try:
             return handlers[args.command](args)
+        except NonApplicableTaskError as exc:
+            return exc.to_dict(), 0
         except KeyError as exc:
             raise ValueError(f"Unsupported command: {args.command}") from exc
 
