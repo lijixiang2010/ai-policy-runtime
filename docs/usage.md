@@ -517,6 +517,34 @@ for both supported plugin integrations.
 Claude for Windows exposes Claude Code through the desktop Code tab. The plugin
 integration above is the path for local and SSH Code sessions. Configure the
 Claude Desktop client from Claude's plugin UI, not from the VS Code extension.
+
+You can preconfigure a workspace with the helper script:
+
+```powershell
+python tools/configure_claude_desktop.py `
+  --root D:\work\target-project `
+  --plugin-root D:\MilesLi\ai-policy-runtime
+```
+
+The script updates:
+
+```text
+D:\work\target-project\.policy\config.json
+D:\work\target-project\.claude\settings.local.json
+```
+
+It enables `agents: ["claude"]`, registers this repository as a local Claude
+plugin marketplace, and enables `ai-policy-runtime@ai-policy-runtime` for that
+workspace. Use `--scope project` to write `.claude/settings.json` instead, or
+`--scope user` to write `%USERPROFILE%\.claude\settings.json`.
+
+When the Claude CLI is available, add `--install` to also run Claude's plugin
+commands:
+
+```powershell
+python tools/configure_claude_desktop.py --install
+```
+
 In Claude for Windows:
 
 1. Switch to the Code tab.

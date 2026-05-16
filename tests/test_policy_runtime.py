@@ -41,6 +41,11 @@ from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_mapping
 from ai_policy_runtime.services.verification import FileVerifier, Violation, verify_rules
 from hooks import stop_refinement, user_prompt_submit
+from tools.configure_claude_desktop import (
+    PLUGIN_ID,
+    configure_claude_settings,
+    configure_policy,
+)
 
 
 def _load_fixture(name: str) -> dict[str, object]:
@@ -1155,6 +1160,31 @@ class PolicyRuntimeTests(unittest.TestCase):
                 "--dangerously-skip-permissions",
                 "帮我写一个 C++20 低延迟队列",
             ),
+        )
+
+    def test_configure_claude_desktop_writes_policy_and_settings(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path(tmp) / "plugin"
+            (plugin_root / ".claude-plugin").mkdir(parents=True)
+            (plugin_root / ".claude-plugin" / "plugin.json").write_text("{}", encoding="utf-8")
+            (plugin_root / ".claude-plugin" / "marketplace.json").write_text("{}", encoding="utf-8")
+            (plugin_root / "hooks").mkdir()
+            (plugin_root / "hooks" / "claude-hooks.json").write_text("{}", encoding="utf-8")
+
+            policy_path = configure_policy(root, plugin_root)
+            settings_path = configure_claude_settings(root, plugin_root, "local")
+
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(policy["enabled"])
+        self.assertIn("claude", policy["agents"])
+        self.assertEqual(policy["policyRoot"], str(plugin_root))
+        self.assertTrue(settings["enabledPlugins"][PLUGIN_ID])
+        self.assertEqual(
+            settings["extraKnownMarketplaces"]["ai-policy-runtime"]["source"]["path"],
+            str(plugin_root),
         )
 
     def test_post_refinement_task_preserves_scope_and_behavior(self) -> None:
