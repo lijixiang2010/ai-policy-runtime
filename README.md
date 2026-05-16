@@ -302,6 +302,8 @@ docs/              design and usage documentation
 
 - [Usage Guide](docs/usage.md): CLI commands, wrappers, plugin setup, VS Code,
   embeddings, cache, and verification details.
+- [NPM Install Guide](docs/npm-install.md): end-user installation,
+  `ai-policy` commands, Claude Desktop setup, and troubleshooting.
 - [Release Guide](docs/release.md): NPM release checks, versioning, and publish
   workflow.
 - [Skill Policy Runtime](docs/skill_policy_runtime.md): runtime model and core

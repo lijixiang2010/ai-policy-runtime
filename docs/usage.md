@@ -16,6 +16,9 @@ This exposes `ai-policy` and the compatibility alias `ai-policy-runtime`.
 The command uses the installed package as its policy and plugin root, so users
 do not need to clone this repository.
 
+See [NPM Install Guide](npm-install.md) for the end-user install flow,
+Claude Desktop setup, runtime diagnostics, and troubleshooting.
+
 ## Task Analysis
 
 Task analysis uses:
