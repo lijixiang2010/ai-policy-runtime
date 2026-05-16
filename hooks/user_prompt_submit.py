@@ -40,9 +40,8 @@ def main() -> int:
             config.policy_root(project_root),
             config.packs,
         )
-        if not _has_effective_rules(additional_context):
-            additional_context = ""
-        _write_turn_state(project_root, payload, prompt, config)
+        if additional_context:
+            _write_turn_state(project_root, payload, prompt, config)
     except Exception as exc:
         additional_context = (
             "AI Policy Runtime hook could not generate Effective Rules for this turn. "
@@ -156,21 +155,10 @@ def _resolve_effective_prompt(
             policy_root=policy_root,
         )
     )
-    result = runtime.resolve(prompt, packs)
-    return (result.current / "effective-prompt.md").read_text(encoding="utf-8")
-
-
-def _has_effective_rules(prompt: str) -> bool:
-    lower = prompt.lower()
-    return any(
-        section in lower and f"{section}\n\n- " in lower
-        for section in (
-            "## hard rules",
-            "## soft rules",
-            "## preferences",
-            "## verification requirements",
-        )
-    )
+    result = runtime.resolve_if_applicable(prompt, packs)
+    if not result.applicable or result.resolve_result is None:
+        return ""
+    return (result.resolve_result.current / "effective-prompt.md").read_text(encoding="utf-8")
 
 
 def _prepare_imports() -> None:

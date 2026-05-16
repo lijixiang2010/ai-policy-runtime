@@ -49,6 +49,22 @@ class ResolveResult:
 
 
 @dataclass(frozen=True)
+class ResolveApplicabilityResult:
+    """Result of attempting to resolve policy only when task rules apply."""
+
+    applicable: bool
+    resolve_result: ResolveResult | None
+    task_analysis: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "applicable": self.applicable,
+            "result": self.resolve_result.to_dict() if self.resolve_result else None,
+            "task_analysis": self.task_analysis,
+        }
+
+
+@dataclass(frozen=True)
 class ExplainResult:
     """Result of task analysis without resolving Effective Rules."""
 
@@ -89,31 +105,46 @@ class PolicyRuntime:
         return validate_repository(paths.skills, paths.packs)
 
     def resolve(self, task_text: str, pack_ids: tuple[str, ...] = ()) -> ResolveResult:
-        paths = self.config.paths
-        project = self._analyze_project()
-        analysis = self._analyze(task_text, project)
-        task = analysis.task
-        registry = SkillRegistry.from_dirs(paths.skills, paths.packs)
-        effective_rules = PolicyEngine(registry).evaluate(task, pack_ids)
-        contributing_skills = _contributing_skill_ids(effective_rules)
-        current, structured = write_current_state(
-            root=paths.root,
-            task=task,
-            effective_rules=effective_rules,
-            trace={
-                "task": task_text,
-                "packs": list(pack_ids),
-                "project_context": project.to_dict(),
-                "task_analysis": analysis.to_dict(),
-                "active_skills": contributing_skills,
-                "conflict_count": len(effective_rules.conflicts),
-            },
-            project_context=project.to_dict(),
+        project, analysis, effective_rules, contributing_skills = self._evaluate(
+            task_text,
+            pack_ids,
         )
-        return ResolveResult(
-            current=current,
+        return self._write_resolved_state(
+            task_text,
+            analysis,
+            project,
             effective_rules=effective_rules,
-            structured=structured,
+            pack_ids=pack_ids,
+            contributing_skills=contributing_skills,
+        )
+
+    def resolve_if_applicable(
+        self,
+        task_text: str,
+        pack_ids: tuple[str, ...] = (),
+    ) -> ResolveApplicabilityResult:
+        project, analysis, effective_rules, contributing_skills = self._evaluate(
+            task_text,
+            pack_ids,
+        )
+        if not _has_policy_content(effective_rules):
+            return ResolveApplicabilityResult(
+                applicable=False,
+                resolve_result=None,
+                task_analysis=analysis.to_dict(),
+            )
+        resolved = self._write_resolved_state(
+            task_text,
+            analysis,
+            project,
+            effective_rules=effective_rules,
+            pack_ids=pack_ids,
+            contributing_skills=contributing_skills,
+        )
+        return ResolveApplicabilityResult(
+            applicable=True,
+            resolve_result=resolved,
+            task_analysis=analysis.to_dict(),
         )
 
     def explain(self, task_text: str) -> ExplainResult:
@@ -202,6 +233,49 @@ class PolicyRuntime:
     def _analyze_project(self) -> ProjectAnalysis:
         return ProjectContextAnalyzer(self.config.paths.root).analyze()
 
+    def _evaluate(
+        self,
+        task_text: str,
+        pack_ids: tuple[str, ...],
+    ):
+        paths = self.config.paths
+        project = self._analyze_project()
+        analysis = self._analyze(task_text, project)
+        registry = SkillRegistry.from_dirs(paths.skills, paths.packs)
+        effective_rules = PolicyEngine(registry).evaluate(analysis.task, pack_ids)
+        contributing_skills = _contributing_skill_ids(effective_rules)
+        return project, analysis, effective_rules, contributing_skills
+
+    def _write_resolved_state(
+        self,
+        task_text: str,
+        analysis,
+        project: ProjectAnalysis,
+        *,
+        effective_rules: EffectiveRules,
+        pack_ids: tuple[str, ...],
+        contributing_skills: list[str],
+    ) -> ResolveResult:
+        current, structured = write_current_state(
+            root=self.config.paths.root,
+            task=analysis.task,
+            effective_rules=effective_rules,
+            trace={
+                "task": task_text,
+                "packs": list(pack_ids),
+                "project_context": project.to_dict(),
+                "task_analysis": analysis.to_dict(),
+                "active_skills": contributing_skills,
+                "conflict_count": len(effective_rules.conflicts),
+            },
+            project_context=project.to_dict(),
+        )
+        return ResolveResult(
+            current=current,
+            effective_rules=effective_rules,
+            structured=structured,
+        )
+
     def _supported_domains(self) -> set[str]:
         try:
             registry = SkillRegistry.from_dirs(self.config.paths.skills, self.config.paths.packs)
@@ -234,3 +308,14 @@ def _contributing_skill_ids(effective_rules: EffectiveRules) -> list[str]:
         if rule.source
     }
     return sorted(sources)
+
+
+def _has_policy_content(effective_rules: EffectiveRules) -> bool:
+    return any(
+        (
+            effective_rules.hard,
+            effective_rules.soft,
+            effective_rules.preferences,
+            effective_rules.exceptions,
+        )
+    )

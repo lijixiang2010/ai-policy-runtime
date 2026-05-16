@@ -1144,21 +1144,14 @@ class PolicyRuntimeTests(unittest.TestCase):
                 {"enabled": True, "packs": ["cpp.safe_generation"]},
             )
 
-    def test_hook_omits_empty_effective_rules_from_additional_context(self) -> None:
-        self.assertFalse(
-            user_prompt_submit._has_effective_rules(
-                "# Effective Rules for Current Task\n\n"
-                "## Task Context\n\n- Domain: general\n\n"
-                "## HARD Rules\n\n"
-                "## SOFT Rules\n\n"
-            )
-        )
-        self.assertTrue(
-            user_prompt_submit._has_effective_rules(
-                "# Effective Rules for Current Task\n\n"
-                "## HARD Rules\n\n- Avoid undefined behavior.\n"
-            )
-        )
+    def test_resolve_if_applicable_skips_non_policy_input_without_writing_current(self) -> None:
+        with TemporaryDirectory() as tmp:
+            runtime = PolicyRuntime(RuntimeConfig.from_values(root=tmp, policy_root="."))
+
+            result = runtime.resolve_if_applicable("hello", ("cpp.safe_generation",))
+
+            self.assertFalse(result.applicable)
+            self.assertFalse((Path(tmp) / ".policy" / "current").exists())
 
     def test_codex_wrapper_builds_command_with_task_last(self) -> None:
         command = _build_codex_command(
