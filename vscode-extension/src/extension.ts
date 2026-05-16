@@ -46,7 +46,6 @@ const COMMANDS = {
   configurePacks: 'aiPolicy.configurePacks',
   showStatus: 'aiPolicy.showStatus',
   showEffectiveRules: 'aiPolicy.showEffectiveRules',
-  prepareClaudeDesktop: 'aiPolicy.prepareClaudeDesktop',
   validateRuntime: 'aiPolicy.validateRuntime'
 } as const;
 
@@ -109,7 +108,6 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(COMMANDS.configurePacks, () => configurePacks(workspace)),
     vscode.commands.registerCommand(COMMANDS.showStatus, () => showStatus(workspace)),
     vscode.commands.registerCommand(COMMANDS.showEffectiveRules, () => showEffectiveRules(workspace)),
-    vscode.commands.registerCommand(COMMANDS.prepareClaudeDesktop, () => prepareClaudeDesktop(workspace, status, panel)),
     vscode.commands.registerCommand(COMMANDS.validateRuntime, () => validateRuntime(workspace)),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(CONFIG_SECTION)) {
@@ -232,10 +230,6 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     }
     if (message.type === 'showEffectiveRules') {
       await showEffectiveRules(this.workspace);
-      return;
-    }
-    if (message.type === 'prepareClaudeDesktop') {
-      await prepareClaudeDesktop(this.workspace, this.status, this);
       return;
     }
     if (message.type === 'validateRuntime') {
@@ -509,7 +503,6 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
 
   <div class="actions">
     <button id="save">Save Configuration</button>
-    <button id="prepareClaude" class="secondary">Prepare Claude Desktop</button>
     <button id="show" class="secondary">Show Effective Rules</button>
     <button id="validate" class="secondary">Validate Runtime</button>
     <div id="status" class="status"></div>
@@ -619,7 +612,6 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       vscode.postMessage({ type: 'save', config: readConfig() });
       setTimeout(() => { byId('status').textContent = 'Saved'; }, 120);
     });
-    byId('prepareClaude').addEventListener('click', () => vscode.postMessage({ type: 'prepareClaudeDesktop' }));
     byId('show').addEventListener('click', () => vscode.postMessage({ type: 'showEffectiveRules' }));
     byId('validate').addEventListener('click', () => vscode.postMessage({ type: 'validateRuntime' }));
   </script>
@@ -741,74 +733,6 @@ async function showEffectiveRules(workspace: PolicyWorkspace): Promise<void> {
   await vscode.window.showTextDocument(document);
 }
 
-async function prepareClaudeDesktop(
-  workspace: PolicyWorkspace,
-  status: PolicyStatusBar,
-  panel: PolicyConfigViewProvider
-): Promise<void> {
-  const paths = workspace.pathsOrWarn();
-  if (!paths) {
-    return;
-  }
-
-  const config = workspace.readConfig();
-  const agents = Array.from(new Set([...config.agents, 'claude'] as AgentTarget[]));
-
-  await Promise.all([
-    workspace.updateSetting('enabled', true),
-    workspace.updateSetting('agents', agents)
-  ]);
-  await workspace.syncProjectConfig();
-  status.refresh();
-  panel.refresh();
-
-  const updated = workspace.readConfig();
-  const pluginRoot = await claudePluginRootCandidate(paths.root, updated);
-  const pluginManifest = path.join(pluginRoot, '.claude-plugin', 'plugin.json');
-  const hookConfig = path.join(pluginRoot, 'hooks', 'claude-hooks.json');
-  const manifestReady = await exists(pluginManifest);
-  const hooksReady = await exists(hookConfig);
-
-  const document = await vscode.workspace.openTextDocument({
-    language: 'markdown',
-    content: [
-      '# Claude Desktop Readiness',
-      '',
-      `Workspace config: \`${paths.config}\``,
-      `Enabled: ${updated.enabled}`,
-      `Agents: ${updated.agents.join(', ') || '(none)'}`,
-      `Packs: ${updated.packs.join(', ') || '(none)'}`,
-      '',
-      '## Plugin Files',
-      '',
-      `Plugin root: \`${pluginRoot}\``,
-      `Manifest: ${manifestReady ? 'ready' : 'missing'} - \`${pluginManifest}\``,
-      `Hooks: ${hooksReady ? 'ready' : 'missing'} - \`${hookConfig}\``,
-      manifestReady && hooksReady
-        ? ''
-        : 'Set `aiPolicy.policyRoot` to the AI Policy Runtime checkout or installable plugin root when these files are missing from the workspace.',
-      '',
-      '## Claude for Windows',
-      '',
-      '1. Open Claude for Windows.',
-      '2. Switch to the Code tab.',
-      '3. Start or open a local project session.',
-      '4. Open the prompt `+` menu, choose Plugins, then add this plugin root.',
-      '5. Enable AI Policy Runtime for that session.',
-      '',
-      'Remote sessions do not load plugins; use a local or SSH session when plugin hooks are required.',
-      '',
-      'Official docs:',
-      '',
-      '- https://code.claude.com/docs/en/desktop',
-      '- https://code.claude.com/docs/en/plugins-reference',
-      '- https://code.claude.com/docs/en/hooks'
-    ].join('\n')
-  });
-  await vscode.window.showTextDocument(document);
-  vscode.window.showInformationMessage('Claude Desktop workspace configuration is ready.');
-}
-
 async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
   const paths = workspace.pathsOrWarn();
   if (!paths) {
@@ -820,13 +744,6 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
     ? `AI Policy Runtime config is ready: ${paths.config}`
     : 'AI Policy Runtime config was not created.';
   vscode.window.showInformationMessage(message);
-}
-
-async function claudePluginRootCandidate(root: string, config: PolicyConfig): Promise<string> {
-  if (config.policyRoot) {
-    return path.resolve(root, config.policyRoot);
-  }
-  return root;
 }
 
 function cleanOptionalString(value: string): string | undefined {

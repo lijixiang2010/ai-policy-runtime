@@ -21,9 +21,7 @@ not replace agent hooks or wrappers.
    continue once before ending a turn for production refinement.
 4. Run `AI Policy: Configure Packs`.
 5. Select Codex, Claude Code, or both in the side-bar configuration view.
-6. Run `AI Policy: Prepare Claude Desktop` when using Claude for Windows Code
-   tab.
-7. Use your agent normally.
+6. Use your VS Code agent plugin normally.
 
 ## Local VSIX Install
 
@@ -50,7 +48,6 @@ Developer: Reload Window
 - `AI Policy: Configure Packs`
 - `AI Policy: Show Status`
 - `AI Policy: Show Effective Rules`
-- `AI Policy: Prepare Claude Desktop`
 - `AI Policy: Validate Runtime`
 
 ## Settings

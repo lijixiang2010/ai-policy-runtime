@@ -194,8 +194,6 @@ A VS Code extension is also included in `vscode-extension/`. It writes
 workspace configuration to `.policy/config.json` so Codex and Claude Code
 integrations can enable or disable packs, select target agents, and configure
 one-click post-task refinement without hand-editing environment variables.
-It also includes a Claude Desktop readiness command for the Claude for Windows
-Code tab.
 
 ## Programmatic Use
 

@@ -405,7 +405,6 @@ AI Policy: Enable Post-Task Refinement
 AI Policy: Configure Packs
 AI Policy: Show Status
 AI Policy: Show Effective Rules
-AI Policy: Prepare Claude Desktop
 AI Policy: Validate Runtime
 ```
 
@@ -516,17 +515,9 @@ for both supported plugin integrations.
 ## Use with Claude for Windows
 
 Claude for Windows exposes Claude Code through the desktop Code tab. The plugin
-integration above is the path for local and SSH Code sessions.
-
-From VS Code, run:
-
-```text
-AI Policy: Prepare Claude Desktop
-```
-
-The command enables this workspace, adds `claude` to `.policy/config.json`, and
-opens a readiness document with the plugin root, manifest path, and hook config
-path. In Claude for Windows:
+integration above is the path for local and SSH Code sessions. Configure the
+Claude Desktop client from Claude's plugin UI, not from the VS Code extension.
+In Claude for Windows:
 
 1. Switch to the Code tab.
 2. Start or open a local project session.

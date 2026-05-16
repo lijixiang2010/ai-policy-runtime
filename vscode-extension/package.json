@@ -42,7 +42,6 @@
     "onCommand:aiPolicy.configurePacks",
     "onCommand:aiPolicy.showStatus",
     "onCommand:aiPolicy.showEffectiveRules",
-    "onCommand:aiPolicy.prepareClaudeDesktop",
     "onCommand:aiPolicy.validateRuntime",
     "onView:aiPolicy.config",
     "onStartupFinished"
@@ -91,10 +90,6 @@
       {
         "command": "aiPolicy.showEffectiveRules",
         "title": "AI Policy Runtime: Show Effective Rules"
-      },
-      {
-        "command": "aiPolicy.prepareClaudeDesktop",
-        "title": "AI Policy Runtime: Prepare Claude Desktop"
       },
       {
         "command": "aiPolicy.validateRuntime",
