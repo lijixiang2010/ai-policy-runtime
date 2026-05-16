@@ -1,0 +1,63 @@
+{
+  "name": "ai-policy-runtime",
+  "version": "0.1.0",
+  "description": "Task-scoped policy runtime and Claude/Codex agent plugin tooling.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Miles Li"
+  },
+  "homepage": "https://github.com/lkimuk/ai-policy-runtime#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lkimuk/ai-policy-runtime.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lkimuk/ai-policy-runtime/issues"
+  },
+  "keywords": [
+    "ai",
+    "policy",
+    "claude-code",
+    "codex",
+    "agent",
+    "hooks",
+    "developer-tools"
+  ],
+  "type": "commonjs",
+  "bin": {
+    "ai-policy": "bin/ai-policy.js",
+    "ai-policy-runtime": "bin/ai-policy.js"
+  },
+  "files": [
+    "ai_policy_runtime/**/*.py",
+    "bin/*.js",
+    "docs/**/*.md",
+    "docs/assets/*.png",
+    "hooks/*.json",
+    "hooks/*.py",
+    "packs/*.yaml",
+    "schemas/*.json",
+    "skills/**/*.yaml",
+    "tools/*.py",
+    ".claude-plugin/*.json",
+    ".codex-plugin/*.json",
+    "MANIFEST.in",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "node --check bin/ai-policy.js && node --check bin/ai-policy-hook.js",
+    "test": "python -m unittest discover -s tests",
+    "pack:dry-run": "node bin/npm-pack-dry-run.js",
+    "publish:dry-run": "node bin/npm-publish-dry-run.js",
+    "release:check": "npm run check && npm run pack:dry-run && npm test",
+    "prepublishOnly": "npm run release:check"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

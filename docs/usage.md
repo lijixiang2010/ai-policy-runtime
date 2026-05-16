@@ -4,6 +4,18 @@ This guide keeps the operational details for AI Policy Runtime. The README is
 the project entry point; this file is the reference for day-to-day commands and
 integration knobs.
 
+## Install
+
+For normal use, install the packaged command:
+
+```powershell
+npm install -g ai-policy-runtime
+```
+
+This exposes `ai-policy` and the compatibility alias `ai-policy-runtime`.
+The command uses the installed package as its policy and plugin root, so users
+do not need to clone this repository.
+
 ## Task Analysis
 
 Task analysis uses:
@@ -64,7 +76,7 @@ phrases.
 To verify which semantic path works in your environment, run:
 
 ```powershell
-python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+ai-policy explain "帮我写一个 C++20 低延迟队列"
 ```
 
 The output should include structured context such as `hot_path: true`,
@@ -75,16 +87,16 @@ You can force each provider while testing:
 
 ```powershell
 $env:AI_POLICY_EMBEDDING_PROVIDER="openai-compatible"
-python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+ai-policy explain "帮我写一个 C++20 低延迟队列"
 
 $env:AI_POLICY_EMBEDDING_PROVIDER="local"
-python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+ai-policy explain "帮我写一个 C++20 低延迟队列"
 
 $env:AI_POLICY_EMBEDDING_PROVIDER="hashing"
-python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+ai-policy explain "帮我写一个 C++20 低延迟队列"
 
 $env:AI_POLICY_EMBEDDING_PROVIDER="disabled"
-python -m ai_policy_runtime.cli explain "帮我写一个 C++20 低延迟队列"
+ai-policy explain "帮我写一个 C++20 低延迟队列"
 ```
 
 In automatic mode, leave `AI_POLICY_EMBEDDING_PROVIDER` unset. Automatic mode
@@ -103,13 +115,13 @@ pip install "ai-policy-runtime[semantic]"
 Then install the recommended local model into the policy asset root:
 
 ```powershell
-python -m ai_policy_runtime.cli model install
+ai-policy model install
 ```
 
 Inspect local model status with:
 
 ```powershell
-python -m ai_policy_runtime.cli model list
+ai-policy model list
 ```
 
 The default local model path is:
@@ -138,7 +150,7 @@ Semantic index vectors are cached under:
 Explain Task Analysis without resolving rules:
 
 ```powershell
-python -m ai_policy_runtime.cli explain "写一个 C++20 数据通道，主循环里不能有分配和阻塞，尾延迟要稳"
+ai-policy explain "写一个 C++20 数据通道，主循环里不能有分配和阻塞，尾延迟要稳"
 ```
 
 The runtime scans project files before resolving a task. High-confidence facts
@@ -180,43 +192,43 @@ tags:
 Inspect the current resolved state:
 
 ```powershell
-python -m ai_policy_runtime.cli inspect
+ai-policy inspect
 ```
 
 Print bundled schemas:
 
 ```powershell
-python -m ai_policy_runtime.cli schema skill
-python -m ai_policy_runtime.cli schema pack
-python -m ai_policy_runtime.cli schema effective-rules
+ai-policy schema skill
+ai-policy schema pack
+ai-policy schema effective-rules
 ```
 
 List or clear semantic-index cache entries:
 
 ```powershell
-python -m ai_policy_runtime.cli cache list
-python -m ai_policy_runtime.cli cache clear
+ai-policy cache list
+ai-policy cache clear
 ```
 
 ## Resolve a Task
 
 ```powershell
-python -m ai_policy_runtime.cli resolve "帮我写一个 C++20 低延迟队列"
-python -m ai_policy_runtime.cli resolve --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+ai-policy resolve "帮我写一个 C++20 低延迟队列"
+ai-policy resolve --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
 ```
 
 `resolve` prints the final agent-facing prompt by default. For explicitness in
 test scripts, you can also pass `--format prompt`:
 
 ```powershell
-python -m ai_policy_runtime.cli resolve --format prompt "帮我写一个 C++20 低延迟队列"
-python -m ai_policy_runtime.cli resolve --format prompt --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+ai-policy resolve --format prompt "帮我写一个 C++20 低延迟队列"
+ai-policy resolve --format prompt --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
 ```
 
 Use `--format json` only when a tool needs structured command output:
 
 ```powershell
-python -m ai_policy_runtime.cli resolve --format json "帮我写一个 C++20 低延迟队列"
+ai-policy resolve --format json "帮我写一个 C++20 低延迟队列"
 ```
 
 This writes the current task state to `.policy/current/`:
@@ -232,7 +244,7 @@ trace.json
 ## Validate Skills
 
 ```powershell
-python -m ai_policy_runtime.cli validate
+ai-policy validate
 ```
 
 Validation combines bundled JSON Schema checks from `schemas/` with semantic
@@ -241,9 +253,9 @@ runtime checks such as dependency and pack-reference validation.
 ## Inject Effective Rules
 
 ```powershell
-python -m ai_policy_runtime.cli inject --target custom
-python -m ai_policy_runtime.cli inject --target codex
-python -m ai_policy_runtime.cli inject --target claude
+ai-policy inject --target custom
+ai-policy inject --target codex
+ai-policy inject --target claude
 ```
 
 `codex` updates the generated block in `AGENTS.md`; `claude` updates
@@ -521,29 +533,31 @@ Claude Desktop client from Claude's plugin UI, not from the VS Code extension.
 You can preconfigure a workspace with the helper script:
 
 ```powershell
-python tools/configure_claude_desktop.py `
-  --root D:\work\target-project `
-  --plugin-root D:\MilesLi\ai-policy-runtime
+ai-policy configure claude --root D:\work\target-project
 ```
 
 Enable one-pass post-refinement during the same setup when the desktop client
 should ask Claude to continue once after an applicable coding task:
 
 ```powershell
-python tools/configure_claude_desktop.py `
-  --root D:\work\target-project `
-  --plugin-root D:\MilesLi\ai-policy-runtime `
-  --post-refine standard
+ai-policy configure claude --root D:\work\target-project --post-refine standard
 ```
 
 Query or change the same workspace later without editing JSON:
 
 ```powershell
-python tools/configure_claude_desktop.py --root D:\work\target-project --status
-python tools/configure_claude_desktop.py --root D:\work\target-project --disable
-python tools/configure_claude_desktop.py --root D:\work\target-project --enable-plugin
-python tools/configure_claude_desktop.py --root D:\work\target-project --disable-plugin
-python tools/configure_claude_desktop.py --root D:\work\target-project --post-refine off
+ai-policy status --root D:\work\target-project
+ai-policy disable --root D:\work\target-project
+ai-policy plugin enable --root D:\work\target-project
+ai-policy plugin disable --root D:\work\target-project
+ai-policy post-refine off --root D:\work\target-project
+```
+
+Inspect the installed runtime and managed Python environment:
+
+```powershell
+ai-policy doctor
+ai-policy runtime rebuild
 ```
 
 Depending on the command, the script updates:
@@ -553,8 +567,8 @@ D:\work\target-project\.policy\config.json
 D:\work\target-project\.claude\settings.local.json
 ```
 
-The base setup command enables `agents: ["claude"]`, registers this repository
-as a local Claude plugin marketplace, and enables
+The base setup command enables `agents: ["claude"]`, registers the installed
+package as a local Claude plugin marketplace, and enables
 `ai-policy-runtime@ai-policy-runtime` for that workspace. Plugin-only toggles
 only update Claude settings. `--post-refine standard` writes `postRefine` and
 `postRefinePacks` so the Stop hook can perform the second pass; `--post-refine
@@ -562,11 +576,12 @@ off` only disables that second pass. Use `--scope project` to write
 `.claude/settings.json` instead, or `--scope user` to write
 `%USERPROFILE%\.claude\settings.json`.
 
-When the Claude CLI is available, add `--install` to also run Claude's plugin
-commands:
+When working from a source checkout, the development helper is still available:
 
 ```powershell
-python tools/configure_claude_desktop.py --install
+python tools/configure_claude_desktop.py `
+  --root D:\work\target-project `
+  --plugin-root D:\MilesLi\ai-policy-runtime
 ```
 
 In Claude for Windows:
@@ -583,7 +598,7 @@ injection or `policy-claude` for those workflows.
 ## Verify Outputs
 
 ```powershell
-python -m ai_policy_runtime.cli verify --target path\to\output.cpp
+ai-policy verify --target path\to\output.cpp
 ```
 
 The verifier writes `.policy/current/violations.json` and exits non-zero when
@@ -596,7 +611,7 @@ Verification is pluggable. The default verifier checks text-searchable
 ## Run the MVP Workflow
 
 ```powershell
-python -m ai_policy_runtime.cli run --pack cpp.low_latency --agent custom "帮我写一个 C++20 低延迟队列"
+ai-policy run --pack cpp.low_latency --agent custom "帮我写一个 C++20 低延迟队列"
 ```
 
 This performs:

@@ -5,9 +5,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python",
+            "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/claude_user_prompt_submit.py"
+              "${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js",
+              "claude-user-prompt-submit"
             ],
             "timeout": 30
           }
@@ -19,9 +20,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python",
+            "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/claude_stop_refinement.py"
+              "${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js",
+              "claude-stop-refinement"
             ],
             "timeout": 30
           }

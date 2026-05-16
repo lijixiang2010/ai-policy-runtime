@@ -4,6 +4,9 @@ import os
 import json
 import argparse
 import io
+import shutil
+import subprocess
+import sys
 import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -51,6 +54,16 @@ from tools.configure_claude_desktop import (
     configure_policy,
     status as claude_desktop_status,
 )
+
+
+def _npm_test_env(**overrides: str) -> dict[str, str]:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.lower().startswith("npm_")
+    }
+    env.update(overrides)
+    return env
 
 
 def _load_fixture(name: str) -> dict[str, object]:
@@ -1599,6 +1612,156 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, 2)
         self.assertIn("--post-refine-pack requires --post-refine", message)
+
+    def test_npm_package_exposes_ai_policy_commands(self) -> None:
+        package = json.loads(Path("package.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(package["bin"]["ai-policy"], "bin/ai-policy.js")
+        self.assertEqual(package["bin"]["ai-policy-runtime"], "bin/ai-policy.js")
+        self.assertIn(".claude-plugin/*.json", package["files"])
+        self.assertIn("hooks/*.json", package["files"])
+        self.assertIn("hooks/*.py", package["files"])
+        self.assertIn("skills/**/*.yaml", package["files"])
+        self.assertIn("packs/*.yaml", package["files"])
+
+    def test_npm_pack_does_not_include_python_bytecode(self) -> None:
+        npm = shutil.which("npm")
+        if npm is None:
+            self.skipTest("npm is not available")
+
+        with TemporaryDirectory() as tmp:
+            completed = subprocess.run(
+                [npm, "pack", "--dry-run"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=_npm_test_env(npm_config_cache=str(Path(tmp) / "npm-cache")),
+            )
+        output = completed.stdout + completed.stderr
+
+        self.assertNotIn("__pycache__", output)
+        self.assertNotRegex(output, r"\.pyc\b")
+
+    def test_claude_hooks_use_packaged_node_wrapper(self) -> None:
+        hooks = json.loads((Path("hooks") / "claude-hooks.json").read_text(encoding="utf-8"))
+
+        user_prompt = hooks["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+        stop = hooks["hooks"]["Stop"][0]["hooks"][0]
+
+        self.assertEqual(user_prompt["command"], "node")
+        self.assertEqual(
+            user_prompt["args"],
+            ["${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js", "claude-user-prompt-submit"],
+        )
+        self.assertEqual(stop["command"], "node")
+        self.assertEqual(
+            stop["args"],
+            ["${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js", "claude-stop-refinement"],
+        )
+
+    def test_ai_policy_status_command_uses_installed_package_root(self) -> None:
+        if shutil.which("node") is None:
+            self.skipTest("node is not available")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            env = {
+                **os.environ,
+                "AI_POLICY_PYTHON": sys.executable,
+            }
+            completed = subprocess.run(
+                [
+                    "node",
+                    "bin/ai-policy.js",
+                    "status",
+                    "--root",
+                    str(root),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            current = json.loads(completed.stdout)
+
+        self.assertEqual(current["expected_plugin_root"], str(Path.cwd()))
+        self.assertFalse(current["runtime_enabled"])
+        self.assertFalse((root / ".policy" / "config.json").exists())
+
+    def test_ai_policy_doctor_reports_runtime_health(self) -> None:
+        if shutil.which("node") is None:
+            self.skipTest("node is not available")
+
+        env = {
+            **os.environ,
+            "AI_POLICY_PYTHON": sys.executable,
+        }
+        completed = subprocess.run(
+            ["node", "bin/ai-policy.js", "doctor"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        current = json.loads(completed.stdout)
+
+        self.assertTrue(current["ok"])
+        self.assertEqual(current["packageRoot"], str(Path.cwd()))
+        self.assertTrue(current["usingExplicitPython"])
+        self.assertTrue(current["checks"]["claudePlugin"])
+        self.assertTrue(current["checks"]["skills"])
+
+    def test_npm_tarball_install_exposes_ai_policy_command(self) -> None:
+        npm = shutil.which("npm")
+        if npm is None:
+            self.skipTest("npm is not available")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            npm_env = {
+                **_npm_test_env(
+                    AI_POLICY_PYTHON=sys.executable,
+                    npm_config_cache=str(root / "npm-cache"),
+                )
+            }
+            pack = subprocess.run(
+                [npm, "pack", "--silent"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=npm_env,
+            )
+            tarball_name = pack.stdout.strip().splitlines()[-1]
+            tarball = Path.cwd() / tarball_name
+            self.addCleanup(lambda: tarball.exists() and tarball.unlink())
+            prefix = root / "prefix"
+            project = root / "project"
+            subprocess.run(
+                [npm, "install", "--prefix", str(prefix), "-g", str(tarball)],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=npm_env,
+            )
+            command = (
+                prefix / "ai-policy.cmd"
+                if sys.platform.startswith("win")
+                else prefix / "bin" / "ai-policy"
+            )
+            completed = subprocess.run(
+                [str(command), "status", "--root", str(project)],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=npm_env,
+            )
+            current = json.loads(completed.stdout)
+            plugin_root_exists = Path(current["expected_plugin_root"]).exists()
+            policy_exists = (project / ".policy" / "config.json").exists()
+
+        self.assertTrue(plugin_root_exists)
+        self.assertFalse(current["runtime_enabled"])
+        self.assertFalse(policy_exists)
 
     def test_post_refinement_task_preserves_scope_and_behavior(self) -> None:
         task = build_post_refinement_task("Refactor the matching engine API.", "standard")

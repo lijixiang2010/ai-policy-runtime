@@ -23,6 +23,19 @@ This runtime makes those rules explicit, reproducible, and inspectable:
 
 ## Install
 
+For end users, install the packaged command:
+
+```powershell
+npm install -g ai-policy-runtime
+```
+
+This provides both `ai-policy` and the compatibility alias
+`ai-policy-runtime`. The command locates its installed package root
+automatically, so users do not need to clone this repository or pass a source
+checkout as `--plugin-root`.
+
+For local Python development:
+
 ```powershell
 pip install -e .
 ```
@@ -42,7 +55,7 @@ available.
 Resolve a task into agent-facing Effective Rules:
 
 ```powershell
-python -m ai_policy_runtime.cli resolve `
+ai-policy resolve `
   --pack cpp.production_refinement `
   "Refactor this C++20 code so it is not just working. Reduce complexity and preserve safety."
 ```
@@ -114,14 +127,14 @@ Example output:
 Explain the detected task context:
 
 ```powershell
-python -m ai_policy_runtime.cli explain `
+ai-policy explain `
   "Refactor this C++20 code so it is not just working. Reduce complexity and preserve safety."
 ```
 
 Validate Skills and packs:
 
 ```powershell
-python -m ai_policy_runtime.cli validate
+ai-policy validate
 ```
 
 Run the bundled example:
@@ -142,9 +155,9 @@ Inject Effective Rules into a generated prompt, Codex instructions, or Claude
 instructions:
 
 ```powershell
-python -m ai_policy_runtime.cli inject --target custom
-python -m ai_policy_runtime.cli inject --target codex
-python -m ai_policy_runtime.cli inject --target claude
+ai-policy inject --target custom
+ai-policy inject --target codex
+ai-policy inject --target claude
 ```
 
 Run Codex through the policy wrapper:
@@ -189,10 +202,21 @@ hooks/stop_refinement.py
 The same repository can also be installed as a Claude Code plugin. The Claude
 plugin manifest lives in `.claude-plugin/plugin.json` and uses Claude-specific
 hook entry points that share the same runtime logic.
-For Claude for Windows / Desktop Code sessions, `tools/configure_claude_desktop.py`
-can prepare a workspace-local Claude settings file and register the local plugin
-marketplace. It can also report status and toggle the runtime, plugin, and
-post-refinement settings without hand-editing JSON.
+For Claude for Windows / Desktop Code sessions, the packaged `ai-policy`
+command can prepare a workspace-local Claude settings file and register the
+installed package as a local plugin marketplace. It can also report status and
+toggle the runtime, plugin, and post-refinement settings without hand-editing
+JSON:
+
+```powershell
+ai-policy configure claude --root D:\work\target-project
+ai-policy status --root D:\work\target-project
+ai-policy post-refine standard --root D:\work\target-project
+ai-policy doctor
+```
+
+`tools/configure_claude_desktop.py` remains available for development and
+debugging when a source checkout should be used explicitly as `--plugin-root`.
 
 A VS Code extension is also included in `vscode-extension/`. It writes
 workspace configuration to `.policy/config.json` so Codex and Claude Code
@@ -253,7 +277,7 @@ Verification writes:
 Run verification against generated output:
 
 ```powershell
-python -m ai_policy_runtime.cli verify --target path\to\output.cpp
+ai-policy verify --target path\to\output.cpp
 ```
 
 ## Repository Map
@@ -278,6 +302,8 @@ docs/              design and usage documentation
 
 - [Usage Guide](docs/usage.md): CLI commands, wrappers, plugin setup, VS Code,
   embeddings, cache, and verification details.
+- [Release Guide](docs/release.md): NPM release checks, versioning, and publish
+  workflow.
 - [Skill Policy Runtime](docs/skill_policy_runtime.md): runtime model and core
   concepts.
 - [Automation Strategy](docs/policy_runtime_automation_strategy.md): agent
