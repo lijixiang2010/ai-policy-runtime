@@ -222,6 +222,14 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(analysis.needs_review)
         self.assertLess(analysis.confidence, 0.72)
 
+    def test_task_analyzer_does_not_treat_plugin_status_as_refactor(self) -> None:
+        analysis = analyze("请检查当前项目，并说明 AI Policy Runtime 是否通过 Claude Code plugin 启用了。")
+
+        self.assertEqual(analysis.task.domain, "general")
+        self.assertEqual(analysis.task.task_type, "unknown")
+        self.assertNotIn("artifact_type", analysis.task.context)
+        self.assertNotIn("refinement_requested", analysis.task.context)
+
     def test_task_analyzer_uses_embedding_semantics_for_rephrased_intent(self) -> None:
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
@@ -1128,6 +1136,22 @@ class PolicyRuntimeTests(unittest.TestCase):
                 user_prompt_submit._load_project_config(root),
                 {"enabled": True, "packs": ["cpp.safe_generation"]},
             )
+
+    def test_hook_omits_empty_effective_rules_from_additional_context(self) -> None:
+        self.assertFalse(
+            user_prompt_submit._has_effective_rules(
+                "# Effective Rules for Current Task\n\n"
+                "## Task Context\n\n- Domain: general\n\n"
+                "## HARD Rules\n\n"
+                "## SOFT Rules\n\n"
+            )
+        )
+        self.assertTrue(
+            user_prompt_submit._has_effective_rules(
+                "# Effective Rules for Current Task\n\n"
+                "## HARD Rules\n\n- Avoid undefined behavior.\n"
+            )
+        )
 
     def test_codex_wrapper_builds_command_with_task_last(self) -> None:
         command = _build_codex_command(

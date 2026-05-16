@@ -26,6 +26,8 @@ class DeterministicTaskExtractor:
     def extract(self, text: str, signals: TaskSignals | None = None) -> TaskAnalysis:
         normalized = normalize_text(text)
         state = ExtractionState()
+        if _looks_like_status_query(normalized):
+            return state.to_analysis(self._lexicon)
         self._apply_domain(normalized, signals, state)
         self._apply_task_type(normalized, state)
         self._apply_exact_context(normalized, state)
@@ -98,3 +100,28 @@ def _int_or_none(value: object) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def _looks_like_status_query(text: str) -> bool:
+    status_terms = (
+        "是否启用",
+        "有没有启用",
+        "是否开启",
+        "有没有开启",
+        "启用了",
+        "enabled",
+        "active",
+        "loaded",
+    )
+    integration_terms = (
+        "ai policy runtime",
+        "plugin",
+        "hook",
+        "claude code",
+        "codex",
+        "插件",
+        "钩子",
+    )
+    return any(term in text for term in status_terms) and any(
+        term in text for term in integration_terms
+    )

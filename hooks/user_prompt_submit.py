@@ -40,6 +40,8 @@ def main() -> int:
             config.policy_root(project_root),
             config.packs,
         )
+        if not _has_effective_rules(additional_context):
+            additional_context = ""
         _write_turn_state(project_root, payload, prompt, config)
     except Exception as exc:
         additional_context = (
@@ -156,6 +158,19 @@ def _resolve_effective_prompt(
     )
     result = runtime.resolve(prompt, packs)
     return (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+
+
+def _has_effective_rules(prompt: str) -> bool:
+    lower = prompt.lower()
+    return any(
+        section in lower and f"{section}\n\n- " in lower
+        for section in (
+            "## hard rules",
+            "## soft rules",
+            "## preferences",
+            "## verification requirements",
+        )
+    )
 
 
 def _prepare_imports() -> None:
