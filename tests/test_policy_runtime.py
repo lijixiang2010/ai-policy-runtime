@@ -230,6 +230,13 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertNotIn("artifact_type", analysis.task.context)
         self.assertNotIn("refinement_requested", analysis.task.context)
 
+    def test_task_analyzer_does_not_treat_greeting_as_code_task(self) -> None:
+        analysis = analyze("hello")
+
+        self.assertEqual(analysis.task.domain, "general")
+        self.assertEqual(analysis.task.task_type, "unknown")
+        self.assertEqual(analysis.task.tags, ())
+
     def test_task_analyzer_uses_embedding_semantics_for_rephrased_intent(self) -> None:
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
