@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any
 
@@ -140,6 +141,12 @@ class PolicyRuntime:
         task_text: str,
         pack_ids: tuple[str, ...] = (),
     ) -> ResolveApplicabilityResult:
+        if _is_runtime_status_query(task_text):
+            return ResolveApplicabilityResult(
+                applicable=False,
+                resolve_result=None,
+                task_analysis=_non_applicable_task_analysis(),
+            )
         project, analysis, effective_rules, contributing_skills = self._evaluate(
             task_text,
             pack_ids,
@@ -301,6 +308,21 @@ class PolicyRuntime:
         return {domain for skill in registry.all() for domain in skill.domains}
 
     def _embedding_provider(self) -> EmbeddingProvider | None:
+        provider = _configured_embedding_provider_name()
+        if provider in {
+            "disabled",
+            "none",
+            "null",
+            "hashing",
+            "lightweight",
+            "openai",
+            "openai-compatible",
+            "opaicompat",
+        }:
+            return None
+        if not provider and _remote_embedding_configured():
+            return None
+
         model_root = self.config.policy_root or self.config.paths.root
         local_model = (
             model_root
@@ -336,3 +358,68 @@ def _has_policy_content(effective_rules: EffectiveRules) -> bool:
             effective_rules.exceptions,
         )
     )
+
+
+def _configured_embedding_provider_name() -> str:
+    return (
+        os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "")
+        .strip()
+        .lower()
+        .replace("_", "-")
+    )
+
+
+def _remote_embedding_configured() -> bool:
+    return any(
+        os.environ.get(name, "").strip()
+        for name in (
+            "AI_POLICY_EMBEDDING_API_KEY",
+            "OPENAI_API_KEY",
+            "AI_POLICY_EMBEDDING_BASE_URL",
+        )
+    )
+
+
+def _is_runtime_status_query(task_text: str) -> bool:
+    text = " ".join(task_text.lower().split())
+    runtime_terms = (
+        "ai policy runtime",
+        "policy runtime",
+        "claude code plugin",
+        "codex plugin",
+        "plugin",
+        "插件",
+    )
+    status_terms = (
+        "status",
+        "enabled",
+        "enable",
+        "configured",
+        "configuration",
+        "启用",
+        "开启",
+        "状态",
+        "配置",
+        "是否",
+        "检查当前项目",
+        "通过",
+    )
+    return any(term in text for term in runtime_terms) and any(
+        term in text for term in status_terms
+    )
+
+
+def _non_applicable_task_analysis() -> dict[str, Any]:
+    return {
+        "task": {
+            "domain": "general",
+            "task_type": "unknown",
+            "capabilities": [],
+            "tags": [],
+            "context": {},
+        },
+        "confidence": 0.2,
+        "needs_review": True,
+        "activation_ready": False,
+        "evidence": [],
+    }

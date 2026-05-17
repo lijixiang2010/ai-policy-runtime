@@ -40,7 +40,8 @@ local sentence-transformers model
 dependency-free hashing n-gram matcher
 ```
 
-Use an OpenAI-compatible embedding endpoint when you want strong multilingual
+OpenAI-compatible is the preferred default provider shape. Use an
+OpenAI-compatible embedding endpoint when you want strong multilingual
 semantic matching without asking users to download a local model:
 
 ```powershell
@@ -56,6 +57,7 @@ advanced overrides:
 
 ```powershell
 $env:AI_POLICY_EMBEDDING_PROVIDER="openai-compatible" # force remote embeddings
+$env:AI_POLICY_EMBEDDING_PROVIDER="opaicompat"         # alias for openai-compatible
 $env:AI_POLICY_EMBEDDING_PROVIDER="local"             # force sentence-transformers
 $env:AI_POLICY_EMBEDDING_PROVIDER="hashing"           # force lightweight local matcher
 $env:AI_POLICY_EMBEDDING_PROVIDER="disabled"          # disable semantic matching
@@ -104,7 +106,9 @@ ai-policy explain "帮我写一个 C++20 低延迟队列"
 
 In automatic mode, leave `AI_POLICY_EMBEDDING_PROVIDER` unset. Automatic mode
 uses the remote OpenAI-compatible endpoint when endpoint credentials are
-configured, otherwise the local model, otherwise the hashing matcher. When a
+configured, otherwise the local model, otherwise the hashing matcher. The
+offline hashing provider is only a fallback, not the preferred production
+semantic provider. When a
 provider is forced explicitly, configuration or endpoint errors are reported
 instead of silently falling back to a weaker provider.
 
@@ -440,6 +444,17 @@ Developer: Reload Window
 
 For local development in this repository, `.codex/config.toml` points Codex at
 the same hook implementation used by the plugin.
+
+For an installed NPM package, configure the shared project policy for Codex:
+
+```powershell
+ai-policy configure codex --root D:\work\target-project
+ai-policy status --agent codex --root D:\work\target-project
+```
+
+This enables the `codex` agent in `.policy/config.json`, records the installed
+package as `policyRoot`, and leaves Claude settings untouched. Codex plugin
+installation remains a Codex client action.
 
 After publishing this repository to GitHub, users can add it as a Codex plugin
 marketplace:

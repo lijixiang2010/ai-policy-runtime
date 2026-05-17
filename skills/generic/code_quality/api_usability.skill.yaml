@@ -54,6 +54,7 @@ task_analysis:
         - smart defaults
         - ergonomic API
         - easy common path
+        - easier to use
       set:
         user_facing_api: true
         artifact_type: code

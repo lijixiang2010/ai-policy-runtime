@@ -215,8 +215,22 @@ ai-policy post-refine standard --root D:\work\target-project
 ai-policy doctor
 ```
 
+For Codex, the same command can prepare the shared `.policy/config.json`
+without writing Claude settings:
+
+```powershell
+ai-policy configure codex --root D:\work\target-project
+ai-policy status --agent codex --root D:\work\target-project
+```
+
+Codex plugin installation remains a Codex client action; the runtime package
+ships the `.codex-plugin/plugin.json` and `hooks/hooks.json` assets used by that
+plugin.
+
 `tools/configure_claude_desktop.py` remains available for development and
 debugging when a source checkout should be used explicitly as `--plugin-root`.
+`tools/configure_codex.py` provides the equivalent project-policy automation for
+Codex.
 
 A VS Code extension is also included in `vscode-extension/`. It writes
 workspace configuration to `.policy/config.json` so Codex and Claude Code

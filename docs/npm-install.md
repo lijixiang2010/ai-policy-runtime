@@ -104,6 +104,36 @@ ai-policy status --root D:\work\target-project
 
 `status` is read-only. It does not create `.policy` or `.claude` files.
 
+For Codex-specific policy status:
+
+```powershell
+ai-policy status --agent codex --root D:\work\target-project
+```
+
+## Configure Codex
+
+Configure the shared project policy for Codex:
+
+```powershell
+ai-policy configure codex --root D:\work\target-project
+```
+
+This writes:
+
+```text
+D:\work\target-project\.policy\config.json
+```
+
+It enables the `codex` agent, sets the default `cpp.safe_generation` pack when
+no packs are configured, and records the installed NPM package as `policyRoot`.
+It does not write `.claude/settings.local.json`.
+
+Disable only Codex in the shared policy:
+
+```powershell
+ai-policy configure codex --root D:\work\target-project --disable
+```
+
 ## Toggle Runtime and Plugin
 
 Disable both the runtime and Claude plugin for a workspace:

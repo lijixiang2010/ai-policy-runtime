@@ -74,8 +74,8 @@ def build_extractor(
 def _default_embedding_provider() -> EmbeddingProvider:
     """Return the best configured embedding provider.
 
-    Selection order keeps the product lightweight by default while preserving
-    offline options:
+    Selection order defaults toward OpenAI-compatible embeddings when remote
+    configuration is present, while preserving offline options:
 
     1. Explicit provider choices from AI_POLICY_EMBEDDING_PROVIDER.
     2. OpenAI-compatible /v1/embeddings when configured.
@@ -88,11 +88,11 @@ def _default_embedding_provider() -> EmbeddingProvider:
         return NullEmbeddingProvider()
     if provider in {"hashing", "lightweight"}:
         return HashingTextEmbeddingProvider()
-    if provider in {"openai", "openai-compatible"}:
+    if provider in {"openai", "openai-compatible", "opaicompat"}:
         remote = OpenAICompatibleEmbeddingProvider.from_env()
         if remote is None:
             raise RuntimeError(
-                "AI_POLICY_EMBEDDING_PROVIDER requests openai-compatible, "
+                "AI_POLICY_EMBEDDING_PROVIDER requests OpenAI-compatible embeddings, "
                 "but no endpoint configuration was found."
             )
         return remote

@@ -8,7 +8,8 @@ const { spawnSync } = require("child_process");
 
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
 const PYTHON_MODULE = "ai_policy_runtime.cli";
-const CONFIGURE_SCRIPT = path.join(PACKAGE_ROOT, "tools", "configure_claude_desktop.py");
+const CLAUDE_CONFIGURE_SCRIPT = path.join(PACKAGE_ROOT, "tools", "configure_claude_desktop.py");
+const CODEX_CONFIGURE_SCRIPT = path.join(PACKAGE_ROOT, "tools", "configure_codex.py");
 const MIN_PYTHON = [3, 10];
 
 function main(argv) {
@@ -22,7 +23,7 @@ function main(argv) {
     return configure(rest);
   }
   if (command === "status") {
-    return runConfigure(["--status", ...withDefaultRoot(rest)]);
+    return status(rest);
   }
   if (command === "enable") {
     return configure(["claude", ...rest]);
@@ -58,21 +59,35 @@ function main(argv) {
 function configure(argv) {
   const [target, ...rest] = argv;
   if (!target || target === "claude") {
-    return runConfigure(withDefaultRoot(rest));
+    return runClaudeConfigure(withDefaultRoot(rest));
   }
   if (target === "desktop" || target === "claude-desktop") {
-    return runConfigure(withDefaultRoot(rest));
+    return runClaudeConfigure(withDefaultRoot(rest));
+  }
+  if (target === "codex") {
+    return runCodexConfigure(withDefaultRoot(rest));
   }
   fail(`Unknown configure target: ${target}`);
+}
+
+function status(argv) {
+  const { agent, rest } = extractOptionValue(argv, "--agent");
+  if (agent === "codex") {
+    return runCodexConfigure(["--status", ...withDefaultRoot(rest)]);
+  }
+  if (!agent || agent === "claude") {
+    return runClaudeConfigure(["--status", ...withDefaultRoot(rest)]);
+  }
+  fail(`Unknown status agent: ${agent}`);
 }
 
 function plugin(argv) {
   const [action, ...rest] = argv;
   if (action === "enable") {
-    return runConfigure(["--enable-plugin", ...withDefaultRoot(rest)]);
+    return runClaudeConfigure(["--enable-plugin", ...withDefaultRoot(rest)]);
   }
   if (action === "disable") {
-    return runConfigure(["--disable-plugin", ...withDefaultRoot(rest)]);
+    return runClaudeConfigure(["--disable-plugin", ...withDefaultRoot(rest)]);
   }
   fail("Usage: ai-policy plugin <enable|disable> [--root <project>]");
 }
@@ -82,12 +97,17 @@ function postRefine(argv) {
   if (!mode || mode.startsWith("-")) {
     fail("Usage: ai-policy post-refine <off|light|standard|strict> [--root <project>]");
   }
-  return runConfigure(["--post-refine", mode, ...withDefaultRoot(rest)]);
+  return runClaudeConfigure(["--post-refine", mode, ...withDefaultRoot(rest)]);
 }
 
-function runConfigure(args) {
+function runClaudeConfigure(args) {
   const normalized = addPluginRoot(args);
-  return runPython([CONFIGURE_SCRIPT, ...normalized]);
+  return runPython([CLAUDE_CONFIGURE_SCRIPT, ...normalized]);
+}
+
+function runCodexConfigure(args) {
+  const normalized = addPluginRoot(args);
+  return runPython([CODEX_CONFIGURE_SCRIPT, ...normalized]);
 }
 
 function withDefaultRoot(args) {
@@ -106,6 +126,23 @@ function addPluginRoot(args) {
 
 function hasOption(args, name) {
   return args.some((item) => item === name || item.startsWith(`${name}=`));
+}
+
+function extractOptionValue(args, name) {
+  const rest = [];
+  let value = null;
+  for (let index = 0; index < args.length; index += 1) {
+    const item = args[index];
+    if (item === name) {
+      value = args[index + 1] || "";
+      index += 1;
+    } else if (item.startsWith(`${name}=`)) {
+      value = item.slice(name.length + 1);
+    } else {
+      rest.push(item);
+    }
+  }
+  return { agent: value, rest };
 }
 
 function withDefaultPolicyRoot(command, args) {
@@ -274,7 +311,8 @@ function printHelp() {
 
 Usage:
   ai-policy configure claude [--root <project>]
-  ai-policy status [--root <project>]
+  ai-policy configure codex [--root <project>]
+  ai-policy status [--agent <claude|codex>] [--root <project>]
   ai-policy disable [--root <project>]
   ai-policy plugin <enable|disable> [--root <project>]
   ai-policy post-refine <off|light|standard|strict> [--root <project>]
@@ -284,8 +322,9 @@ Usage:
 
 Examples:
   ai-policy configure claude --root D:\\work\\project
+  ai-policy configure codex --root D:\\work\\project
   ai-policy post-refine standard --root D:\\work\\project
-  ai-policy status --root D:\\work\\project
+  ai-policy status --agent codex --root D:\\work\\project
 `);
 }
 

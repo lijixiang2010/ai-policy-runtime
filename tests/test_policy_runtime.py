@@ -12,10 +12,6 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 from unittest.mock import patch
 
-# Keep unit tests deterministic even when the developer shell has remote
-# embedding credentials configured.
-os.environ["AI_POLICY_EMBEDDING_PROVIDER"] = "local"
-
 from ai_policy_runtime import PolicyEngine, Skill, SkillRegistry, TaskContext
 from ai_policy_runtime.application.runtime import NonApplicableTaskError, PolicyRuntime
 from ai_policy_runtime.domain.config import RuntimeConfig
@@ -53,6 +49,11 @@ from tools.configure_claude_desktop import (
     main as configure_claude_desktop_main,
     configure_policy,
     status as claude_desktop_status,
+)
+from tools.configure_codex import (
+    configure_policy as configure_codex_policy,
+    main as configure_codex_main,
+    status as codex_status,
 )
 
 
@@ -392,6 +393,30 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(provider.config.api_key, "key")
         self.assertEqual(provider.config.model, "embedding-model")
 
+    def test_opaicompat_embedding_provider_alias_can_be_loaded_from_env(self) -> None:
+        env = {
+            "AI_POLICY_EMBEDDING_PROVIDER": "opaicompat",
+            "AI_POLICY_EMBEDDING_BASE_URL": "https://gateway.example.test/v1",
+            "AI_POLICY_EMBEDDING_API_KEY": "key",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            provider = OpenAICompatibleEmbeddingProvider.from_env()
+
+        self.assertIsNotNone(provider)
+        assert provider is not None
+        self.assertEqual(provider.config.base_url, "https://gateway.example.test/v1")
+        self.assertEqual(provider.config.api_key, "key")
+
+    def test_openai_compatible_embedding_provider_requires_endpoint_configuration(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"AI_POLICY_EMBEDDING_PROVIDER": "openai-compatible"},
+            clear=True,
+        ):
+            provider = OpenAICompatibleEmbeddingProvider.from_env()
+
+        self.assertIsNone(provider)
+
     def test_local_model_manager_lists_and_installs_known_model(self) -> None:
         with TemporaryDirectory() as tmp:
             manager = LocalModelManager(tmp)
@@ -418,6 +443,23 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertFalse(result["needs_review"])
         self.assertTrue(result["evidence"])
         self.assertIn("project_context", result)
+
+    def test_runtime_does_not_override_openai_compatible_embedding_provider(self) -> None:
+        with TemporaryDirectory() as tmp:
+            policy_root = Path(tmp)
+            local_model = policy_root / "models" / "paraphrase-multilingual-MiniLM-L12-v2"
+            local_model.mkdir(parents=True)
+            runtime = PolicyRuntime(
+                RuntimeConfig.from_values(root=tmp, policy_root=policy_root)
+            )
+            env = {
+                "AI_POLICY_EMBEDDING_PROVIDER": "openai-compatible",
+                "AI_POLICY_EMBEDDING_API_KEY": "key",
+                "AI_POLICY_EMBEDDING_MODEL": "text-embedding-3-small",
+            }
+
+            with patch.dict(os.environ, env, clear=True):
+                self.assertIsNone(runtime._embedding_provider())
 
     def test_project_context_reads_cmake_standard(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -1207,7 +1249,7 @@ class PolicyRuntimeTests(unittest.TestCase):
             }
         )
         env = {
-            "AI_POLICY_EMBEDDING_PROVIDER": "hashing",
+            "AI_POLICY_EMBEDDING_PROVIDER": "openai-compatible",
             "AI_POLICY_EMBEDDING_BASE_URL": "https://env.example.test/v1",
             "AI_POLICY_EMBEDDING_API_KEY": "env-key",
             "AI_POLICY_EMBEDDING_MODEL": "env-model",
@@ -1248,10 +1290,14 @@ class PolicyRuntimeTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             runtime = PolicyRuntime(RuntimeConfig.from_values(root=tmp, policy_root="."))
 
-            result = runtime.resolve_if_applicable(
-                "请检查当前项目，并说明 AI Policy Runtime 是否通过 Claude Code plugin 启用了。",
-                ("cpp.safe_generation",),
-            )
+            with patch(
+                "ai_policy_runtime.task_analysis.embeddings.urlopen",
+                side_effect=AssertionError("status query should not request embeddings"),
+            ):
+                result = runtime.resolve_if_applicable(
+                    "请检查当前项目，并说明 AI Policy Runtime 是否通过 Claude Code plugin 启用了。",
+                    ("cpp.safe_generation",),
+                )
 
             self.assertFalse(result.applicable)
             self.assertFalse((Path(tmp) / ".policy" / "current").exists())
@@ -1613,6 +1659,86 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 2)
         self.assertIn("--post-refine-pack requires --post-refine", message)
 
+    def test_configure_codex_enables_policy_without_claude_settings(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+
+            policy_path = configure_codex_policy(root, plugin_root)
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+            claude_settings_exists = (root / ".claude").exists()
+
+        self.assertTrue(policy["enabled"])
+        self.assertEqual(policy["agents"], ["codex"])
+        self.assertEqual(policy["packs"], ["cpp.safe_generation"])
+        self.assertEqual(policy["policyRoot"], str(Path.cwd()))
+        self.assertFalse(claude_settings_exists)
+
+    def test_configure_codex_disable_preserves_other_agents(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            policy = root / ".policy"
+            policy.mkdir(parents=True)
+            (policy / "config.json").write_text(
+                json.dumps(
+                    {
+                        "enabled": True,
+                        "agents": ["codex", "claude"],
+                        "packs": ["cpp.safe_generation"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            policy_path = configure_codex_policy(root, Path.cwd(), enabled=False)
+            current = json.loads(policy_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(current["enabled"])
+        self.assertEqual(current["agents"], ["claude"])
+
+    def test_configure_codex_disable_turns_runtime_off_without_other_agents(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            policy = root / ".policy"
+            policy.mkdir(parents=True)
+            (policy / "config.json").write_text(
+                json.dumps({"enabled": True, "agents": ["codex"]}),
+                encoding="utf-8",
+            )
+
+            policy_path = configure_codex_policy(root, Path.cwd(), enabled=False)
+            current = json.loads(policy_path.read_text(encoding="utf-8"))
+
+        self.assertFalse(current["enabled"])
+        self.assertEqual(current["agents"], [])
+
+    def test_configure_codex_status_reports_current_features(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+            configure_codex_policy(root, plugin_root)
+
+            current = codex_status(root, plugin_root)
+
+        self.assertTrue(current["runtime_enabled"])
+        self.assertTrue(current["codex_agent_enabled"])
+        self.assertTrue(current["plugin_assets_present"])
+        self.assertEqual(current["expected_plugin_root"], str(Path.cwd()))
+
+    def test_configure_codex_cli_updates_policy(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+
+            with patch("sys.stdout", new=io.StringIO()):
+                exit_code = configure_codex_main(["--root", str(root)])
+
+            policy = json.loads(
+                (root / ".policy" / "config.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(policy["agents"], ["codex"])
+
     def test_npm_package_exposes_ai_policy_commands(self) -> None:
         package = json.loads(Path("package.json").read_text(encoding="utf-8"))
 
@@ -1687,6 +1813,72 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(current["expected_plugin_root"], str(Path.cwd()))
         self.assertFalse(current["runtime_enabled"])
         self.assertFalse((root / ".policy" / "config.json").exists())
+
+    def test_ai_policy_configure_codex_command_updates_policy_only(self) -> None:
+        if shutil.which("node") is None:
+            self.skipTest("node is not available")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            env = {
+                **os.environ,
+                "AI_POLICY_PYTHON": sys.executable,
+            }
+            subprocess.run(
+                [
+                    "node",
+                    "bin/ai-policy.js",
+                    "configure",
+                    "codex",
+                    "--root",
+                    str(root),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            policy = json.loads(
+                (root / ".policy" / "config.json").read_text(encoding="utf-8")
+            )
+            claude_settings_exists = (root / ".claude").exists()
+
+        self.assertTrue(policy["enabled"])
+        self.assertEqual(policy["agents"], ["codex"])
+        self.assertFalse(claude_settings_exists)
+
+    def test_ai_policy_status_codex_command_is_read_only(self) -> None:
+        if shutil.which("node") is None:
+            self.skipTest("node is not available")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            env = {
+                **os.environ,
+                "AI_POLICY_PYTHON": sys.executable,
+            }
+            completed = subprocess.run(
+                [
+                    "node",
+                    "bin/ai-policy.js",
+                    "status",
+                    "--agent",
+                    "codex",
+                    "--root",
+                    str(root),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            current = json.loads(completed.stdout)
+            policy_exists = (root / ".policy" / "config.json").exists()
+
+        self.assertFalse(current["runtime_enabled"])
+        self.assertFalse(current["codex_agent_enabled"])
+        self.assertTrue(current["plugin_assets_present"])
+        self.assertFalse(policy_exists)
 
     def test_ai_policy_doctor_reports_runtime_health(self) -> None:
         if shutil.which("node") is None:

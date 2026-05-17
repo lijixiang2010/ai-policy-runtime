@@ -33,14 +33,26 @@ class OpenAICompatibleEmbeddingConfig:
     def from_env(cls) -> "OpenAICompatibleEmbeddingConfig | None":
         """Return config when the environment requests remote embeddings."""
 
-        provider = os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "").strip().lower()
+        provider = (
+            os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "")
+            .strip()
+            .lower()
+            .replace("_", "-")
+        )
         base_url = os.environ.get("AI_POLICY_EMBEDDING_BASE_URL", "").strip()
         api_key = (
             os.environ.get("AI_POLICY_EMBEDDING_API_KEY")
             or os.environ.get("OPENAI_API_KEY")
             or ""
         ).strip()
-        if provider not in {"openai", "openai-compatible"} and not (base_url or api_key):
+        remote_provider_requested = provider in {
+            "openai",
+            "openai-compatible",
+            "opaicompat",
+        }
+        if not remote_provider_requested and not (base_url or api_key):
+            return None
+        if remote_provider_requested and not (base_url or api_key):
             return None
         return cls(
             base_url=base_url or cls.base_url,
