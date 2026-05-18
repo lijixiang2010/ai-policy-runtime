@@ -101,11 +101,14 @@ class PromptRenderer:
         self._append_rule_lines(
             lines,
             "SOFT Rules",
-            prompt_rules.soft(effective["soft"], self.SOFT_LIMIT),
+            prompt_rules.soft(effective["soft"], prompt_rules.soft_limit(self.SOFT_LIMIT)),
         )
         self._append_preference_lines(
             lines,
-            prompt_rules.preferences(effective["preference"], self.PREFERENCE_LIMIT),
+            prompt_rules.preferences(
+                effective["preference"],
+                prompt_rules.preference_limit(self.PREFERENCE_LIMIT),
+            ),
         )
         self._append_exception_lines(lines, effective["exceptions"])
         self._append_verification_lines(
@@ -164,12 +167,26 @@ class PromptRuleSelector:
     def __init__(self, context: dict[str, Any]) -> None:
         self.context = context
         self.refinement = bool(context.get("refinement_requested")) or context.get("task_type") == "refactor_code"
+        self.generic_code_refinement = self.refinement and (
+            context.get("domain") in {"general", "generic_code"}
+            or context.get("language") == "generic_code"
+        )
 
     def hard(self, rules: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
         return self._limit(self._collapse(rules), limit, self._hard_score)
 
+    def soft_limit(self, default: int) -> int:
+        if self.context.get("unclear_hierarchy") and not self.context.get("duplicated_logic"):
+            return min(default, 7)
+        return min(default, 9) if self.generic_code_refinement else default
+
     def soft(self, rules: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
         return self._limit(rules, limit, self._soft_score)
+
+    def preference_limit(self, default: int) -> int:
+        if self.context.get("unclear_hierarchy") and not self.context.get("duplicated_logic"):
+            return min(default, 2)
+        return min(default, 4) if self.generic_code_refinement else default
 
     def preferences(self, rules: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
         return self._limit(rules, limit, self._preference_score)
@@ -206,14 +223,6 @@ class PromptRuleSelector:
                 ),
             },
             {
-                "id": "verify.prompt.standard_availability",
-                "type": "review_check",
-                "statement": (
-                    "Verify recommendations use facilities available in the "
-                    "selected C++ standard."
-                ),
-            },
-            {
                 "id": "verify.prompt.complexity_reduction",
                 "type": "review_check",
                 "statement": (
@@ -222,7 +231,21 @@ class PromptRuleSelector:
                 ),
             },
         ]
-        if any("api" in _rule_text(item) or "user" in _rule_text(item) for item in items):
+        if _is_cpp_context(self.context):
+            checks.insert(
+                2,
+                {
+                    "id": "verify.prompt.standard_availability",
+                    "type": "review_check",
+                    "statement": (
+                        "Verify recommendations use facilities available in the "
+                        "selected C++ standard."
+                    ),
+                },
+            )
+        if self.context.get("user_facing_api") or any(
+            "api" in _rule_text(item) or "user" in _rule_text(item) for item in items
+        ):
             checks.append(
                 {
                     "id": "verify.prompt.api_usability",
@@ -318,6 +341,24 @@ class PromptRuleSelector:
                 "source_structure": 35,
             }
             score += target_bonus.get(target, 0)
+            if target == "parameterized_abstraction" and self.context.get(
+                "similar_logic_with_small_variation"
+            ):
+                score += 90
+            if target == "api_usability" and self.context.get("user_facing_api"):
+                score += 45
+            if target == "component_structure" and self.context.get(
+                "scattered_related_logic"
+            ):
+                score += 45
+            if target in {"hierarchy", "dependency_direction"} and self.context.get(
+                "unclear_hierarchy"
+            ):
+                score += 45
+                if "clarify component hierarchy" in text:
+                    score += 160
+                if "circular" in text or "cycle" in text:
+                    score += 200
             for needle in (
                 "accidental complexity",
                 "effective complexity",
@@ -337,6 +378,12 @@ class PromptRuleSelector:
                     score += 40
             if source.startswith("generic."):
                 score += 35
+            if (
+                target == "parameterized_abstraction"
+                and self.context.get("unclear_hierarchy")
+                and not self.context.get("duplicated_logic")
+            ):
+                score -= 80
             if target in {"undefined_behavior", "ownership", "resource_lifetime", "type_safety", "bounds_safety"}:
                 score += 15
         if source.startswith("cpp.source_structure"):
@@ -360,9 +407,34 @@ class PromptRuleSelector:
 
     def _preference_score(self, rule: dict[str, Any]) -> int:
         text = _rule_text(rule)
+        target = str(rule.get("target", ""))
         score = 0
+        if self.refinement:
+            score += {
+                "complexity": 90,
+                "duplication": 80,
+                "implementation_polish": 70,
+                "api_usability": 65,
+                "component_structure": 45,
+                "hierarchy": 40,
+                "implementation_expression": 35,
+                "parameterized_abstraction": 30,
+            }.get(target, 0)
+            if target == "parameterized_abstraction" and self.context.get(
+                "similar_logic_with_small_variation"
+            ):
+                score += 90
+            if (
+                target == "parameterized_abstraction"
+                and self.context.get("unclear_hierarchy")
+                and not self.context.get("duplicated_logic")
+            ):
+                score -= 80
         for needle in (
             "effective_complexity",
+            "shared_responsibility",
+            "finished_component",
+            "simple_common_case",
             "cohesive_component",
             "clear_call_chain",
             "clarity",
@@ -541,6 +613,14 @@ def _verification_target(item: dict[str, Any]) -> str:
     if "standard" in statement:
         return "standard_availability"
     return ""
+
+
+def _is_cpp_context(context: dict[str, Any]) -> bool:
+    return (
+        context.get("domain") == "cpp"
+        or context.get("language") == "cpp"
+        or "standard" in context
+    )
 
 
 def _rule_text(rule: dict[str, Any]) -> str:

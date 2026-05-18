@@ -1,0 +1,141 @@
+cases:
+  - id: zh_generic_refinement
+    provider: local
+    prompt: 帮我把这个模块整理到生产可用，不改变行为，减少意外复杂度，顺便把重复逻辑和接口摩擦处理掉
+    include:
+      - Preserve the existing observable behavior
+      - Remove accidental complexity
+      - Extract duplicated logic
+      - Avoid extracting code only because it looks similar
+      - Minimize the number of steps required
+      - Make each component feel complete
+      - Verify behavior preservation
+    exclude:
+      - selected C++ standard
+      - Prefer clear call chain
+      - Prefer cohesive component
+      - Use language-native constructs
+    max_soft_rules: 9
+    max_preferences: 4
+
+  - id: en_component_grouping
+    provider: deterministic
+    prompt: Refactor these scattered helpers and state into a cohesive component without changing behavior.
+    include:
+      - Preserve the existing observable behavior
+      - Group related variables, functions, helpers, and state
+      - Group related state, helper functions, and behavior
+    exclude:
+      - selected C++ standard
+      - Extract duplicated logic
+      - Minimize the number of steps required
+    max_soft_rules: 9
+    max_preferences: 4
+
+  - id: zh_api_usability
+    provider: deterministic
+    prompt: 这个接口调用步骤太多，帮我降低调用方负担，给常见路径合理默认值
+    include:
+      - Minimize the number of steps required
+      - Provide reasonable defaults
+      - Prefer simple common case usage
+      - Verify the resulting API requires fewer or clearer user steps
+    exclude:
+      - selected C++ standard
+      - Extract duplicated logic
+      - Prefer clear call chain
+    max_soft_rules: 9
+    max_preferences: 4
+
+  - id: zh_hierarchy_cleanup
+    provider: deterministic
+    prompt: 这几个模块调用链太绕，还有循环依赖风险，帮我整理层次但不要改变行为
+    include:
+      - Preserve the existing observable behavior
+      - Clarify component hierarchy
+      - Keep dependency direction stable
+      - Avoid introducing circular dependencies
+    exclude:
+      - selected C++ standard
+      - Minimize the number of steps required
+      - Extract duplicated logic
+      - Extract shared control flow
+      - Prefer explicit variation point
+    max_soft_rules: 9
+    max_preferences: 4
+
+  - id: en_parameterized_variation
+    provider: deterministic
+    prompt: These implementations share the same control flow with small variations; extract the shared structure carefully.
+    include:
+      - Extract shared control flow
+      - Give variation points clear names
+      - Avoid replacing clear specialized logic with a parameterized abstraction
+      - Prefer explicit variation point
+    exclude:
+      - selected C++ standard
+      - Minimize the number of steps required
+    max_soft_rules: 9
+    max_preferences: 4
+
+  - id: zh_daily_make_code_better
+    provider: deterministic
+    prompt: 这段代码现在能跑，但有点乱，帮我整理清楚一点，行为不要变
+    include:
+      - Preserve the existing observable behavior
+      - Remove accidental complexity
+      - Make each component feel complete
+      - Verify behavior preservation
+    exclude:
+      - selected C++ standard
+      - Minimize the number of steps required
+      - Extract shared control flow
+      - Extract duplicated logic
+    max_soft_rules: 9
+    max_preferences: 4
+
+  - id: en_cpp_review_lifetime
+    provider: deterministic
+    prompt: Review this C++20 header for ownership, lifetime, and undefined behavior risks.
+    include:
+      - Avoid undefined behavior
+      - Preserve ownership and lifetime safety
+      - Verify recommendations use facilities available in the selected C++ standard
+    exclude:
+      - Prefer simple common case usage
+      - Minimize the number of steps required
+
+  - id: en_cpp23_api
+    provider: deterministic
+    prompt: Design a C++23 parser API that returns errors explicitly and avoids hidden ownership transfer.
+    include:
+      - Do not use facilities unavailable in the selected C++ standard
+      - Make resource ownership explicit
+      - Prefer available standard facility
+    exclude:
+      - Prefer simple common case usage
+
+  - id: en_non_code_copy
+    provider: deterministic
+    prompt: Improve this landing page copy for launch, no code changes.
+    applicable: false
+
+  - id: zh_explain_code_only
+    provider: deterministic
+    prompt: 只解释这段代码在做什么，不需要修改
+    applicable: false
+
+  - id: zh_error_log_summary
+    provider: deterministic
+    prompt: 帮我把这段报错日志总结成 issue 描述，先不要修改代码
+    applicable: false
+
+  - id: zh_cpp_low_latency_queue
+    provider: deterministic
+    prompt: 写一个 C++20 数据通道，主循环里不能有分配和阻塞，尾延迟要稳
+    include:
+      - Avoid undefined behavior
+      - Do not use facilities unavailable in the selected C++ standard
+      - Verify recommendations use facilities available in the selected C++ standard
+    exclude:
+      - Prefer simple common case usage

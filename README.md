@@ -1,339 +1,179 @@
 ![AI Policy Runtime banner](docs/assets/banner.png)
 
-AI Policy Runtime helps AI coding agents generate higher-quality code by giving
-each task the right engineering policies before code is written. It resolves the
-developer request into task context, activates relevant Skill packs, produces
-Effective Rules, and injects those rules into tools such as Codex, Claude Code,
-or a custom agent workflow.
+# AI Policy Runtime
 
-## Why It Exists
+Generate better AI code with task-aware policies.
 
-AI coding agents work better when the rules are specific to the task instead of
-stored as one large static instruction file. A C++20 low-latency API design task
-needs different constraints than a general refactor, a review, or a frontend
-change.
+AI Policy Runtime helps Codex, Claude Code, and other AI coding workflows apply
+the right engineering guidance for each task. Instead of relying on one static
+prompt for every situation, it activates focused policies for the work at hand:
+implementation, review, refactoring, API design, performance-sensitive code,
+and post-task refinement.
 
-This runtime makes those rules explicit, reproducible, and inspectable:
+It is designed for general AI coding workflows. C++ currently has the deepest
+policy coverage, including ownership, lifetime, bounds safety, modern C++,
+low-latency constraints, and library API design.
 
-- resolve the current task into structured context
-- activate the matching Skills and policy packs
-- reduce them into task-scoped Effective Rules
-- inject the result into an agent-facing prompt or project instruction file
-- optionally verify generated output against deterministic rules
+## Why Use It
+
+- Improve AI-generated code quality without rewriting prompts by hand.
+- Keep agent behavior consistent across a workspace.
+- Apply different policy packs for generation, review, modernization, API
+  design, and performance-sensitive work.
+- Add an optional refinement pass before an agent finishes.
+- Inspect the active policy when you need to understand what guided a response.
 
 ## Install
 
-For end users, install the packaged command:
+For command-line and agent integration workflows:
 
 ```powershell
 npm install -g ai-policy-runtime
-```
-
-This provides both `ai-policy` and the compatibility alias
-`ai-policy-runtime`. The command locates its installed package root
-automatically, so users do not need to clone this repository or pass a source
-checkout as `--plugin-root`.
-
-For local Python development:
-
-```powershell
-pip install -e .
-```
-
-For optional transformer-based semantic recall:
-
-```powershell
-pip install -e ".[semantic]"
-```
-
-The default runtime does not call an LLM and does not download models. It uses
-deterministic analysis first, then the best configured semantic matcher when
-available.
-
-## Quick Start
-
-Resolve a task into agent-facing Effective Rules:
-
-```powershell
-ai-policy resolve `
-  --pack cpp.production_refinement `
-  "Refactor this C++20 code so it is not just working. Reduce complexity and preserve safety."
-```
-
-Example output:
-
-```text
-# Effective Rules for Current Task
-
-## Task Context
-
-- Language: C++
-- Standard: C++20
-- Selected Standard Is Known: true
-- Refinement Requested: true
-- Artifact Type: code
-- Behavior Preservation Required: true
-- Cpp Template Abstraction Candidate: true
-- Template Constraints Required: true
-- Source Structure: true
-- Type Sensitive: true
-- Domain: cpp
-- Task Type: refactor_code
-- Capabilities: refactor_code
-- Tags: code-quality, complexity, cpp, cpp20, refactoring, review, safety, standard-library, templates
-
-## HARD Rules
-
-- Preserve the existing observable behavior while reducing complexity unless the task explicitly asks for a behavior change.
-- Avoid undefined behavior.
-- Do not use facilities unavailable in the selected C++ standard.
-- Avoid invalid or unsafe casts that bypass type and lifetime safety.
-- Preserve ownership and lifetime safety.
-- Do not introduce resource leaks.
-- Do not use unchecked bounds access unless the valid range is proven by a clear invariant.
-
-## SOFT Rules
-
-- Remove accidental complexity that does not contribute to correctness, extensibility, performance, or clarity.
-- Avoid extracting code only because it looks similar when the duplicated fragments represent different responsibilities or are likely to change independently.
-- Avoid introducing abstractions that increase conceptual overhead without improving reuse, clarity, testability, or extension.
-- Make each component feel complete by clarifying its public contract, expected inputs, outputs, failure behavior, and ownership of important state.
-- Handle important boundary conditions and failure paths explicitly rather than leaving them as implicit assumptions.
-- Keep complexity that represents real domain rules, safety constraints, performance needs, or important extension points.
-- Use language-native constructs that express the operation directly when they preserve clarity, correctness, and maintainability.
-- Keep dependency direction stable and avoid designs where low-level components unexpectedly depend on high-level orchestration details.
-- Group related state, helper functions, and behavior into coherent components with clear responsibilities, names, interfaces, and placement.
-- Avoid creating broad utility or manager components that collect unrelated responsibilities under a vague name.
-- Avoid replacing clear specialized logic with a parameterized abstraction whose many flags or modes make behavior harder to understand.
-- Keep headers self-contained so they can be included independently.
-
-## Preferences
-
-- Prefer safety over performance.
-- Prefer standard vocabulary type over ad hoc convention.
-- Prefer effective complexity over accidental complexity.
-- Prefer clear call chain over hidden cross layer coupling.
-- Prefer cohesive component over scattered helper logic.
-- Prefer clarity over cleverness.
-
-## Verification Requirements
-
-- Verify behavior preservation.
-- Verify no new ownership, lifetime, resource, bounds, or undefined-behavior risks were introduced.
-- Verify recommendations use facilities available in the selected C++ standard.
-- Verify the refactoring reduced accidental complexity without introducing over-abstraction.
-```
-
-Explain the detected task context:
-
-```powershell
-ai-policy explain `
-  "Refactor this C++20 code so it is not just working. Reduce complexity and preserve safety."
-```
-
-Validate Skills and packs:
-
-```powershell
-ai-policy validate
-```
-
-Run the bundled example:
-
-```powershell
-python examples/cpp_low_latency.py
-```
-
-Run tests:
-
-```powershell
-python -m unittest discover -s tests
-```
-
-## Use With Agents
-
-Inject Effective Rules into a generated prompt, Codex instructions, or Claude
-instructions:
-
-```powershell
-ai-policy inject --target custom
-ai-policy inject --target codex
-ai-policy inject --target claude
-```
-
-Run Codex through the policy wrapper:
-
-```powershell
-policy-codex `
-  --pack cpp.production_refinement `
-  "Refactor this C++20 code so it is not just working. Reduce complexity and preserve safety."
-```
-
-Add a second, behavior-preserving refinement pass after the first successful
-agent run:
-
-```powershell
-policy-codex `
-  --pack cpp.low_latency `
-  --post-refine `
-  --verify-target src `
-  "Implement a C++20 matching-engine API."
-```
-
-Run Claude Code through the policy wrapper:
-
-```powershell
-policy-claude `
-  --pack cpp.production_refinement `
-  "Refactor this C++20 code so it is not just working. Reduce complexity and preserve safety."
-```
-
-Use this repository as a Codex plugin to resolve each submitted prompt through
-the runtime hooks. `UserPromptSubmit` injects task-scoped Effective Rules, and
-the optional `Stop` hook can ask Codex to continue once with a post-refinement
-prompt before the turn ends. The plugin files live in:
-
-```text
-.codex-plugin/plugin.json
-hooks/hooks.json
-hooks/user_prompt_submit.py
-hooks/stop_refinement.py
-```
-
-The same repository can also be installed as a Claude Code plugin. The Claude
-plugin manifest lives in `.claude-plugin/plugin.json` and uses Claude-specific
-hook entry points that share the same runtime logic.
-For Claude for Windows / Desktop Code sessions, the packaged `ai-policy`
-command can prepare a workspace-local Claude settings file and register the
-installed package as a local plugin marketplace. It can also report status and
-toggle the runtime, plugin, and post-refinement settings without hand-editing
-JSON:
-
-```powershell
-ai-policy configure claude --root D:\work\target-project
-ai-policy status --root D:\work\target-project
-ai-policy post-refine standard --root D:\work\target-project
 ai-policy doctor
 ```
 
-For Codex, the same command can prepare the shared `.policy/config.json`
-without writing Claude settings:
+For VS Code, install the **AI Policy Runtime** extension alongside the Codex or
+Claude Code extension you already use.
+
+## Use It Three Ways
+
+### 1. VS Code Extension
+
+Use this when you run Codex or Claude Code from VS Code.
+
+1. Install the Codex or Claude Code extension you want to use.
+2. Install **AI Policy Runtime**.
+3. Open the AI Policy Runtime side bar.
+4. Enable the runtime for the workspace.
+5. Select Codex, Claude Code, or both.
+6. Choose the policy packs for your project.
+
+Your selected AI coding agents will use the workspace policy automatically.
+
+### 2. Command-Line Agent Hooks
+
+Use this when you run the original Codex CLI, Claude Code CLI, or Claude
+Desktop Code sessions.
+
+Configure a project for Codex CLI:
 
 ```powershell
 ai-policy configure codex --root D:\work\target-project
+```
+
+Then run Codex normally from that project. AI Policy Runtime hooks will apply
+the workspace policy automatically.
+
+Configure a project for Claude Code or Claude Desktop Code sessions:
+
+```powershell
+ai-policy configure claude --root D:\work\target-project
+```
+
+Enable a post-task refinement pass when you want the agent to review and polish
+its own work before finishing:
+
+```powershell
+ai-policy post-refine standard --root D:\work\target-project
+```
+
+Check the active configuration:
+
+```powershell
+ai-policy status --root D:\work\target-project
 ai-policy status --agent codex --root D:\work\target-project
 ```
 
-Codex plugin installation remains a Codex client action; the runtime package
-ships the `.codex-plugin/plugin.json` and `hooks/hooks.json` assets used by that
-plugin.
+### 3. Python Runtime
 
-`tools/configure_claude_desktop.py` remains available for development and
-debugging when a source checkout should be used explicitly as `--plugin-root`.
-`tools/configure_codex.py` provides the equivalent project-policy automation for
-Codex.
-
-A VS Code extension is also included in `vscode-extension/`. It writes
-workspace configuration to `.policy/config.json` so Codex and Claude Code
-integrations can enable or disable packs, select target agents, and configure
-one-click post-task refinement without hand-editing environment variables.
-
-## Programmatic Use
+Use this when you want to embed policy resolution in a custom tool, CI flow, or
+agent workflow.
 
 ```python
 from ai_policy_runtime import PolicyRuntime, RuntimeConfig
 
 runtime = PolicyRuntime(RuntimeConfig.from_values(root="."))
 result = runtime.resolve(
-    "Refactor this C++20 code so it is not just working. "
-    "Reduce complexity and preserve safety.",
-    ("cpp.production_refinement",),
+    "Implement a C++20 matching-engine API.",
+    ("cpp.low_latency",),
 )
 ```
 
-To apply this policy repository to another project, keep the target project root
-separate from the policy asset root:
+## Policy Packs
 
-```python
-runtime = PolicyRuntime(
-    RuntimeConfig.from_values(
-        root=r"D:\work\target-project",
-        policy_root=r"D:\MilesLi\ai-policy-runtime",
-    )
-)
-result = runtime.resolve(
-    "Refactor this C++20 code so it is not just working. "
-    "Reduce complexity and preserve safety.",
-    ("cpp.production_refinement",),
-)
-```
+Bundled packs include:
 
-In this mode, the target project receives `.policy/current/`, `AGENTS.md`, or
-`CLAUDE.md`, while Skills and packs are loaded from `policy_root`.
+- `cpp.safe_generation`
+- `cpp.low_latency`
+- `cpp.code_review`
+- `cpp.library_api_design`
+- `cpp.modernization`
+- `cpp.production_refinement`
+- `generic.production_refinement`
 
-## Outputs
+C++ has the most complete coverage today. Generic refinement packs are available
+for broader coding workflows.
 
-`resolve` writes the current task state to `.policy/current/`:
+## Useful Commands
 
-```text
-task-context.json
-effective-rules.json
-effective-rules.yaml
-effective-prompt.md
-trace.json
-```
-
-Verification writes:
-
-```text
-.policy/current/violations.json
-```
-
-Run verification against generated output:
+Resolve a prompt into task-aware rules:
 
 ```powershell
-ai-policy verify --target path\to\output.cpp
+ai-policy resolve --pack cpp.low_latency "Implement a C++20 matching-engine API."
 ```
 
-## Repository Map
+Explain how a task was classified:
 
-```text
-ai_policy_runtime/
-  domain/          TaskContext, Skill, Rule, SkillPack, diagnostics, config
-  infrastructure/  YAML/JSON loading, condition evaluation, schema loading
-  services/        registry, engine, validation, rendering, verification
-  application/     PolicyRuntime orchestration
-  interfaces/      CLI and agent adapters
-  task_analysis/   exact analysis, project scanning, semantic recall
-skills/            Skill DSL files
-packs/             reusable policy packs
-schemas/           JSON Schemas for Skills, packs, and Effective Rules
-hooks/             Codex and Claude Code plugin hooks
-vscode-extension/  VS Code configuration surface
-docs/              design and usage documentation
+```powershell
+ai-policy explain "Review this API for ownership and lifetime risks."
+```
+
+Validate the bundled policies:
+
+```powershell
+ai-policy validate
+```
+
+Show generated rules for the current workspace:
+
+```powershell
+ai-policy inspect
+```
+
+## Agent Wrappers
+
+Hooks are the recommended path for normal Codex and Claude Code usage. Wrapper
+commands are also available when you want to run an agent through an explicit
+policy-aware command:
+
+```powershell
+policy-codex --pack cpp.low_latency "Implement a C++20 matching-engine API."
+policy-claude --pack cpp.production_refinement "Refactor this module safely."
 ```
 
 ## Documentation
 
-- [Usage Guide](docs/usage.md): CLI commands, wrappers, plugin setup, VS Code,
-  embeddings, cache, and verification details.
-- [NPM Install Guide](docs/npm-install.md): end-user installation,
-  `ai-policy` commands, Claude Desktop setup, and troubleshooting.
-- [Release Guide](docs/release.md): NPM release checks, versioning, and publish
-  workflow.
+- [Usage Guide](docs/usage.md): command-line workflows, agent integrations,
+  embeddings, cache, and verification.
+- [NPM Install Guide](docs/npm-install.md): end-user installation and
+  troubleshooting.
+- [Post-Task Refinement](docs/post_task_refinement_workflow.md): refinement
+  modes and verification flow.
 - [Skill Policy Runtime](docs/skill_policy_runtime.md): runtime model and core
   concepts.
-- [Automation Strategy](docs/policy_runtime_automation_strategy.md): agent
-  integration lifecycle and injection strategy.
-- [Post-Task Refinement Workflow](docs/post_task_refinement_workflow.md):
-  wrapper-level automation for behavior-preserving production refinement.
 - [Skill DSL Syntax](docs/skill_dsl_syntax_specification.md): Skill file format.
 - [Effective Rules Output](docs/effective_rules_output_specification.md):
-  generated rule output contract.
+  generated rule contract.
 - [C++ Skill Library Design](docs/cpp_skill_library_design.md): current C++
   policy library structure.
+- [Reference Assets](docs/reference/): ontology and verification mapping
+  references used by the design documents.
+- [Release Guide](docs/release.md): release checks and publishing workflow.
 
 ## Notes
 
-- JSON skill files work with the Python standard library.
-- YAML skill files are supported through `PyYAML`.
-- The runtime produces Effective Rules for AI agents; it is not itself an LLM.
+- The runtime produces task-aware policy context for AI agents; it is not itself
+  an LLM.
+- The default installation does not download models.
+- Optional semantic matching can use OpenAI-compatible embeddings or a local
+  sentence-transformers model.

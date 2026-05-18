@@ -421,7 +421,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       <input id="enabled" type="checkbox">
     </div>
     <div class="row">
-      <label for="autoInstall">Auto install</label>
+      <label for="autoInstall">Install dependencies automatically</label>
       <input id="autoInstall" type="checkbox">
     </div>
   </div>
@@ -469,7 +469,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
 
   <div class="section">
     <label for="policyRoot">Policy root</label>
-    <input id="policyRoot" type="text" placeholder="Agent plugin or policy asset root">
+    <input id="policyRoot" type="text" placeholder="Leave empty: resolved from Claude/Codex hook location">
   </div>
 
   <div class="section">
@@ -479,7 +479,6 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
         <option value="">Auto</option>
         <option value="openai-compatible">OpenAI-compatible /v1/embeddings</option>
         <option value="local">Local sentence-transformers</option>
-        <option value="hashing">Hashing matcher</option>
         <option value="disabled">Disabled</option>
       </select>
     </div>
@@ -705,7 +704,7 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
       `Enabled: ${config.enabled}`,
       `Agents: ${config.agents.length ? config.agents.join(', ') : '(none)'}`,
       `Packs: ${config.packs.length ? config.packs.join(', ') : '(none)'}`,
-      `Policy root: ${config.policyRoot || '(agent plugin root)'}`,
+      `Policy root: ${config.policyRoot || '(resolved from Claude/Codex hook location)'}`,
       `Embedding provider: ${config.embeddingProvider || '(auto)'}`,
       `Embedding base URL: ${config.embeddingBaseUrl || '(default)'}`,
       `Embedding model: ${config.embeddingModel || '(default)'}`,

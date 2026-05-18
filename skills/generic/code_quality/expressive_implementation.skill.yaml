@@ -39,6 +39,15 @@ skill:
   incompatibilities: []
 
 task_analysis:
+  trigger_confidence: 0.19
+
+  trigger_semantics:
+    improve_code_quality:
+      - replace verbose boilerplate with direct expressive code
+      - use clear language-native implementation constructs
+    refactor_code:
+      - make existing implementation more idiomatic without changing behavior
+
   context_rules:
     - id: detect_expressive_implementation_request
       when_text_matches:
@@ -51,6 +60,7 @@ task_analysis:
         - remove boilerplate
         - more expressive code
       set:
+        expressive_implementation: true
         artifact_type: code
         refinement_requested: true
       tags:

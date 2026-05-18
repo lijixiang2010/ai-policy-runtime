@@ -26,6 +26,9 @@ class DeterministicTaskExtractor:
     def extract(self, text: str, signals: TaskSignals | None = None) -> TaskAnalysis:
         normalized = normalize_text(text)
         state = ExtractionState()
+        if _is_explicit_non_code_change_request(normalized):
+            state.add(default_task_type_evidence())
+            return state.to_analysis(self._lexicon)
         self._apply_domain(normalized, signals, state)
         self._apply_task_type(normalized, state)
         self._apply_exact_context(normalized, state)
@@ -71,9 +74,18 @@ class DeterministicTaskExtractor:
     ) -> None:
         if self._semantic_index is None:
             return
+        bootstrapped_scope: frozenset[str] | None = None
         if gate is None:
-            return
-        scope = self._lexicon.semantic_scope(gate)
+            bootstrapped_scope = self._lexicon.generic_semantic_scope()
+            for match in self._semantic_index.search_scoped(text, scope=bootstrapped_scope):
+                if match.rule.field == "task_type":
+                    state.apply_rule(match.rule, match.evidence())
+            gate = self._semantic_gate(state)
+            if gate is None:
+                return
+        scope = bootstrapped_scope or self._lexicon.semantic_scope(gate)
+        if gate.domain is None:
+            scope = scope | self._lexicon.generic_semantic_scope()
         if not scope:
             return
         if gate.task_type is None:
@@ -84,6 +96,8 @@ class DeterministicTaskExtractor:
             if gated is None or gated.task_type is None:
                 return
             scope = self._lexicon.semantic_scope(gated)
+            if gated.domain is None:
+                scope = scope | self._lexicon.generic_semantic_scope()
         for match in self._semantic_index.search_scoped(text, scope=scope):
             state.apply_rule(match.rule, match.evidence())
 
@@ -110,3 +124,26 @@ def _int_or_none(value: object) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def _is_explicit_non_code_change_request(text: str) -> bool:
+    return any(
+        phrase in text
+        for phrase in (
+            "no code changes",
+            "do not change source code",
+            "do not change code",
+            "without changing source code",
+            "explain only",
+            "only explain",
+            "summarize only",
+            "不需要改代码",
+            "不用改代码",
+            "不要改代码",
+            "不改代码",
+            "不需要修改",
+            "不要修改",
+            "只解释",
+            "只总结",
+        )
+    )

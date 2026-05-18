@@ -4,7 +4,6 @@ from .analyzer import TaskAnalyzer, build_extractor
 from .deterministic_extractor import DeterministicTaskExtractor
 from .embeddings import (
     EmbeddingProvider,
-    HashingTextEmbeddingProvider,
     OpenAICompatibleEmbeddingConfig,
     OpenAICompatibleEmbeddingProvider,
     SentenceTransformerEmbeddingProvider,
@@ -16,7 +15,6 @@ __all__ = [
     "DeterministicTaskExtractor",
     "EmbeddingProvider",
     "ExtractionEvidence",
-    "HashingTextEmbeddingProvider",
     "LexiconRule",
     "OpenAICompatibleEmbeddingConfig",
     "OpenAICompatibleEmbeddingProvider",

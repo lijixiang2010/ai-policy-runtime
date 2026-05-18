@@ -6,7 +6,6 @@ from pathlib import Path
 from .deterministic_extractor import DeterministicTaskExtractor
 from .embeddings import (
     EmbeddingProvider,
-    HashingTextEmbeddingProvider,
     NullEmbeddingProvider,
     OpenAICompatibleEmbeddingProvider,
     SentenceTransformerEmbeddingProvider,
@@ -80,14 +79,12 @@ def _default_embedding_provider() -> EmbeddingProvider:
     1. Explicit provider choices from AI_POLICY_EMBEDDING_PROVIDER.
     2. OpenAI-compatible /v1/embeddings when configured.
     3. Local bundled sentence-transformers model when available.
-    4. Dependency-free hashing fallback.
+    4. Deterministic exact matching when no embedding provider is available.
     """
 
     provider = _configured_provider_name()
     if provider in {"disabled", "none", "null"}:
         return NullEmbeddingProvider()
-    if provider in {"hashing", "lightweight"}:
-        return HashingTextEmbeddingProvider()
     if provider in {"openai", "openai-compatible", "opaicompat"}:
         remote = OpenAICompatibleEmbeddingProvider.from_env()
         if remote is None:
@@ -110,7 +107,7 @@ def _default_embedding_provider() -> EmbeddingProvider:
             return SentenceTransformerEmbeddingProvider(str(local_model))
         except RuntimeError:
             pass
-    return HashingTextEmbeddingProvider()
+    return NullEmbeddingProvider()
 
 
 def optional_sentence_transformer_provider() -> EmbeddingProvider | None:

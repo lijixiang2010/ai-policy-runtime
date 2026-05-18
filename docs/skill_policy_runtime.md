@@ -1158,7 +1158,7 @@ ai_policy_runtime/
 │   ├── tool_router.py
 │   └── execution.py
 │
-├── verification/                   # Rule verification
+├── docs/reference/verification/    # Reference verification mappings
 │   ├── ast/
 │   ├── lint/
 │   ├── evaluators/

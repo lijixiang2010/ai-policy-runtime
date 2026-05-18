@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import os
-import re
-import unicodedata
-from collections import Counter
 from dataclasses import dataclass
 from typing import Protocol, Sequence
 from urllib.error import HTTPError, URLError
@@ -110,37 +106,6 @@ class OpenAICompatibleEmbeddingProvider:
         return headers
 
 
-class HashingTextEmbeddingProvider:
-    """Dependency-free semantic approximation using hashed lexical n-grams.
-
-    This provider is intentionally small and local. It is not a replacement for
-    transformer embeddings, but it works well enough for task-intent recall when
-    Skill authors provide representative semantic phrases.
-    """
-
-    model_name = "hashing-text-ngram-v1"
-
-    def __init__(self, dimensions: int = 512) -> None:
-        if dimensions <= 0:
-            raise ValueError("dimensions must be positive")
-        self.dimensions = dimensions
-
-    def encode(self, texts: Sequence[str]) -> list[list[float]]:
-        return [self._encode_one(text) for text in texts]
-
-    def _encode_one(self, text: str) -> list[float]:
-        vector = [0.0] * self.dimensions
-        features = _text_features(text)
-        if not features:
-            return vector
-        counts = Counter(features)
-        for feature, count in counts.items():
-            index = _stable_hash(feature) % self.dimensions
-            sign = 1.0 if _stable_hash(f"{feature}:sign") % 2 == 0 else -1.0
-            vector[index] += sign * (1.0 + math.log(count))
-        return _normalize(vector)
-
-
 class SentenceTransformerEmbeddingProvider:
     """Embedding provider backed by an explicitly configured local sentence-transformers model."""
 
@@ -199,55 +164,6 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     if not left_norm or not right_norm:
         return 0.0
     return numerator / (left_norm * right_norm)
-
-
-def _text_features(text: str) -> list[str]:
-    normalized = _normalize_text(text)
-    if not normalized:
-        return []
-    compact = normalized.replace(" ", "")
-    features: list[str] = []
-    features.extend(f"char:{gram}" for gram in _char_ngrams(compact, 2, 4))
-    tokens = normalized.split()
-    features.extend(f"token:{token}" for token in tokens)
-    features.extend(f"word:{gram}" for gram in _word_ngrams(tokens, 2, 3))
-    return features
-
-
-def _normalize_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFKC", text).lower()
-    return " ".join(re.findall(r"[\w]+|[\u4e00-\u9fff]", normalized, flags=re.UNICODE))
-
-
-def _char_ngrams(text: str, min_n: int, max_n: int) -> list[str]:
-    if not text:
-        return []
-    grams: list[str] = []
-    for size in range(min_n, max_n + 1):
-        if len(text) < size:
-            continue
-        grams.extend(text[index : index + size] for index in range(len(text) - size + 1))
-    return grams or [text]
-
-
-def _word_ngrams(tokens: Sequence[str], min_n: int, max_n: int) -> list[str]:
-    grams: list[str] = []
-    for size in range(min_n, max_n + 1):
-        if len(tokens) < size:
-            continue
-        grams.extend(" ".join(tokens[index : index + size]) for index in range(len(tokens) - size + 1))
-    return grams
-
-
-def _stable_hash(value: str) -> int:
-    return int.from_bytes(hashlib.blake2b(value.encode("utf-8"), digest_size=8).digest(), "big")
-
-
-def _normalize(vector: list[float]) -> list[float]:
-    norm = math.sqrt(sum(value * value for value in vector))
-    if not norm:
-        return vector
-    return [value / norm for value in vector]
 
 
 def _embeddings_url(base_url: str) -> str:

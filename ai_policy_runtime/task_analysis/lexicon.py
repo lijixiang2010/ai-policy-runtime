@@ -115,6 +115,15 @@ class TaskLexicon:
             if profile.matches(gate)
         )
 
+    def generic_semantic_scope(self) -> frozenset[str]:
+        """Return language-independent skills eligible for no-domain bootstrapping."""
+
+        return frozenset(
+            profile.skill_id
+            for profile in self.skill_profiles
+            if profile.domain in {None, "generic_code"}
+        )
+
 
 class SkillAnalysisDocument:
     """Task-analysis view over a raw Skill DSL mapping."""
@@ -181,20 +190,22 @@ class SkillAnalysisDocument:
     def trigger_rules(self) -> tuple[LexiconRule, ...]:
         """Return task-trigger rules declared by this Skill."""
 
+        aliases_by_trigger = dict(self._analysis.get("trigger_aliases", {}))
         semantics = dict(self._analysis.get("trigger_semantics", {}))
+        triggers = sorted({*aliases_by_trigger, *semantics})
         return tuple(
             LexiconRule(
                 skill_id=self.skill_id,
                 field="task_type",
                 value=str(trigger),
-                phrases=_normalize_phrases(_strings(aliases)),
+                phrases=_normalize_phrases(_strings(aliases_by_trigger.get(trigger, ()))),
                 confidence=float(self._analysis.get("trigger_confidence", 0.82)),
                 source=f"skill:{self.skill_id}:trigger:{trigger}",
                 semantic_texts=_normalize_phrases(
                     _strings(semantics.get(trigger, ()))
                 ),
             )
-            for trigger, aliases in dict(self._analysis.get("trigger_aliases", {})).items()
+            for trigger in triggers
         )
 
     def context_rules(self) -> tuple[LexiconRule, ...]:

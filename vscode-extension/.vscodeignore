@@ -3,6 +3,7 @@
 src/**
 node_modules/**
 *.vsix
+*.log
 tsconfig.json
 package-lock.json
 **/*.map

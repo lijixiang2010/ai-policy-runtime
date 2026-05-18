@@ -41,6 +41,17 @@ skill:
   incompatibilities: []
 
 task_analysis:
+  trigger_confidence: 0.19
+
+  trigger_semantics:
+    design_api:
+      - improve API ergonomics for callers
+      - reduce caller burden in common API usage
+      - simplify setup for the common API path
+    improve_code_quality:
+      - reduce friction for callers using an existing API
+      - provide reasonable defaults for common code usage
+
   context_rules:
     - id: detect_api_usability_refinement
       when_text_matches:
@@ -65,6 +76,8 @@ task_analysis:
       semantic_match:
         - minimize setup and steps for common API usage
         - provide reasonable defaults without hiding advanced control
+        - reduce friction for callers using the API
+        - improve API ergonomics for common use cases
       confidence: 0.84
 
 rules:

@@ -33,6 +33,7 @@
     "bin/*.js",
     "docs/**/*.md",
     "docs/assets/*.png",
+    "docs/reference/**/*.yaml",
     "hooks/*.json",
     "hooks/*.py",
     "packs/*.yaml",

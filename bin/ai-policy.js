@@ -273,6 +273,8 @@ function doctor() {
   const checks = {
     packageJson: fs.existsSync(path.join(PACKAGE_ROOT, "package.json")),
     pythonPackage: fs.existsSync(path.join(PACKAGE_ROOT, "ai_policy_runtime", "__init__.py")),
+    codexPlugin: fs.existsSync(path.join(PACKAGE_ROOT, ".codex-plugin", "plugin.json")),
+    codexHooks: fs.existsSync(path.join(PACKAGE_ROOT, "hooks", "hooks.json")),
     claudePlugin: fs.existsSync(path.join(PACKAGE_ROOT, ".claude-plugin", "plugin.json")),
     claudeHooks: fs.existsSync(path.join(PACKAGE_ROOT, "hooks", "claude-hooks.json")),
     skills: fs.existsSync(path.join(PACKAGE_ROOT, "skills")),

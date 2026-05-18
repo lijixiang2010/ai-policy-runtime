@@ -313,8 +313,6 @@ class PolicyRuntime:
             "disabled",
             "none",
             "null",
-            "hashing",
-            "lightweight",
             "openai",
             "openai-compatible",
             "opaicompat",
@@ -322,6 +320,8 @@ class PolicyRuntime:
             return None
         if not provider and _remote_embedding_configured():
             return None
+        if provider and provider not in {"local", "sentence-transformers"}:
+            raise RuntimeError(f"Unsupported AI_POLICY_EMBEDDING_PROVIDER: {provider}")
 
         model_root = self.config.policy_root or self.config.paths.root
         local_model = (

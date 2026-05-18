@@ -19,10 +19,8 @@ from ai_policy_runtime.domain.pack import PackRegistry, SkillPack
 from ai_policy_runtime.domain.rule import RuleAction
 from ai_policy_runtime.task_analysis import TaskAnalyzer
 from ai_policy_runtime.task_analysis.embeddings import (
-    HashingTextEmbeddingProvider,
     OpenAICompatibleEmbeddingConfig,
     OpenAICompatibleEmbeddingProvider,
-    cosine_similarity,
 )
 from ai_policy_runtime.task_analysis.lexicon import LexiconRule, TaskLexicon
 from ai_policy_runtime.task_analysis.semantic_index import SemanticTaskIndex
@@ -51,6 +49,8 @@ from tools.configure_claude_desktop import (
     status as claude_desktop_status,
 )
 from tools.configure_codex import (
+    configure_codex_config,
+    configure_codex_hooks,
     configure_policy as configure_codex_policy,
     main as configure_codex_main,
     status as codex_status,
@@ -119,6 +119,17 @@ def _section_bullet_count(prompt: str, title: str) -> int:
     return sum(1 for line in section.splitlines() if line.startswith("- "))
 
 
+def _has_policy_content_for_test(effective) -> bool:
+    return any(
+        (
+            effective.hard,
+            effective.soft,
+            effective.preferences,
+            effective.exceptions,
+        )
+    )
+
+
 class KeywordConceptEmbeddingProvider:
     """Small deterministic embedding provider for semantic-index tests."""
 
@@ -128,6 +139,101 @@ class KeywordConceptEmbeddingProvider:
         ("latency", ("尾延迟", "latency", "延迟", "hot path", "critical path")),
         ("allocation", ("分配", "allocation", "blocking", "阻塞", "unbounded")),
         ("queue", ("队列", "queue", "data channel", "buffer", "producer consumer")),
+        (
+            "production",
+            (
+                "生产可用",
+                "production-ready",
+                "production-quality",
+                "polish",
+                "能跑",
+                "produccion",
+                "本番品質",
+            ),
+        ),
+        (
+            "behavior",
+            (
+                "不改变行为",
+                "不要改变行为",
+                "preserving behavior",
+                "without changing behavior",
+                "sin cambiar el comportamiento",
+                "changer le comportement",
+                "振る舞いを変えず",
+            ),
+        ),
+        (
+            "complexity",
+            (
+                "意外复杂度",
+                "accidental complexity",
+                "complejidad accidental",
+                "複雑さ",
+                "有点乱",
+                "整理清楚",
+                "maintainable",
+            ),
+        ),
+        (
+            "duplication",
+            (
+                "重复逻辑",
+                "duplicated logic",
+                "repeated logic",
+                "logique dupliquee",
+            ),
+        ),
+        (
+            "api",
+            (
+                "接口摩擦",
+                "接口调用步骤",
+                "调用方负担",
+                "合理默认值",
+                "api ergonomics",
+                "caller friction",
+                "friction de l'api",
+            ),
+        ),
+        (
+            "grouping",
+            (
+                "scattered helpers",
+                "scattered helpers and state",
+                "cohesive component",
+                "整理相关",
+            ),
+        ),
+        (
+            "hierarchy",
+            (
+                "调用链",
+                "循环依赖",
+                "层次",
+                "call chain",
+                "circular dependencies",
+            ),
+        ),
+        (
+            "variation",
+            (
+                "small variations",
+                "shared control flow",
+                "same control flow",
+                "variation point",
+            ),
+        ),
+        (
+            "expression",
+            (
+                "样板代码",
+                "语言原生",
+                "清晰直接",
+                "language-native",
+                "boilerplate",
+            ),
+        ),
     )
 
     def encode(self, texts: list[str] | tuple[str, ...]) -> list[list[float]]:
@@ -260,6 +366,80 @@ class PolicyRuntimeTests(unittest.TestCase):
             [item.source for item in analysis.evidence],
         )
 
+    def test_task_analyzer_bootstraps_generic_refinement_from_semantics(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=KeywordConceptEmbeddingProvider(),
+        )
+
+        analysis = analyzer.analyze(
+            "帮我把这个模块整理到生产可用，不改变行为，"
+            "减少意外复杂度，顺便把重复逻辑和接口摩擦处理掉"
+        )
+        task = analysis.task
+
+        self.assertEqual(task.domain, "general")
+        self.assertNotEqual(task.task_type, "unknown")
+        self.assertTrue(task.context["artifact_type"] == "code")
+        self.assertTrue(task.context["refinement_requested"])
+        self.assertTrue(task.context["behavior_preservation_required"])
+        self.assertTrue(
+            set(task.context["semantic_skill_matches"]).intersection(
+                {
+                    "generic.code_quality.implementation_polish",
+                    "generic.refactoring.duplication_extraction",
+                    "generic.code_quality.api_usability",
+                    "generic.code_quality.expressive_implementation",
+                }
+            )
+        )
+        self.assertTrue(analysis.activation_ready)
+        self.assertTrue(
+            any(":semantic:" in item.source for item in analysis.evidence),
+            [item.source for item in analysis.evidence],
+        )
+
+    def test_semantic_recall_quality_eval_set(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=KeywordConceptEmbeddingProvider(),
+        )
+        fixture = _load_fixture("semantic_recall_eval.yaml")
+
+        for case in fixture["cases"]:
+            with self.subTest(case=case["id"]):
+                analysis = analyzer.analyze(str(case["prompt"]))
+                task = analysis.task
+
+                self.assertEqual(analysis.activation_ready, case["activation_ready"])
+                if "domain" in case:
+                    self.assertEqual(task.domain, case["domain"])
+                if "forbidden_domain" in case:
+                    self.assertNotEqual(task.domain, case["forbidden_domain"])
+                    self.assertNotEqual(task.context.get("language"), case["forbidden_domain"])
+                if "task_type" in case:
+                    self.assertEqual(task.task_type, case["task_type"])
+                if "task_type_not" in case:
+                    self.assertNotEqual(task.task_type, case["task_type_not"])
+
+                for key, value in case.get("required_context", {}).items():
+                    self.assertEqual(task.context.get(key), value, key)
+                for key in case.get("forbidden_context", ()):
+                    self.assertNotIn(key, task.context)
+                for tag in case.get("required_tags", ()):
+                    self.assertIn(tag, task.tags)
+
+                expected_any_skill = set(case.get("expected_any_skill", ()))
+                if expected_any_skill:
+                    self.assertTrue(
+                        expected_any_skill.intersection(
+                            set(task.context.get("semantic_skill_matches", ()))
+                        ),
+                        task.context.get("semantic_skill_matches", ()),
+                    )
+                if task.domain != "cpp":
+                    self.assertNotIn("cpp", task.tags)
+
     def test_semantic_index_reuses_cached_vectors(self) -> None:
         lexicon = TaskLexicon(
             context_rules=(
@@ -331,21 +511,6 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("concept", template_rule.phrases)
         self.assertEqual(template_rule.set_context, {"template_constraints_required": True})
 
-    def test_hashing_embedding_provider_supports_lightweight_semantic_similarity(self) -> None:
-        provider = HashingTextEmbeddingProvider()
-        stable_tail_latency, unrelated = provider.encode(
-            (
-                "尾延迟保持稳定",
-                "write a formal markdown document",
-            )
-        )
-        query = provider.encode(("尾延迟要稳定",))[0]
-
-        self.assertGreater(
-            cosine_similarity(query, stable_tail_latency),
-            cosine_similarity(query, unrelated),
-        )
-
     def test_openai_compatible_embedding_provider_uses_batch_endpoint(self) -> None:
         provider = OpenAICompatibleEmbeddingProvider(
             OpenAICompatibleEmbeddingConfig(
@@ -416,6 +581,15 @@ class PolicyRuntimeTests(unittest.TestCase):
             provider = OpenAICompatibleEmbeddingProvider.from_env()
 
         self.assertIsNone(provider)
+
+    def test_hashing_embedding_provider_is_not_supported(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"AI_POLICY_EMBEDDING_PROVIDER": "hashing"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Unsupported"):
+                TaskAnalyzer.from_skills_dir("skills")
 
     def test_local_model_manager_lists_and_installs_known_model(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -800,6 +974,34 @@ class PolicyRuntimeTests(unittest.TestCase):
         )
 
         self.assertEqual(effective.hard, [])
+
+    def test_general_code_task_activates_generic_code_skills(self) -> None:
+        task = TaskContext(
+            domain="general",
+            task_type="improve_code_quality",
+            capabilities=("code_review", "refactor_code"),
+            tags=("code-quality", "complexity", "refactoring"),
+            context={
+                "artifact_type": "code",
+                "refinement_requested": True,
+                "behavior_preservation_required": True,
+                "duplicated_logic": True,
+            },
+        )
+
+        effective = PolicyEngine(SkillRegistry.from_dirs("skills", "packs")).evaluate(task)
+        sources = {
+            rule.source
+            for rule in (
+                *effective.hard,
+                *effective.soft,
+                *effective.preferences,
+                *effective.exceptions,
+            )
+        }
+
+        self.assertIn("generic.code_quality.complexity_reduction", sources)
+        self.assertIn("generic.refactoring.duplication_extraction", sources)
 
     def test_multiline_condition_expression_is_normalized(self) -> None:
         skill = Skill.from_mapping(
@@ -1674,6 +1876,99 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(policy["policyRoot"], str(Path.cwd()))
         self.assertFalse(claude_settings_exists)
 
+    def test_configure_codex_hooks_writes_project_hook_commands(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+
+            hooks_path = configure_codex_hooks(root, plugin_root)
+            hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+
+        user_prompt = hooks["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+        stop = hooks["hooks"]["Stop"][0]["hooks"][0]
+        self.assertIn("ai-policy-hook.js", user_prompt["command"])
+        self.assertIn("codex-user-prompt-submit", user_prompt["command"])
+        self.assertIn("ai-policy-hook.js", stop["command"])
+        self.assertIn("codex-stop-refinement", stop["command"])
+
+    def test_configure_codex_hooks_preserves_existing_hooks(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            hooks_dir = root / ".codex"
+            hooks_dir.mkdir(parents=True)
+            (hooks_dir / "hooks.json").write_text(
+                json.dumps(
+                    {
+                        "hooks": {
+                            "UserPromptSubmit": [
+                                {
+                                    "hooks": [
+                                        {
+                                            "type": "command",
+                                            "command": "echo existing",
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            hooks_path = configure_codex_hooks(root, Path.cwd())
+            hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+            entries = hooks["hooks"]["UserPromptSubmit"]
+
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0]["hooks"][0]["command"], "echo existing")
+        self.assertIn("ai-policy-hook.js", entries[1]["hooks"][0]["command"])
+
+    def test_configure_codex_hooks_disable_removes_only_ai_policy_hooks(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            configure_codex_hooks(root, Path.cwd())
+            hooks_path = root / ".codex" / "hooks.json"
+            hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+            hooks["hooks"]["Stop"].insert(
+                0,
+                {"hooks": [{"type": "command", "command": "echo keep"}]},
+            )
+            hooks_path.write_text(json.dumps(hooks), encoding="utf-8")
+
+            configure_codex_hooks(root, Path.cwd(), enabled=False)
+            disabled = json.loads(hooks_path.read_text(encoding="utf-8"))
+
+        self.assertNotIn("UserPromptSubmit", disabled["hooks"])
+        self.assertEqual(disabled["hooks"]["Stop"][0]["hooks"][0]["command"], "echo keep")
+
+    def test_configure_codex_config_enables_project_hooks_feature(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            config_path = configure_codex_config(root)
+
+            content = config_path.read_text(encoding="utf-8")
+
+        self.assertIn("[features]", content)
+        self.assertIn("codex_hooks = true", content)
+
+    def test_configure_codex_config_preserves_existing_toml(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            codex = root / ".codex"
+            codex.mkdir(parents=True)
+            (codex / "config.toml").write_text(
+                "model = \"gpt-5\"\n\n[features]\nother = true\n",
+                encoding="utf-8",
+            )
+
+            config_path = configure_codex_config(root)
+            content = config_path.read_text(encoding="utf-8")
+
+        self.assertIn("model = \"gpt-5\"", content)
+        self.assertIn("other = true", content)
+        self.assertIn("codex_hooks = true", content)
+
     def test_configure_codex_disable_preserves_other_agents(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"
@@ -1717,13 +2012,42 @@ class PolicyRuntimeTests(unittest.TestCase):
             root = Path(tmp) / "project"
             plugin_root = Path.cwd()
             configure_codex_policy(root, plugin_root)
+            configure_codex_hooks(root, plugin_root)
+            configure_codex_config(root)
 
             current = codex_status(root, plugin_root)
 
         self.assertTrue(current["runtime_enabled"])
         self.assertTrue(current["codex_agent_enabled"])
+        self.assertTrue(current["codex_hooks_enabled"])
+        self.assertTrue(current["project_hooks_present"])
+        self.assertTrue(current["project_hooks_configured"])
         self.assertTrue(current["plugin_assets_present"])
         self.assertEqual(current["expected_plugin_root"], str(Path.cwd()))
+
+    def test_configure_codex_status_does_not_treat_unrelated_hooks_as_configured(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            hooks_dir = root / ".codex"
+            hooks_dir.mkdir(parents=True)
+            (hooks_dir / "hooks.json").write_text(
+                json.dumps(
+                    {
+                        "hooks": {
+                            "UserPromptSubmit": [
+                                {"hooks": [{"type": "command", "command": "echo user"}]}
+                            ],
+                            "Stop": [{"hooks": [{"type": "command", "command": "echo stop"}]}],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            current = codex_status(root, Path.cwd())
+
+        self.assertTrue(current["project_hooks_present"])
+        self.assertFalse(current["project_hooks_configured"])
 
     def test_configure_codex_cli_updates_policy(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -1735,18 +2059,24 @@ class PolicyRuntimeTests(unittest.TestCase):
             policy = json.loads(
                 (root / ".policy" / "config.json").read_text(encoding="utf-8")
             )
+            hooks = json.loads((root / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+            codex_config = (root / ".codex" / "config.toml").read_text(encoding="utf-8")
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(policy["agents"], ["codex"])
+        self.assertIn("UserPromptSubmit", hooks["hooks"])
+        self.assertIn("codex_hooks = true", codex_config)
 
     def test_npm_package_exposes_ai_policy_commands(self) -> None:
         package = json.loads(Path("package.json").read_text(encoding="utf-8"))
 
         self.assertEqual(package["bin"]["ai-policy"], "bin/ai-policy.js")
         self.assertEqual(package["bin"]["ai-policy-runtime"], "bin/ai-policy.js")
+        self.assertIn(".codex-plugin/*.json", package["files"])
         self.assertIn(".claude-plugin/*.json", package["files"])
         self.assertIn("hooks/*.json", package["files"])
         self.assertIn("hooks/*.py", package["files"])
+        self.assertIn("docs/reference/**/*.yaml", package["files"])
         self.assertIn("skills/**/*.yaml", package["files"])
         self.assertIn("packs/*.yaml", package["files"])
 
@@ -1814,7 +2144,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertFalse(current["runtime_enabled"])
         self.assertFalse((root / ".policy" / "config.json").exists())
 
-    def test_ai_policy_configure_codex_command_updates_policy_only(self) -> None:
+    def test_ai_policy_configure_codex_command_updates_policy_and_hooks(self) -> None:
         if shutil.which("node") is None:
             self.skipTest("node is not available")
 
@@ -1841,10 +2171,14 @@ class PolicyRuntimeTests(unittest.TestCase):
             policy = json.loads(
                 (root / ".policy" / "config.json").read_text(encoding="utf-8")
             )
+            hooks = json.loads((root / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+            codex_config = (root / ".codex" / "config.toml").read_text(encoding="utf-8")
             claude_settings_exists = (root / ".claude").exists()
 
         self.assertTrue(policy["enabled"])
         self.assertEqual(policy["agents"], ["codex"])
+        self.assertIn("UserPromptSubmit", hooks["hooks"])
+        self.assertIn("codex_hooks = true", codex_config)
         self.assertFalse(claude_settings_exists)
 
     def test_ai_policy_status_codex_command_is_read_only(self) -> None:
@@ -2070,6 +2404,81 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(
             any("Preserve the existing observable behavior" in item for item in detailed_checks)
         )
+
+    def test_generic_refinement_prompt_omits_cpp_standard_verification(self) -> None:
+        task = TaskContext(
+            domain="general",
+            task_type="improve_code_quality",
+            capabilities=("code_review", "refactor_code"),
+            tags=("code-quality", "complexity", "refactoring"),
+            context={
+                "artifact_type": "code",
+                "refinement_requested": True,
+                "behavior_preservation_required": True,
+                "duplicated_logic": True,
+            },
+        )
+        rules = PolicyEngine(SkillRegistry.from_dirs("skills", "packs")).evaluate(task)
+        rendered = EffectiveRulesRenderer().to_mapping(
+            task=task,
+            task_id="task_test",
+            summary="Generic refinement",
+            rules=rules,
+            trace={"active_skills": []},
+        )
+        prompt = EffectiveRulesRenderer().to_prompt(rendered)
+
+        self.assertIn("Preserve the existing observable behavior", prompt)
+        self.assertIn("Extract duplicated logic", prompt)
+        self.assertIn("Prefer shared responsibility abstraction", prompt)
+        self.assertIn("Prefer finished component", prompt)
+        self.assertNotIn("selected C++ standard", prompt)
+        self.assertNotIn("Prefer clear call chain", prompt)
+        self.assertLessEqual(_section_bullet_count(prompt, "SOFT Rules"), 9)
+        self.assertLessEqual(_section_bullet_count(prompt, "Preferences"), 4)
+
+    def test_prompt_quality_eval_set(self) -> None:
+        fixture = _load_fixture("prompt_quality_eval.yaml")
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=KeywordConceptEmbeddingProvider(),
+        )
+        registry = SkillRegistry.from_dirs("skills", "packs")
+        renderer = EffectiveRulesRenderer()
+
+        for case in fixture["cases"]:
+            with self.subTest(case=case["id"]):
+                analysis = analyzer.analyze(str(case["prompt"]))
+                effective = PolicyEngine(registry).evaluate(analysis.task)
+                if case.get("applicable", True) is False:
+                    self.assertFalse(analysis.activation_ready)
+                    self.assertFalse(_has_policy_content_for_test(effective))
+                    continue
+                self.assertTrue(analysis.activation_ready, analysis.to_dict())
+                self.assertTrue(_has_policy_content_for_test(effective))
+                rendered = renderer.to_mapping(
+                    task=analysis.task,
+                    task_id=str(case["id"]),
+                    summary=str(case["prompt"]),
+                    rules=effective,
+                    trace={"active_skills": []},
+                )
+                prompt = renderer.to_prompt(rendered)
+
+                for text in case.get("include", ()):
+                    self.assertIn(text, prompt)
+                for text in case.get("exclude", ()):
+                    self.assertNotIn(text, prompt)
+                if "max_soft_rules" in case:
+                    self.assertLessEqual(
+                        _section_bullet_count(prompt, "SOFT Rules"),
+                        case["max_soft_rules"],
+                    )
+                if "max_preferences" in case:
+                    self.assertLessEqual(
+                        _section_bullet_count(prompt, "Preferences"),
+                        case["max_preferences"],
+                    )
 
     def test_effective_rules_schema_validator_reports_missing_field(self) -> None:
         diagnostics = validate_effective_rules_mapping(

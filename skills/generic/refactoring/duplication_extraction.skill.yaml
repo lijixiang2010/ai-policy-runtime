@@ -48,6 +48,11 @@ task_analysis:
       - extract duplicated logic
       - eliminate copy paste
       - factor common logic
+  trigger_semantics:
+    reduce_duplication:
+      - remove repeated logic that expresses the same responsibility
+      - reduce duplicated implementation while preserving behavior
+      - factor common behavior out of existing code
 
   trigger_capabilities:
     reduce_duplication:
@@ -72,8 +77,10 @@ task_analysis:
         - refactoring
         - code-quality
       semantic_match:
-        - repeated code expresses the same responsibility
+        - explicit duplicated logic expresses the same responsibility
         - common logic should be extracted carefully
+        - remove duplicated logic without creating false abstraction
+        - factor repeated implementation into shared behavior
       confidence: 0.86
 
 rules:

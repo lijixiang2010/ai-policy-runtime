@@ -37,7 +37,6 @@ configured semantic provider:
 ```text
 OpenAI-compatible /v1/embeddings endpoint
 local sentence-transformers model
-dependency-free hashing n-gram matcher
 ```
 
 OpenAI-compatible is the preferred default provider shape. Use an
@@ -59,7 +58,6 @@ advanced overrides:
 $env:AI_POLICY_EMBEDDING_PROVIDER="openai-compatible" # force remote embeddings
 $env:AI_POLICY_EMBEDDING_PROVIDER="opaicompat"         # alias for openai-compatible
 $env:AI_POLICY_EMBEDDING_PROVIDER="local"             # force sentence-transformers
-$env:AI_POLICY_EMBEDDING_PROVIDER="hashing"           # force lightweight local matcher
 $env:AI_POLICY_EMBEDDING_PROVIDER="disabled"          # disable semantic matching
 ```
 
@@ -73,10 +71,9 @@ If `AI_POLICY_EMBEDDING_MODEL` is omitted for a remote endpoint, the runtime
 uses `text-embedding-3-small`.
 
 If no remote provider is configured, the runtime tries the bundled local model
-path shown below, then falls back to the lightweight hashing matcher. The
-dependency-free matcher is less powerful than real embedding models, but works
-well for task-intent recall when Skills provide representative semantic
-phrases.
+path shown below. If neither provider is available, semantic embedding recall is
+disabled and the runtime uses deterministic exact matching plus project-context
+scanning only.
 
 To verify which semantic path works in your environment, run:
 
@@ -97,20 +94,15 @@ ai-policy explain "帮我写一个 C++20 低延迟队列"
 $env:AI_POLICY_EMBEDDING_PROVIDER="local"
 ai-policy explain "帮我写一个 C++20 低延迟队列"
 
-$env:AI_POLICY_EMBEDDING_PROVIDER="hashing"
-ai-policy explain "帮我写一个 C++20 低延迟队列"
-
 $env:AI_POLICY_EMBEDDING_PROVIDER="disabled"
 ai-policy explain "帮我写一个 C++20 低延迟队列"
 ```
 
 In automatic mode, leave `AI_POLICY_EMBEDDING_PROVIDER` unset. Automatic mode
 uses the remote OpenAI-compatible endpoint when endpoint credentials are
-configured, otherwise the local model, otherwise the hashing matcher. The
-offline hashing provider is only a fallback, not the preferred production
-semantic provider. When a
-provider is forced explicitly, configuration or endpoint errors are reported
-instead of silently falling back to a weaker provider.
+configured, otherwise the local model when installed. When a provider is forced
+explicitly, configuration or endpoint errors are reported instead of silently
+falling back to a weaker provider.
 
 Transformer-based semantic recall is optional. Install the optional extra when
 you want it:
@@ -145,8 +137,8 @@ $env:AI_POLICY_EMBEDDING_MODEL="D:\path\to\model"
 
 When `policy_root/models/paraphrase-multilingual-MiniLM-L12-v2` exists, the
 high-level runtime uses it automatically. If no local transformer model is
-configured, the runtime falls back to the built-in hashing n-gram matcher rather
-than downloading anything.
+configured, semantic embedding recall is disabled rather than downloading
+anything.
 
 Semantic index vectors are cached under:
 
@@ -442,8 +434,8 @@ Reload VS Code after reinstalling:
 Developer: Reload Window
 ```
 
-For local development in this repository, `.codex/config.toml` points Codex at
-the same hook implementation used by the plugin.
+For local development in this repository, project `.codex/config.toml` can point
+Codex at the same hook implementation used by the plugin.
 
 For an installed NPM package, configure the shared project policy for Codex:
 
@@ -453,8 +445,18 @@ ai-policy status --agent codex --root D:\work\target-project
 ```
 
 This enables the `codex` agent in `.policy/config.json`, records the installed
-package as `policyRoot`, and leaves Claude settings untouched. Codex plugin
-installation remains a Codex client action.
+package as `policyRoot`, writes project-local Codex hook settings, and leaves
+Claude settings untouched:
+
+```text
+D:\work\target-project\.policy\config.json
+D:\work\target-project\.codex\hooks.json
+D:\work\target-project\.codex\config.toml
+```
+
+The generated `.codex/hooks.json` invokes the installed package's hook runner,
+so users can run the normal `codex` CLI in that project without using
+`policy-codex`.
 
 After publishing this repository to GitHub, users can add it as a Codex plugin
 marketplace:

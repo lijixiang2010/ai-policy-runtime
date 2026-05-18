@@ -8,6 +8,8 @@ const PACKAGE_ROOT = path.resolve(__dirname, "..");
 const CLI = path.join(PACKAGE_ROOT, "bin", "ai-policy.js");
 
 const HOOKS = {
+  "codex-user-prompt-submit": path.join(PACKAGE_ROOT, "hooks", "user_prompt_submit.py"),
+  "codex-stop-refinement": path.join(PACKAGE_ROOT, "hooks", "stop_refinement.py"),
   "claude-user-prompt-submit": path.join(PACKAGE_ROOT, "hooks", "claude_user_prompt_submit.py"),
   "claude-stop-refinement": path.join(PACKAGE_ROOT, "hooks", "claude_stop_refinement.py"),
 };
@@ -15,7 +17,10 @@ const HOOKS = {
 const hook = process.argv[2];
 const script = HOOKS[hook];
 if (!script) {
-  console.error("ai-policy-hook: expected claude-user-prompt-submit or claude-stop-refinement");
+  console.error(
+    "ai-policy-hook: expected codex-user-prompt-submit, codex-stop-refinement, " +
+      "claude-user-prompt-submit, or claude-stop-refinement"
+  );
   process.exit(1);
 }
 

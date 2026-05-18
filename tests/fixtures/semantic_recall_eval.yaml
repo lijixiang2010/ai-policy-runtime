@@ -1,0 +1,241 @@
+cases:
+  - id: zh_generic_refinement
+    prompt: 帮我把这个模块整理到生产可用，不改变行为，减少意外复杂度，顺便把重复逻辑和接口摩擦处理掉
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type_not: unknown
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      behavior_preservation_required: true
+    expected_any_skill:
+      - generic.code_quality.complexity_reduction
+      - generic.code_quality.implementation_polish
+      - generic.refactoring.duplication_extraction
+      - generic.code_quality.api_usability
+
+  - id: en_generic_refinement
+    prompt: Polish this implementation for production without changing behavior and reduce accidental complexity.
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type: improve_code_quality
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      behavior_preservation_required: true
+    expected_any_skill:
+      - generic.code_quality.complexity_reduction
+      - generic.code_quality.implementation_polish
+
+  - id: es_generic_refinement
+    prompt: Prepara este modulo para produccion sin cambiar el comportamiento y reduce la complejidad accidental.
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type: improve_code_quality
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      behavior_preservation_required: true
+    expected_any_skill:
+      - generic.code_quality.complexity_reduction
+      - generic.code_quality.implementation_polish
+
+  - id: fr_api_duplication_refinement
+    prompt: Reduis la friction de l'API et supprime la logique dupliquee sans changer le comportement.
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type_not: unknown
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      duplicated_logic: true
+      user_facing_api: true
+    expected_any_skill:
+      - generic.refactoring.duplication_extraction
+      - generic.code_quality.api_usability
+
+  - id: ja_generic_refinement
+    prompt: この実装を本番品質に整えて、振る舞いを変えずに偶発的な複雑さを減らして
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type: improve_code_quality
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      behavior_preservation_required: true
+    expected_any_skill:
+      - generic.code_quality.complexity_reduction
+      - generic.code_quality.implementation_polish
+
+  - id: zh_api_usability_only
+    prompt: 这个接口调用步骤太多，帮我降低调用方负担，给常见路径合理默认值
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type_not: unknown
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      user_facing_api: true
+
+  - id: en_component_grouping
+    prompt: Refactor these scattered helpers and state into a cohesive component without changing behavior.
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type_not: unknown
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      behavior_preservation_required: true
+      scattered_related_logic: true
+
+  - id: zh_hierarchy_cleanup
+    prompt: 这几个模块调用链太绕，还有循环依赖风险，帮我整理层次但不要改变行为
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type_not: unknown
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      behavior_preservation_required: true
+      unclear_hierarchy: true
+
+  - id: en_parameterized_variation
+    prompt: These implementations share the same control flow with small variations; extract the shared structure carefully.
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type_not: unknown
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      similar_logic_with_small_variation: true
+
+  - id: zh_expression_cleanup
+    prompt: 这段实现样板代码太多，用更清晰直接的语言原生写法整理一下
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type_not: unknown
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      expressive_implementation: true
+
+  - id: zh_daily_make_code_better
+    prompt: 这段代码现在能跑，但有点乱，帮我整理清楚一点，行为不要变
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type_not: unknown
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      behavior_preservation_required: true
+
+  - id: en_daily_react_refactor
+    prompt: Refactor this React component so the state and handlers are easier to follow without changing behavior.
+    activation_ready: true
+    forbidden_domain: cpp
+    task_type_not: unknown
+    required_context:
+      artifact_type: code
+      refinement_requested: true
+      behavior_preservation_required: true
+
+  - id: en_cpp_review_lifetime
+    prompt: Review this C++20 header for ownership, lifetime, and undefined behavior risks.
+    activation_ready: true
+    domain: cpp
+    task_type: review_code
+    required_context:
+      language: cpp
+      standard: 20
+    required_tags:
+      - cpp20
+
+  - id: en_cpp23_api
+    prompt: Design a C++23 parser API that returns errors explicitly and avoids hidden ownership transfer.
+    activation_ready: true
+    domain: cpp
+    task_type: design_api
+    required_context:
+      language: cpp
+      standard: 23
+      designing_api: true
+      ownership_required: true
+    required_tags:
+      - cpp23
+
+  - id: zh_irrelevant_meeting_notes
+    prompt: 帮我总结一下这段会议纪要，提炼三个行动项
+    activation_ready: false
+    task_type: unknown
+    forbidden_context:
+      - semantic_skill_matches
+      - artifact_type
+      - refinement_requested
+
+  - id: en_non_code_copy
+    prompt: Improve this landing page copy for launch, no code changes.
+    activation_ready: false
+    task_type: unknown
+    forbidden_context:
+      - semantic_skill_matches
+      - artifact_type
+      - refinement_requested
+
+  - id: zh_docs_only
+    prompt: 帮我重写 README 的介绍文案，让用户更容易理解，不需要改代码
+    activation_ready: false
+    task_type: unknown
+    forbidden_context:
+      - semantic_skill_matches
+      - artifact_type
+      - refinement_requested
+
+  - id: en_test_plan_only
+    prompt: Draft a manual QA checklist for the release, do not change source code.
+    activation_ready: false
+    task_type: unknown
+    forbidden_context:
+      - semantic_skill_matches
+      - artifact_type
+      - refinement_requested
+
+  - id: zh_explain_code_only
+    prompt: 只解释这段代码在做什么，不需要修改
+    activation_ready: false
+    task_type: unknown
+    forbidden_context:
+      - semantic_skill_matches
+      - artifact_type
+      - refinement_requested
+
+  - id: zh_error_log_summary
+    prompt: 帮我把这段报错日志总结成 issue 描述，先不要修改代码
+    activation_ready: false
+    task_type: unknown
+    forbidden_context:
+      - semantic_skill_matches
+      - artifact_type
+      - refinement_requested
+
+  - id: en_readme_only
+    prompt: Rewrite the README overview and usage copy only, no code changes.
+    activation_ready: false
+    task_type: unknown
+    forbidden_context:
+      - semantic_skill_matches
+      - artifact_type
+      - refinement_requested
+
+  - id: zh_cpp_low_latency_queue
+    prompt: 写一个 C++20 数据通道，主循环里不能有分配和阻塞，尾延迟要稳
+    activation_ready: true
+    domain: cpp
+    task_type: write_code
+    required_context:
+      language: cpp
+      standard: 20
+      hot_path: true
+      performance_critical: true
+    required_tags:
+      - low_latency
+      - cpp20

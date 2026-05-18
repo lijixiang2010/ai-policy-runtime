@@ -59,6 +59,8 @@ for the installed package:
   "checks": {
     "claudePlugin": true,
     "claudeHooks": true,
+    "codexPlugin": true,
+    "codexHooks": true,
     "skills": true,
     "packs": true
   }
@@ -122,11 +124,14 @@ This writes:
 
 ```text
 D:\work\target-project\.policy\config.json
+D:\work\target-project\.codex\hooks.json
+D:\work\target-project\.codex\config.toml
 ```
 
 It enables the `codex` agent, sets the default `cpp.safe_generation` pack when
-no packs are configured, and records the installed NPM package as `policyRoot`.
-It does not write `.claude/settings.local.json`.
+no packs are configured, records the installed NPM package as `policyRoot`, and
+enables project-local Codex hooks for bare `codex` CLI usage. It does not write
+`.claude/settings.local.json`.
 
 Disable only Codex in the shared policy:
 

@@ -21,6 +21,22 @@ GENERIC_ACTIVATION_TAGS = frozenset(
     }
 )
 
+GENERIC_CORE_SKILLS = frozenset(
+    {
+        "generic.code_quality.complexity_reduction",
+        "generic.code_quality.implementation_polish",
+    }
+)
+
+GENERIC_CONTEXT_GATES = {
+    "generic.code_quality.api_usability": ("user_facing_api",),
+    "generic.architecture.hierarchy_cleanup": ("unclear_hierarchy",),
+    "generic.refactoring.component_grouping": ("scattered_related_logic",),
+    "generic.refactoring.duplication_extraction": ("duplicated_logic",),
+    "generic.code_quality.expressive_implementation": ("expressive_implementation",),
+    "generic.refactoring.parameterized_abstraction": ("similar_logic_with_small_variation",),
+}
+
 
 class SkillRegistry:
     """In-memory index for Skill activation and Pack expansion."""
@@ -92,7 +108,9 @@ class SkillRegistry:
     def _matches(self, skill: Skill, task: TaskContext) -> bool:
         if skill.status in {"deprecated", "removed"}:
             return False
-        if skill.domains and task.domain not in skill.domains:
+        if skill.domains and not _domain_matches(skill.domains, task):
+            return False
+        if not _generic_code_skill_allowed(skill, task):
             return False
         if skill.triggers and task.task_type not in skill.triggers:
             return False
@@ -123,6 +141,26 @@ def _matches_expected(actual: object, expected: object) -> bool:
         except (TypeError, ValueError):
             return False
     return actual == expected
+
+
+def _domain_matches(skill_domains: tuple[str, ...], task: TaskContext) -> bool:
+    if task.domain in skill_domains:
+        return True
+    if "generic_code" not in skill_domains:
+        return False
+    if task.domain != "general":
+        return False
+    return task.context.get("artifact_type") == "code" or task.context.get("language") == "generic_code"
+
+
+def _generic_code_skill_allowed(skill: Skill, task: TaskContext) -> bool:
+    if "generic_code" not in skill.domains:
+        return True
+    if task.context.get("artifact_type") != "code":
+        return True
+    if skill.skill_id in GENERIC_CORE_SKILLS:
+        return True
+    return any(task.context.get(key) is True for key in GENERIC_CONTEXT_GATES.get(skill.skill_id, ()))
 
 
 def _tags_match(skill_tags: tuple[str, ...], task_tags: tuple[str, ...]) -> bool:

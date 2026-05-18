@@ -66,11 +66,21 @@ task_analysis:
       - compress scattered complexity
       - preserve effective complexity
   trigger_semantics:
+    refactor_code:
+      - change the internal structure of existing code without changing behavior
+      - reorganize an existing module while preserving observable behavior
+      - improve the structure of existing implementation code
     improve_code_quality:
       - turn working code into production-quality code
+      - clean up messy but working code without changing behavior
       - make code clearer and more maintainable
+      - make an existing module production-ready without changing behavior
+      - polish existing code for production use
+      - improve maintainability without changing observable behavior
     reduce_complexity:
       - preserve effective complexity and remove accidental complexity
+      - reduce accidental complexity in existing code
+      - simplify implementation structure while preserving behavior
 
   trigger_capabilities:
     refactor_code:
@@ -103,8 +113,11 @@ task_analysis:
         - complexity
       semantic_match:
         - improve working code into production-quality code
+        - clean up messy but working code while preserving behavior
         - remove accidental complexity while preserving useful structure
         - make code clearer and easier to maintain
+        - refine existing code without changing observable behavior
+        - make an implementation production-ready while preserving behavior
       confidence: 0.88
 
 rules:

@@ -998,7 +998,7 @@ ai_policy_runtime/
 │   ├── rule_cache.py
 │   └── trace_store.py
 │
-├── verification/
+├── docs/reference/verification/
 │   ├── validators/
 │   │   ├── clang_tidy.py
 │   │   ├── regex_checker.py

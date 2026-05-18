@@ -51,6 +51,13 @@ class ExtractionState:
                 and item.confidence >= candidate.confidence
                 for item in self.evidence
             )
+        if candidate.field == "task_type":
+            existing = [item for item in self.evidence if item.field == candidate.field]
+            if any(item.value == UNKNOWN_TASK_TYPE for item in existing):
+                return any(
+                    item.value != UNKNOWN_TASK_TYPE and item.confidence >= candidate.confidence
+                    for item in existing
+                )
         return any(
             item.field == candidate.field and item.confidence >= candidate.confidence
             for item in self.evidence
@@ -62,6 +69,10 @@ class ExtractionState:
         matches = [item for item in self.evidence if item.field == field]
         if not matches:
             return default
+        if field == "task_type":
+            non_unknown = [item for item in matches if item.value != UNKNOWN_TASK_TYPE]
+            if non_unknown:
+                matches = non_unknown
         return str(max(matches, key=lambda item: item.confidence).value)
 
     def to_analysis(self, lexicon: TaskLexicon) -> TaskAnalysis:

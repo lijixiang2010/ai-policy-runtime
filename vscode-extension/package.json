@@ -1,7 +1,7 @@
 {
   "name": "ai-policy-runtime",
   "displayName": "AI Policy Runtime",
-  "description": "Configure AI Policy Runtime for AI coding agents from VS Code.",
+  "description": "Generate better AI code with task-aware policies for Codex and Claude Code.",
   "version": "0.1.0",
   "publisher": "cppmore",
   "author": {
@@ -24,7 +24,10 @@
     "ai",
     "agent",
     "rules",
-    "cpp"
+    "cpp",
+    "code-quality",
+    "review",
+    "refactoring"
   ],
   "homepage": "https://github.com/lkimuk/ai-policy-runtime#readme",
   "repository": {
@@ -131,12 +134,12 @@
         "aiPolicy.policyRoot": {
           "type": "string",
           "default": "",
-          "description": "Optional policy asset root. Leave empty to use the installed agent plugin root."
+          "description": "Optional policy asset root. Leave empty to let the Claude/Codex hook resolve its own plugin root."
         },
         "aiPolicy.autoInstall": {
           "type": "boolean",
           "default": true,
-          "description": "Allow agent hooks to install missing Python dependencies."
+          "description": "Install missing AI Policy Runtime Python dependencies automatically when agent hooks run."
         },
         "aiPolicy.embeddingProvider": {
           "type": "string",
@@ -146,7 +149,6 @@
             "openai-compatible",
             "openai",
             "local",
-            "hashing",
             "disabled"
           ],
           "enumDescriptions": [
@@ -154,7 +156,6 @@
             "Use an OpenAI-compatible /v1/embeddings endpoint.",
             "Alias for OpenAI-compatible /v1/embeddings.",
             "Use a local sentence-transformers model.",
-            "Use the dependency-free hashing matcher.",
             "Disable semantic embedding matching."
           ],
           "description": "Semantic embedding provider for task analysis."
