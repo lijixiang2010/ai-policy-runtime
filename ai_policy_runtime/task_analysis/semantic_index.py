@@ -44,7 +44,7 @@ class SemanticTaskIndex:
         self._entries = tuple(_iter_entries(lexicon))
         self._vectors = self._load_or_encode(cache_dir)
 
-    def search(self, text: str, *, limit: int = 16) -> tuple[SemanticMatch, ...]:
+    def search(self, text: str, *, limit: int = 32) -> tuple[SemanticMatch, ...]:
         return self.search_scoped(text, scope=None, limit=limit)
 
     def search_scoped(
@@ -52,7 +52,7 @@ class SemanticTaskIndex:
         text: str,
         *,
         scope: frozenset[str] | None,
-        limit: int = 16,
+        limit: int = 32,
     ) -> tuple[SemanticMatch, ...]:
         """Search semantic entries, optionally constrained to candidate skills."""
 
@@ -129,7 +129,11 @@ def _iter_entries(lexicon: TaskLexicon) -> Iterable[tuple[LexiconRule, str]]:
         *lexicon.trigger_rules,
         *lexicon.context_rules,
     ):
-        texts = rule.semantic_texts or rule.phrases
+        texts = (
+            rule.semantic_texts
+            if rule.field.startswith("context.")
+            else rule.semantic_texts or rule.phrases
+        )
         for text in texts:
             yield rule, text
 

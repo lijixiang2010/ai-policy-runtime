@@ -1,0 +1,217 @@
+# Skill: Git Conflict and Review Workflow
+# File: skills/domain/git/collaboration/conflict_and_review.skill.yaml
+
+skill:
+  id: git.collaboration.conflict_and_review
+  name: Git Conflict and Review Workflow
+  version: 1.0.0
+  status: stable
+  description: Resolve merge conflicts carefully and prepare changes for collaborative review.
+
+  level: domain
+  domain: git
+  category: collaboration
+  priority: 82
+
+  tags:
+    - git
+    - conflict
+    - merge
+    - pull-request
+    - review
+
+  capabilities:
+    - git_workflow
+    - code_review
+
+  activation:
+    when:
+      language: git
+    triggers:
+      - resolve_conflict
+      - prepare_pull_request
+      - review_git_history
+
+  dependencies:
+    - git.workflow.working_tree_safety
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.9
+
+  domain_aliases:
+    - git
+    - version control
+    - source control
+
+  domain_semantics:
+    - Git merge conflict resolution task
+    - prepare a branch for collaborative code review
+
+  trigger_aliases:
+    resolve_conflict:
+      - merge conflict
+      - conflict marker
+      - resolve conflict
+      - rebase conflict
+    prepare_pull_request:
+      - pull request
+      - merge request
+      - review branch
+      - prepare pr
+    review_git_history:
+      - review branch
+      - review commits
+      - review diff
+
+  trigger_semantics:
+    resolve_conflict:
+      - resolve Git merge or rebase conflicts without losing either side's intent
+      - remove conflict markers after understanding both branches
+    prepare_pull_request:
+      - prepare a Git branch and commits for collaborative review
+      - make a pull request easy to review and integrate
+    review_git_history:
+      - review a branch diff and commit history before integration
+
+  trigger_capabilities:
+    resolve_conflict:
+      - git_workflow
+      - code_review
+    prepare_pull_request:
+      - git_workflow
+      - code_review
+    review_git_history:
+      - git_workflow
+      - code_review
+
+  context_rules:
+    - id: detect_conflict_task
+      when_text_matches:
+        - merge conflict
+        - conflict marker
+        - rebase conflict
+        - resolve conflict
+      set:
+        git_conflict_resolution_requested: true
+      tags:
+        - conflict
+        - merge
+      semantic_match:
+        - resolve a Git conflict by preserving the intent from both sides
+        - fix conflict markers after a merge or rebase
+      confidence: 0.9
+
+    - id: detect_pull_request_task
+      when_text_matches:
+        - pull request
+        - merge request
+        - prepare pr
+        - pr title
+        - pr description
+      set:
+        git_pull_request_requested: true
+      tags:
+        - pull-request
+        - review
+      semantic_match:
+        - prepare a pull request title description and review checklist
+        - review a branch before opening a merge request
+      confidence: 0.88
+
+rules:
+  hard:
+    - id: git.conflict.remove_markers_and_preserve_intent
+      title: Remove markers and preserve intent
+      when: domain == "git" and git_conflict_resolution_requested == true
+      must: >-
+        Resolve conflict markers by understanding both sides of the change,
+        preserving the intended behavior, and removing all conflict markers before
+        considering the merge or rebase complete.
+      target: conflict_resolution
+      action: require
+      rationale: Conflict resolution is a semantic merge, not a mechanical deletion task.
+
+  soft:
+    - id: git.conflict.inspect_both_sides
+      title: Inspect both sides of conflicts
+      when: domain == "git" and git_conflict_resolution_requested == true
+      should: >-
+        Inspect ours, theirs, and the surrounding code before choosing a conflict
+        resolution, especially when both sides changed related behavior.
+      target: conflict_resolution
+      action: recommend
+      rationale: The correct resolution often combines intent from both branches.
+
+    - id: git.conflict.avoid_blind_ours_theirs
+      title: Avoid blind ours or theirs resolution
+      when: domain == "git" and git_conflict_resolution_requested == true
+      should_not: >-
+        Avoid resolving conflicts by blindly choosing ours or theirs unless the
+        user explicitly asks for that strategy and the discarded side is understood.
+      target: conflict_resolution
+      action: discourage
+      rationale: Mechanical conflict resolution can silently remove important behavior.
+
+    - id: git.review.summarize_review_scope
+      title: Summarize review scope
+      when: domain == "git" and (git_pull_request_requested == true or task_type in ["prepare_pull_request", "review_git_history"])
+      should: >-
+        For pull requests or merge requests, summarize the branch purpose, main
+        files changed, risk areas, and verification performed.
+      target: review_readiness
+      action: recommend
+      rationale: Reviewers need context, risk, and validation information to review efficiently.
+
+    - id: git.review.keep_pr_diff_reviewable
+      title: Keep review diff focused
+      when: domain == "git" and (git_pull_request_requested == true or task_type in ["prepare_pull_request", "review_git_history"])
+      should: >-
+        Keep pull request diffs focused by separating unrelated cleanup, generated
+        artifacts, formatting churn, and dependency updates when practical.
+      target: review_scope
+      action: recommend
+      rationale: Focused diffs reduce review time and integration risk.
+
+    - id: git.review.check_pr_readiness
+      title: Check PR readiness
+      when: domain == "git" and git_pull_request_requested == true
+      should: >-
+        Check that the branch contains only relevant commits, messages are
+        understandable, generated junk and secrets are absent, and available
+        tests or build checks have been run or explicitly reported as skipped.
+      target: review_readiness
+      action: recommend
+      rationale: Pull requests should provide reviewers with a focused diff and validation context.
+
+    - id: git.review.match_pr_title_style
+      title: Match PR title style
+      when: domain == "git" and git_pull_request_requested == true
+      should: >-
+        Make the pull request title follow the repository's visible style, using
+        the same concise type-and-scope style as commit messages when applicable.
+      target: review_title
+      action: recommend
+      rationale: PR titles become durable review and release metadata.
+
+  preference:
+    - id: git.review.preference_reviewable_diff
+      title: Prefer reviewable diffs
+      when: domain == "git" and (git_pull_request_requested == true or task_type in ["prepare_pull_request", "review_git_history"])
+      prefer: focused_reviewable_diff
+      over:
+        - mixed_unreviewable_diff
+      target: review_scope
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: git.conflict.review_resolution
+      type: llm_self_check
+      applies_to:
+        - conflict_resolution
+      severity: required
+      prompt: >-
+        Check that conflict markers are gone, both sides' intent was considered,
+        and relevant tests or inspections were identified after resolution.
+

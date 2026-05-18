@@ -1,0 +1,193 @@
+# Skill: Git Stash and Clean Safety
+# File: skills/domain/git/workflow/stash_and_clean_safety.skill.yaml
+
+skill:
+  id: git.workflow.stash_and_clean_safety
+  name: Git Stash and Clean Safety
+  version: 1.0.0
+  status: stable
+  description: Save unfinished work and clean generated files without losing local changes.
+
+  level: domain
+  domain: git
+  category: workflow
+  priority: 88
+
+  tags:
+    - git
+    - stash
+    - clean
+    - safety
+
+  capabilities:
+    - git_workflow
+    - code_review
+
+  activation:
+    when:
+      language: git
+    triggers:
+      - save_unfinished_work
+      - clean_working_tree
+      - resolve_git_issue
+
+  dependencies:
+    - git.workflow.working_tree_safety
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - git
+    - version control
+    - source control
+
+  domain_semantics:
+    - Git stash and clean workflow task
+    - temporarily save unfinished repository changes
+    - safely remove untracked generated files from a working tree
+
+  trigger_aliases:
+    save_unfinished_work:
+      - stash
+      - git stash
+      - save work
+      - save unfinished work
+      - clean working tree temporarily
+    clean_working_tree:
+      - git clean
+      - clean generated files
+      - remove untracked files
+      - clean ignored files
+    resolve_git_issue:
+      - dirty working tree
+      - need clean tree
+
+  trigger_semantics:
+    save_unfinished_work:
+      - stash unfinished work before switching branches or rebasing
+      - temporarily save local modifications and untracked files without committing them
+    clean_working_tree:
+      - remove untracked or ignored generated files safely
+      - dry-run Git clean before deleting files
+    resolve_git_issue:
+      - make the working tree clean without losing useful local work
+
+  trigger_capabilities:
+    save_unfinished_work:
+      - git_workflow
+    clean_working_tree:
+      - git_workflow
+    resolve_git_issue:
+      - git_workflow
+
+  context_rules:
+    - id: detect_stash_task
+      when_text_matches:
+        - stash
+        - git stash
+        - save unfinished work
+        - clean working tree temporarily
+      set:
+        git_stash_requested: true
+      tags:
+        - stash
+        - safety
+      semantic_match:
+        - save unfinished local changes temporarily instead of committing them
+        - stash work in progress before changing branch state
+      confidence: 0.88
+
+    - id: detect_clean_task
+      when_text_matches:
+        - git clean
+        - clean generated files
+        - remove untracked files
+        - clean ignored files
+      set:
+        git_clean_requested: true
+      tags:
+        - clean
+        - safety
+      semantic_match:
+        - remove untracked or ignored files from the Git working tree
+        - clean generated build artifacts safely with a dry run first
+      confidence: 0.88
+
+rules:
+  hard:
+    - id: git.clean.require_dry_run_before_delete
+      title: Dry-run before cleaning
+      when: domain == "git" and git_clean_requested == true
+      must: >-
+        Run or recommend a dry-run clean before deleting untracked or ignored
+        files, and require explicit user approval before using commands that
+        remove files from the working tree.
+      target: clean_safety
+      action: require
+      rationale: Git clean can permanently remove files that are not recoverable from history.
+
+    - id: git.clean.do_not_clean_ignored_without_explicit_scope
+      title: Do not clean ignored files casually
+      when: domain == "git" and git_clean_requested == true
+      must_not: >-
+        Do not clean ignored files or broad generated directories unless the
+        intended scope is explicit and the dry-run output matches expectations.
+      target: clean_scope
+      action: forbid
+      rationale: Ignored files can include local caches, downloaded artifacts, or private environment data.
+
+  soft:
+    - id: git.stash.prefer_stash_for_unfinished_work
+      title: Prefer stash for unfinished temporary work
+      when: domain == "git" and git_stash_requested == true
+      should: >-
+        Use stash for unfinished work when the goal is only to temporarily clear
+        the working tree; do not create a normal commit for an arbitrary work-in-progress snapshot.
+      target: stash_workflow
+      action: recommend
+      rationale: Commits should carry logical project history, while stash is better for temporary local state.
+
+    - id: git.stash.include_untracked_when_needed
+      title: Include untracked files deliberately
+      when: domain == "git" and git_stash_requested == true
+      should: >-
+        Decide explicitly whether untracked files belong in the stash, then use
+        a descriptive stash message so the saved work can be recovered later.
+      target: stash_scope
+      action: recommend
+      rationale: Stashing without naming scope makes recovery and review harder.
+
+    - id: git.stash.prefer_stash_branch_for_old_entries
+      title: Prefer stash branch for old entries
+      when: domain == "git" and git_stash_requested == true
+      should: >-
+        Prefer creating a branch from an older stash entry when the original
+        branch has moved significantly or conflicts are likely.
+      target: stash_recovery
+      action: recommend
+      rationale: Applying old stashes onto moved history can create unnecessary conflicts.
+
+  preference:
+    - id: git.stash.preference_temporary_state_over_wip_commit
+      title: Prefer stash for temporary unfinished state
+      when: domain == "git" and git_stash_requested == true
+      prefer: descriptive_stash_for_temporary_unfinished_work
+      over:
+        - vague_wip_commit
+      target: stash_workflow
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: git.clean.review_destructive_scope
+      type: llm_self_check
+      applies_to:
+        - clean_safety
+        - clean_scope
+      severity: required
+      prompt: >-
+        Check that any clean or discard operation has an inspected scope, a dry-run
+        when files may be removed, and explicit user approval for destructive deletion.
+

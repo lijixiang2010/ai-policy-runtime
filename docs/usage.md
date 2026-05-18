@@ -214,6 +214,7 @@ ai-policy cache clear
 ```powershell
 ai-policy resolve "帮我写一个 C++20 低延迟队列"
 ai-policy resolve --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+ai-policy resolve --pack git.best_practices "Prepare a git commit message for the staged diff."
 ```
 
 `resolve` prints the final agent-facing prompt by default. For explicitness in

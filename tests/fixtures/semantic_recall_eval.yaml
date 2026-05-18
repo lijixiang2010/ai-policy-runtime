@@ -163,6 +163,67 @@ cases:
     required_tags:
       - cpp23
 
+  - id: en_git_commit_message
+    prompt: Prepare a git commit message for the staged diff and split unrelated changes.
+    activation_ready: true
+    domain: git
+    task_type: write_commit_message
+    required_context:
+      language: git
+      git_commit_message_requested: true
+    required_tags:
+      - git
+      - commit
+
+  - id: zh_git_history_rewrite
+    prompt: 帮我把这几个 git 提交压缩一下，必要时变基，但不要影响已经共享的历史
+    activation_ready: true
+    domain: git
+    task_type_not: unknown
+    required_context:
+      language: git
+      git_history_rewrite_requested: true
+    required_tags:
+      - git
+      - rebase
+
+  - id: en_git_conflict_pr
+    prompt: Resolve this git merge conflict and prepare the branch for PR review.
+    activation_ready: true
+    domain: git
+    task_type: resolve_conflict
+    required_context:
+      language: git
+      git_conflict_resolution_requested: true
+    required_tags:
+      - git
+      - conflict
+
+  - id: en_git_stash_clean
+    prompt: Stash my unfinished work, then clean untracked generated files safely.
+    activation_ready: true
+    domain: git
+    task_type_not: unknown
+    required_context:
+      language: git
+      git_stash_requested: true
+      git_clean_requested: true
+    required_tags:
+      - git
+      - stash
+
+  - id: en_git_pr_readiness
+    prompt: Prepare this git branch for a pull request with a conventional PR title.
+    activation_ready: true
+    domain: git
+    task_type_not: unknown
+    required_context:
+      language: git
+      git_pull_request_requested: true
+    required_tags:
+      - git
+      - pull-request
+
   - id: zh_irrelevant_meeting_notes
     prompt: 帮我总结一下这段会议纪要，提炼三个行动项
     activation_ready: false

@@ -91,6 +91,12 @@ const KNOWN_PACKS: PackItem[] = [
     description: 'General code quality refinement',
     category: 'Refinement',
     tags: ['Generic', 'Production']
+  },
+  {
+    label: 'git.best_practices',
+    description: 'Git commits, branches, conflicts, and history safety',
+    category: 'Workflow',
+    tags: ['Git', 'Review', 'Safety']
   }
 ];
 

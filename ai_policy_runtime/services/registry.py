@@ -14,6 +14,7 @@ from ai_policy_runtime.infrastructure.loader import load_packs_from_dir, load_sk
 GENERIC_ACTIVATION_TAGS = frozenset(
     {
         "cpp",
+        "git",
         "generation",
         "review",
         "core-guidelines",

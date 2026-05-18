@@ -171,11 +171,14 @@ class PromptRuleSelector:
             context.get("domain") in {"general", "generic_code"}
             or context.get("language") == "generic_code"
         )
+        self.git_workflow = context.get("domain") == "git" or context.get("language") == "git"
 
     def hard(self, rules: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
         return self._limit(self._collapse(rules), limit, self._hard_score)
 
     def soft_limit(self, default: int) -> int:
+        if self.git_workflow:
+            return min(default, 8)
         if self.context.get("unclear_hierarchy") and not self.context.get("duplicated_logic"):
             return min(default, 7)
         return min(default, 9) if self.generic_code_refinement else default
@@ -184,6 +187,8 @@ class PromptRuleSelector:
         return self._limit(rules, limit, self._soft_score)
 
     def preference_limit(self, default: int) -> int:
+        if self.git_workflow:
+            return min(default, 2)
         if self.context.get("unclear_hierarchy") and not self.context.get("duplicated_logic"):
             return min(default, 2)
         return min(default, 4) if self.generic_code_refinement else default
@@ -313,6 +318,20 @@ class PromptRuleSelector:
         text = _rule_text(rule)
         target = str(rule.get("target", ""))
         score = 0
+        if self.git_workflow:
+            score += {
+                "local_changes": 140,
+                "shared_history": 135,
+                "clean_safety": 130,
+                "clean_scope": 125,
+                "conflict_resolution": 120,
+                "branch_target": 115,
+                "protected_branch": 110,
+                "sensitive_content": 105,
+                "commit_message": 100,
+                "commit_scope": 95,
+                "undo_strategy": 90,
+            }.get(target, 0)
         if "observable behavior" in text or target == "behavior_preservation":
             score += 120
         if target in {"undefined_behavior", "standard_availability", "ownership", "resource_lifetime", "type_safety"}:
@@ -326,6 +345,47 @@ class PromptRuleSelector:
         target = str(rule.get("target", ""))
         source = str(rule.get("source", {}).get("skill", ""))
         score = 0
+        if self.git_workflow:
+            score += {
+                "stash_workflow": 130,
+                "stash_scope": 120,
+                "clean_safety": 115,
+                "clean_scope": 110,
+                "conflict_resolution": 125,
+                "review_readiness": 120,
+                "review_title": 115,
+                "review_scope": 110,
+                "commit_scope": 115,
+                "commit_message": 110,
+                "commit_message_format": 105,
+                "staged_diff": 100,
+                "commit_verification": 95,
+                "branch_structure": 100,
+                "branch_naming": 95,
+                "synchronization": 85,
+                "integration_strategy": 80,
+                "release_branch": 75,
+                "force_push": 90,
+                "rewrite_scope": 85,
+                "reset_semantics": 80,
+                "working_tree": 70,
+                "repository_state": 65,
+                "staging": 60,
+            }.get(target, 0)
+            for needle in (
+                "dry-run",
+                "explicit user approval",
+                "unfinished work",
+                "staged diff",
+                "only relevant commits",
+                "pull request title",
+                "blindly choosing ours or theirs",
+                "force-with-lease",
+                "published",
+                "shared",
+            ):
+                if needle in text:
+                    score += 20
         if self.refinement:
             target_bonus = {
                 "complexity": 90,
@@ -409,6 +469,15 @@ class PromptRuleSelector:
         text = _rule_text(rule)
         target = str(rule.get("target", ""))
         score = 0
+        if self.git_workflow:
+            score += {
+                "stash_workflow": 110,
+                "review_scope": 105,
+                "commit_scope": 100,
+                "undo_strategy": 95,
+                "branch_structure": 90,
+                "staging": 80,
+            }.get(target, 0)
         if self.refinement:
             score += {
                 "complexity": 90,

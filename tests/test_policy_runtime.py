@@ -143,6 +143,7 @@ class KeywordConceptEmbeddingProvider:
             "production",
             (
                 "生产可用",
+                "production",
                 "production-ready",
                 "production-quality",
                 "polish",
@@ -167,6 +168,7 @@ class KeywordConceptEmbeddingProvider:
             "complexity",
             (
                 "意外复杂度",
+                "complexity",
                 "accidental complexity",
                 "complejidad accidental",
                 "複雑さ",
@@ -179,6 +181,7 @@ class KeywordConceptEmbeddingProvider:
             "duplication",
             (
                 "重复逻辑",
+                "duplication",
                 "duplicated logic",
                 "repeated logic",
                 "logique dupliquee",
@@ -188,6 +191,7 @@ class KeywordConceptEmbeddingProvider:
             "api",
             (
                 "接口摩擦",
+                "api",
                 "接口调用步骤",
                 "调用方负担",
                 "合理默认值",
@@ -232,6 +236,82 @@ class KeywordConceptEmbeddingProvider:
                 "清晰直接",
                 "language-native",
                 "boilerplate",
+            ),
+        ),
+        (
+            "git",
+            (
+                "git",
+                "version control",
+                "source control",
+            ),
+        ),
+        (
+            "git_commit",
+            (
+                "commit",
+                "commits",
+                "commit message",
+                "commit title",
+                "conventional commit",
+                "atomic commit",
+                "logical commit",
+                "staged diff",
+                "提交",
+                "提交信息",
+                "提交说明",
+                "拆分提交",
+                "changelog",
+            ),
+        ),
+        (
+            "git_history",
+            (
+                "rebase",
+                "rewrite history",
+                "interactive rebase",
+                "squash",
+                "amend",
+                "force push",
+                "force-with-lease",
+                "reset",
+                "revert",
+                "改写历史",
+                "变基",
+                "压缩提交",
+                "撤销提交",
+            ),
+        ),
+        (
+            "git_review",
+            (
+                "merge",
+                "branch",
+                "pull request",
+                "pr",
+                "merge conflict",
+                "conflict marker",
+                "merge request",
+                "review branch",
+                "分支",
+                "合并",
+                "冲突",
+                "冲突标记",
+                "代码评审",
+            ),
+        ),
+        (
+            "git_stash_clean",
+            (
+                "stash",
+                "git stash",
+                "clean",
+                "git clean",
+                "untracked files",
+                "ignored files",
+                "dry run",
+                "保存未完成修改",
+                "清理未跟踪文件",
             ),
         ),
     )
@@ -439,6 +519,84 @@ class PolicyRuntimeTests(unittest.TestCase):
                     )
                 if task.domain != "cpp":
                     self.assertNotIn("cpp", task.tags)
+
+    def test_task_analyzer_understands_git_commit_workflow(self) -> None:
+        task = analyze(
+            "Prepare a git commit message for the staged diff and split unrelated changes."
+        ).task
+
+        self.assertEqual(task.domain, "git")
+        self.assertEqual(task.task_type, "write_commit_message")
+        self.assertTrue(task.context["git_commit_message_requested"])
+        self.assertIn("git_workflow", task.capabilities)
+        self.assertIn("commit", task.tags)
+
+    def test_git_best_practices_pack_outputs_commit_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Prepare a git commit message for the staged diff and split unrelated changes.",
+            ("git.best_practices",),
+        )
+        effective = result.structured["effective_rules"]
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+        sources = _sources(effective)
+
+        self.assertIn("git.workflow.commit_hygiene", sources)
+        self.assertIn("git.workflow.working_tree_safety", sources)
+        self.assertIn("Make the commit message accurately describe the changes", prompt)
+        self.assertIn("Keep each commit focused on one coherent reason", prompt)
+        self.assertIn("Do not discard, overwrite, reset, clean", prompt)
+        self.assertNotIn("selected C++ standard", prompt)
+
+    def test_git_history_rewrite_rules_are_shared_history_safe(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "I need to squash these commits with interactive rebase and force push safely.",
+            ("git.best_practices",),
+        )
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+
+        self.assertIn("Do not rebase, amend, reset, or force-push commits", prompt)
+        self.assertIn("Use force-with-lease rather than an unconditional force push", prompt)
+        self.assertIn("Use amend, squash, fixup, and interactive rebase primarily for local", prompt)
+
+    def test_git_conflict_rules_preserve_both_sides(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Resolve this git merge conflict and prepare the branch for PR review.",
+            ("git.best_practices",),
+        )
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+
+        self.assertIn("Resolve conflict markers by understanding both sides", prompt)
+        self.assertIn("summarize the branch purpose", prompt)
+        self.assertIn("Keep pull request diffs focused", prompt)
+
+    def test_git_stash_and_clean_rules_guard_destructive_cleanup(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Stash my unfinished work, then clean untracked generated files safely.",
+            ("git.best_practices",),
+        )
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+        sources = _sources(result.structured["effective_rules"])
+
+        self.assertIn("git.workflow.stash_and_clean_safety", sources)
+        self.assertIn("Run or recommend a dry-run clean before deleting", prompt)
+        self.assertIn("Use stash for unfinished work", prompt)
+        self.assertIn("Do not clean ignored files", prompt)
+
+    def test_git_pr_rules_include_review_readiness(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Prepare this git branch for a pull request with a conventional PR title.",
+            ("git.best_practices",),
+        )
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+
+        self.assertIn("Check that the branch contains only relevant commits", prompt)
+        self.assertIn("Make the pull request title follow", prompt)
+        self.assertIn("Use short branch names", prompt)
 
     def test_semantic_index_reuses_cached_vectors(self) -> None:
         lexicon = TaskLexicon(

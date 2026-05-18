@@ -1,0 +1,21 @@
+kind: pack
+api_version: policy.skill/v1
+
+pack:
+  id: git.best_practices
+  name: Git Best Practices
+  version: 1.0.0
+  description: >-
+    Task-aware Git workflow policies for commits, staging, branching,
+    synchronization, stashing, cleaning, conflict resolution, and history rewrite safety.
+
+includes:
+  - git.workflow.working_tree_safety
+  - git.workflow.stash_and_clean_safety
+  - git.workflow.commit_hygiene
+  - git.workflow.branching_and_sync
+  - git.history.rewrite_safety
+  - git.collaboration.conflict_and_review
+
+excludes: []
+overrides: []

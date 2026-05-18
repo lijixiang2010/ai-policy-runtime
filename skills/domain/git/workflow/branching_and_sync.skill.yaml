@@ -1,0 +1,243 @@
+# Skill: Git Branching and Sync Workflow
+# File: skills/domain/git/workflow/branching_and_sync.skill.yaml
+
+skill:
+  id: git.workflow.branching_and_sync
+  name: Git Branching and Sync Workflow
+  version: 1.0.0
+  status: stable
+  description: Use clear branches and safe synchronization when collaborating through Git.
+
+  level: domain
+  domain: git
+  category: workflow
+  priority: 85
+
+  tags:
+    - git
+    - branch
+    - merge
+    - rebase
+    - collaboration
+
+  capabilities:
+    - git_workflow
+    - code_review
+
+  activation:
+    when:
+      language: git
+    triggers:
+      - manage_branch
+      - sync_branch
+      - prepare_pull_request
+
+  dependencies:
+    - git.workflow.working_tree_safety
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - git
+    - version control
+    - source control
+
+  domain_semantics:
+    - Git branch management task
+    - synchronize a feature branch with upstream history
+    - prepare changes for collaborative review
+
+  trigger_aliases:
+    manage_branch:
+      - branch
+      - checkout branch
+      - switch branch
+      - feature branch
+      - release branch
+      - hotfix branch
+    sync_branch:
+      - pull
+      - fetch
+      - rebase
+      - merge main
+      - update branch
+      - sync branch
+      - pull ff only
+    prepare_pull_request:
+      - pull request
+      - merge request
+      - prepare pr
+      - branch for review
+
+  trigger_semantics:
+    manage_branch:
+      - create or switch a Git branch for a focused line of work
+      - choose a branch structure for a feature or fix
+    sync_branch:
+      - update a local branch with upstream changes safely
+      - choose between merge and rebase for synchronizing history
+    prepare_pull_request:
+      - prepare a branch for code review and integration
+      - make a Git branch easy to review before opening a pull request
+
+  trigger_capabilities:
+    manage_branch:
+      - git_workflow
+    sync_branch:
+      - git_workflow
+    prepare_pull_request:
+      - git_workflow
+      - code_review
+
+  context_rules:
+    - id: detect_collaborative_branch_task
+      when_text_matches:
+        - pull request
+        - merge request
+        - feature branch
+        - release branch
+        - hotfix branch
+        - update branch
+        - sync branch
+      set:
+        git_collaboration_requested: true
+      tags:
+        - branch
+        - collaboration
+      semantic_match:
+        - prepare a branch for collaborative review and integration
+        - synchronize a feature branch with the shared upstream branch
+      confidence: 0.86
+
+    - id: detect_protected_branch_task
+      when_text_matches:
+        - protected branch
+        - main branch
+        - master branch
+        - release branch
+      set:
+        git_protected_branch_sensitive: true
+      tags:
+        - branch
+        - safety
+      confidence: 0.86
+
+    - id: detect_release_branch_task
+      when_text_matches:
+        - release branch
+        - release/
+        - prepare release
+      set:
+        git_release_branch_requested: true
+      tags:
+        - branch
+        - release
+      confidence: 0.86
+
+rules:
+  hard:
+    - id: git.branch.confirm_target_branch
+      title: Confirm target branch before integration
+      when: domain == "git" and task_type in ["manage_branch", "sync_branch", "prepare_pull_request", "resolve_conflict", "rewrite_history"]
+      must: >-
+        Identify the current branch and intended target branch before merging,
+        rebasing, pushing, or preparing a pull request.
+      target: branch_target
+      action: require
+      rationale: Branch operations can affect shared history and review scope.
+
+    - id: git.branch.do_not_push_directly_to_protected_branch
+      title: Do not push directly to protected branches casually
+      when: domain == "git" and (git_protected_branch_sensitive == true or git_release_branch_requested == true)
+      must_not: >-
+        Do not push directly to protected, main, master, or release branches
+        unless the user explicitly requests that workflow and the target branch is confirmed.
+      target: protected_branch
+      action: forbid
+      rationale: Protected and release branches usually represent shared integration state.
+
+  soft:
+    - id: git.branch.keep_work_on_topic_branch
+      title: Keep work on a topic branch
+      when: domain == "git" and task_type in ["manage_branch", "sync_branch", "prepare_pull_request"]
+      should: >-
+        Keep feature, fix, experiment, and cleanup work on a focused topic branch
+        rather than mixing it directly into a long-lived integration branch.
+      target: branch_structure
+      action: recommend
+      rationale: Topic branches make changes easier to review, abandon, or integrate.
+
+    - id: git.branch.use_clear_branch_names
+      title: Use clear branch names
+      when: domain == "git" and task_type in ["manage_branch", "sync_branch", "prepare_pull_request"]
+      should: >-
+        Use short branch names that communicate the change type and purpose,
+        following the repository's existing naming convention when one is visible.
+      target: branch_naming
+      action: recommend
+      rationale: Predictable branch names make collaboration and cleanup easier.
+
+    - id: git.branch.keep_release_branches_focused
+      title: Keep release branches focused
+      when: domain == "git" and git_release_branch_requested == true
+      should: >-
+        Keep release branches limited to version, changelog, release notes,
+        build metadata, and narrowly approved fixes; do not mix unrelated feature work into them.
+      target: release_branch
+      action: recommend
+      rationale: Release branches should stay easy to audit and stabilize.
+
+    - id: git.branch_fetch_before_integrating
+      title: Fetch before integrating
+      when: domain == "git" and task_type in ["sync_branch", "prepare_pull_request", "rewrite_history"]
+      should: >-
+        Fetch and inspect upstream state before merging, rebasing, or pushing so
+        the operation is based on current remote history.
+      target: synchronization
+      action: recommend
+      rationale: Local branch names can lag behind remote references.
+
+    - id: git.branch.use_ff_only_for_mainline_pull
+      title: Use fast-forward-only pulls for mainline updates
+      when: domain == "git" and task_type in ["manage_branch", "sync_branch"]
+      should: >-
+        Prefer fast-forward-only pulls when updating a local copy of a shared
+        mainline branch so unexpected merge commits are not created accidentally.
+      target: synchronization
+      action: recommend
+      rationale: Mainline updates should not silently change history shape.
+
+    - id: git.branch_choose_merge_or_rebase_intentionally
+      title: Choose merge or rebase intentionally
+      when: domain == "git" and task_type in ["sync_branch", "prepare_pull_request", "rewrite_history"]
+      should: >-
+        Choose merge when preserving branch topology is useful, and choose rebase
+        only when a linear local history is desired and rewriting those commits is safe.
+      target: integration_strategy
+      action: recommend
+      rationale: Merge and rebase express different history shapes and collaboration tradeoffs.
+
+  preference:
+    - id: git.branch.preference_topic_branch_over_mainline_work
+      title: Prefer topic branches
+      when: domain == "git" and task_type in ["manage_branch", "sync_branch", "prepare_pull_request"]
+      prefer: focused_topic_branch
+      over:
+        - mixed_mainline_work
+      target: branch_structure
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: git.branch.review_integration_plan
+      type: llm_self_check
+      applies_to:
+        - branch_target
+        - integration_strategy
+      severity: advisory
+      prompt: >-
+        Check that the current branch, target branch, upstream state, and chosen
+        merge or rebase strategy are explicit before changing history.
+

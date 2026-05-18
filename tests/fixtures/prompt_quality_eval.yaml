@@ -115,6 +115,62 @@ cases:
     exclude:
       - Prefer simple common case usage
 
+  - id: en_git_commit_message
+    provider: deterministic
+    prompt: Prepare a git commit message for the staged diff and split unrelated changes.
+    include:
+      - Make the commit message accurately describe the changes being committed
+      - Keep each commit focused on one coherent reason for change
+      - Review the staged diff before committing
+      - Do not discard, overwrite, reset, clean
+    exclude:
+      - selected C++ standard
+      - Preserve the existing observable behavior
+
+  - id: en_git_history_rewrite
+    provider: deterministic
+    prompt: I need to squash these git commits with interactive rebase and force push safely.
+    include:
+      - Do not rebase, amend, reset, or force-push commits
+      - Use force-with-lease rather than an unconditional force push
+      - Use amend, squash, fixup, and interactive rebase primarily for local
+    exclude:
+      - selected C++ standard
+
+  - id: en_git_conflict_pr
+    provider: deterministic
+    prompt: Resolve this git merge conflict and prepare the branch for PR review.
+    include:
+      - Resolve conflict markers by understanding both sides
+      - Inspect ours, theirs, and the surrounding code
+      - summarize the branch purpose
+      - Avoid resolving conflicts by blindly choosing ours or theirs
+    exclude:
+      - selected C++ standard
+
+  - id: en_git_stash_clean
+    provider: deterministic
+    prompt: Stash my unfinished work, then clean untracked generated files safely.
+    include:
+      - Run or recommend a dry-run clean before deleting
+      - Do not clean ignored files
+      - Use stash for unfinished work
+      - Decide explicitly whether untracked files belong in the stash
+    exclude:
+      - selected C++ standard
+      - Make the commit message accurately describe
+
+  - id: en_git_pr_readiness
+    provider: deterministic
+    prompt: Prepare this git branch for a pull request with a conventional PR title.
+    include:
+      - Check that the branch contains only relevant commits
+      - Make the pull request title follow
+      - Keep pull request diffs focused
+      - Use short branch names
+    exclude:
+      - selected C++ standard
+
   - id: en_non_code_copy
     provider: deterministic
     prompt: Improve this landing page copy for launch, no code changes.

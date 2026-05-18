@@ -1,0 +1,183 @@
+# Skill: Git Working Tree Safety
+# File: skills/domain/git/workflow/working_tree_safety.skill.yaml
+
+skill:
+  id: git.workflow.working_tree_safety
+  name: Git Working Tree Safety
+  version: 1.0.0
+  status: stable
+  description: Keep Git operations explicit about working tree state, staged changes, and destructive effects.
+
+  level: domain
+  domain: git
+  category: workflow
+  priority: 80
+
+  tags:
+    - git
+    - working-tree
+    - staging
+    - safety
+
+  capabilities:
+    - git_workflow
+    - code_review
+
+  activation:
+    when:
+      language: git
+    triggers:
+      - inspect_git_state
+      - prepare_commit
+      - resolve_git_issue
+
+  dependencies: []
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - git
+    - version control
+    - source control
+    - repository
+    - repo
+
+  domain_semantics:
+    - Git version control task
+    - repository history and working tree task
+    - source control workflow task
+
+  trigger_aliases:
+    inspect_git_state:
+      - git status
+      - working tree
+      - staged changes
+      - unstaged changes
+      - untracked files
+      - inspect repository state
+    prepare_commit:
+      - prepare commit
+      - stage changes
+      - commit these changes
+    resolve_git_issue:
+      - fix git issue
+      - git problem
+      - repository state
+
+  trigger_semantics:
+    inspect_git_state:
+      - inspect the current Git working tree and staged changes
+      - understand what files are modified, staged, untracked, or ignored
+    prepare_commit:
+      - prepare a clean Git commit from the intended set of changes
+      - stage only the files that belong in the next commit
+    resolve_git_issue:
+      - diagnose a Git repository state problem without losing local work
+
+  trigger_capabilities:
+    inspect_git_state:
+      - git_workflow
+      - code_review
+    prepare_commit:
+      - git_workflow
+    resolve_git_issue:
+      - git_workflow
+
+  context_rules:
+    - id: detect_dirty_working_tree_task
+      when_text_matches:
+        - working tree
+        - staged changes
+        - unstaged changes
+        - untracked files
+        - git status
+      set:
+        git_working_tree_sensitive: true
+      tags:
+        - working-tree
+        - staging
+      semantic_match:
+        - inspect modified staged unstaged and untracked files before changing repository state
+        - review the Git working tree before committing or switching context
+      confidence: 0.86
+
+rules:
+  hard:
+    - id: git.working_tree.do_not_discard_local_work
+      title: Do not discard local work implicitly
+      when: domain == "git"
+      must_not: >-
+        Do not discard, overwrite, reset, clean, checkout away, or otherwise
+        remove local changes unless the user explicitly asks for that destructive
+        operation and the affected paths are known.
+      target: local_changes
+      action: forbid
+      rationale: Git workflows must protect user work before changing repository state.
+
+    - id: git.working_tree.protect_secrets_and_local_paths
+      title: Do not commit secrets or local paths
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "prepare_pull_request", "review_git_history"]
+      must_not: >-
+        Do not stage or commit secrets, tokens, credentials, private keys,
+        machine-local paths, or environment-specific files unless the user
+        explicitly confirms they are intended safe test fixtures.
+      target: sensitive_content
+      action: forbid
+      rationale: Repository history is durable and widely shared.
+
+  soft:
+    - id: git.working_tree.inspect_before_state_change
+      title: Inspect state before changing it
+      when: domain == "git"
+      should: >-
+        Inspect the working tree and index before committing, switching branches,
+        rebasing, merging, resetting, cleaning, or applying patches.
+      target: working_tree
+      action: recommend
+      rationale: Git commands often depend on the distinction between worktree, index, and history.
+
+    - id: git.working_tree.inspect_branch_and_recent_history
+      title: Inspect branch and recent history before risky operations
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "manage_branch", "sync_branch", "prepare_pull_request", "rewrite_history", "undo_change", "clean_working_tree"]
+      should: >-
+        Inspect the current branch, recent history, and staged diff when they
+        affect the requested Git operation, instead of assuming the branch or
+        index state from the user prompt.
+      target: repository_state
+      action: recommend
+      rationale: Git branch, index, and history state are often different from the user's mental model.
+
+    - id: git.working_tree.stage_intentionally
+      title: Stage intentionally
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "prepare_pull_request", "review_git_history"]
+      should: >-
+        Stage only the paths or hunks that belong to the current logical change,
+        and leave unrelated edits out of the commit.
+      target: staging
+      action: recommend
+      rationale: Intentional staging produces reviewable, reversible commits.
+
+  preference:
+    - id: git.working_tree.preference_explicit_over_implicit
+      title: Prefer explicit path selection
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "prepare_pull_request", "review_git_history"]
+      prefer: explicit_path_or_hunk_selection
+      over:
+        - broad_implicit_repository_mutation
+      target: staging
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: git.working_tree.review_local_changes
+      type: llm_self_check
+      applies_to:
+        - working_tree
+        - staging
+      severity: required
+      prompt: >-
+        Check that the proposed Git operation preserves unrelated local changes
+        and names the affected paths or hunks when staging or modifying state.
+

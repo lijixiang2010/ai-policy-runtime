@@ -110,9 +110,12 @@ Bundled packs include:
 - `cpp.modernization`
 - `cpp.production_refinement`
 - `generic.production_refinement`
+- `git.best_practices`
 
-C++ has the most complete coverage today. Generic refinement packs are available
-for broader coding workflows.
+C++ has the most complete code-generation coverage today. Generic refinement
+packs are available for broader coding workflows. Git workflow policies cover
+commit hygiene, staging, stashing, cleaning, branching, pull request readiness,
+conflict resolution, and history rewrite safety.
 
 ## Useful Commands
 
@@ -159,6 +162,8 @@ policy-claude --pack cpp.production_refinement "Refactor this module safely."
   troubleshooting.
 - [Post-Task Refinement](docs/post_task_refinement_workflow.md): refinement
   modes and verification flow.
+- [Git Best Practices](docs/git_best_practices.md): Git workflow policies for
+  commits, branches, conflict resolution, and history safety.
 - [Skill Policy Runtime](docs/skill_policy_runtime.md): runtime model and core
   concepts.
 - [Skill DSL Syntax](docs/skill_dsl_syntax_specification.md): Skill file format.

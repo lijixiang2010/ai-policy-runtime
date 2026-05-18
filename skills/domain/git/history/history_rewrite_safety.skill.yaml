@@ -1,0 +1,207 @@
+# Skill: Git History Rewrite Safety
+# File: skills/domain/git/history/history_rewrite_safety.skill.yaml
+
+skill:
+  id: git.history.rewrite_safety
+  name: Git History Rewrite Safety
+  version: 1.0.0
+  status: stable
+  description: Rebase, amend, reset, revert, and force-push with clear safety boundaries.
+
+  level: domain
+  domain: git
+  category: history
+  priority: 95
+
+  tags:
+    - git
+    - rebase
+    - reset
+    - revert
+    - force-push
+    - safety
+
+  capabilities:
+    - git_workflow
+    - code_review
+
+  activation:
+    when:
+      language: git
+    triggers:
+      - rewrite_history
+      - undo_change
+      - sync_branch
+
+  dependencies:
+    - git.workflow.working_tree_safety
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - git
+    - version control
+    - source control
+
+  domain_semantics:
+    - Git history rewrite and recovery task
+    - safely undo or rewrite commits in a repository
+
+  trigger_aliases:
+    rewrite_history:
+      - rebase
+      - amend commit
+      - squash commits
+      - force push
+      - force-with-lease
+      - rewrite history
+      - interactive rebase
+    undo_change:
+      - revert
+      - reset
+      - undo commit
+      - undo changes
+      - restore file
+      - checkout file
+    sync_branch:
+      - rebase branch
+      - update branch
+      - pull rebase
+
+  trigger_semantics:
+    rewrite_history:
+      - rewrite local Git commits with rebase amend squash or fixup
+      - clean up local history before publishing it
+      - force push rewritten local commits safely
+    undo_change:
+      - choose between revert reset restore and checkout to undo a Git change
+      - undo a commit without losing unrelated work
+    sync_branch:
+      - rebase a branch onto updated upstream history safely
+
+  trigger_capabilities:
+    rewrite_history:
+      - git_workflow
+    undo_change:
+      - git_workflow
+    sync_branch:
+      - git_workflow
+
+  context_rules:
+    - id: detect_history_rewrite_task
+      when_text_matches:
+        - rewrite history
+        - interactive rebase
+        - squash commits
+        - amend commit
+        - force push
+        - force-with-lease
+      set:
+        git_history_rewrite_requested: true
+      tags:
+        - rebase
+        - force-push
+        - safety
+      semantic_match:
+        - rewrite unpublished commits while preserving shared repository safety
+        - squash amend or reorder local commits before publishing
+      confidence: 0.9
+
+    - id: detect_undo_task
+      when_text_matches:
+        - revert commit
+        - reset commit
+        - undo commit
+        - restore file
+        - discard changes
+      set:
+        git_undo_requested: true
+      tags:
+        - reset
+        - revert
+        - safety
+      semantic_match:
+        - undo a Git change using the safest command for the situation
+        - recover from a bad commit without losing unrelated work
+      confidence: 0.88
+
+rules:
+  hard:
+    - id: git.history.do_not_rewrite_shared_history_without_consent
+      title: Do not rewrite shared history without consent
+      when: domain == "git" and git_history_rewrite_requested == true
+      must_not: >-
+        Do not rebase, amend, reset, or force-push commits that may already be
+        shared with others unless the user explicitly confirms that rewriting
+        that history is acceptable.
+      target: shared_history
+      action: forbid
+      rationale: Rewriting shared history can disrupt collaborators and invalidate their local work.
+
+    - id: git.history.prefer_revert_for_published_undo
+      title: Prefer revert for published history
+      when: domain == "git" and git_undo_requested == true and git_history_rewrite_requested != true
+      must: >-
+        Prefer revert over reset for undoing changes that are already published
+        or may be based on by other collaborators.
+      target: undo_strategy
+      action: require
+      rationale: Revert records a new inverse change without removing shared commits.
+
+  soft:
+    - id: git.history.explain_reset_scope
+      title: Explain reset scope
+      when: domain == "git" and git_undo_requested == true and git_history_rewrite_requested != true
+      should: >-
+        Explain whether the undo operation affects only the index, the working
+        tree, the current branch tip, or all three before recommending reset,
+        restore, checkout, or clean.
+      target: reset_semantics
+      action: recommend
+      rationale: Git undo commands differ by which tree they modify.
+
+    - id: git.history.use_force_with_lease
+      title: Use force-with-lease for safe force push
+      when: domain == "git" and git_history_rewrite_requested == true
+      should: >-
+        Use force-with-lease rather than an unconditional force push when a
+        rewritten branch must be pushed, and explain what remote state it protects.
+      target: force_push
+      action: recommend
+      rationale: Force-with-lease reduces the risk of overwriting another user's new remote commits.
+
+    - id: git.history_keep_rewrites_local
+      title: Keep rewrites local
+      when: domain == "git" and git_history_rewrite_requested == true
+      should: >-
+        Use amend, squash, fixup, and interactive rebase primarily for local,
+        unpublished commits where rewriting history will not surprise collaborators.
+      target: rewrite_scope
+      action: recommend
+      rationale: Local cleanup is useful; shared history needs stronger coordination.
+
+  preference:
+    - id: git.history.preference_revert_shared_reset_local
+      title: Prefer shared-safe undo
+      when: domain == "git" and (git_history_rewrite_requested == true or git_undo_requested == true)
+      prefer: revert_for_shared_history
+      over:
+        - reset_for_published_commits
+      target: undo_strategy
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: git.history.review_rewrite_safety
+      type: llm_self_check
+      applies_to:
+        - shared_history
+        - force_push
+        - undo_strategy
+      severity: required
+      prompt: >-
+        Check whether the commits are published or shared before recommending
+        rebase, amend, reset, or force push; prefer shared-safe alternatives when uncertain.
+

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable
 
 from ai_policy_runtime.domain.task import TaskContext
@@ -37,7 +37,7 @@ class ExtractionState:
             self.skill_matches.add(str(rule.value))
             self.evidence.append(evidence)
             return
-        self.context.update(rule.set_context)
+        self.context.update(self._allowed_context_updates(rule.set_context, evidence))
         self.tags.update(rule.tags)
         self.evidence.append(evidence)
 
@@ -74,6 +74,22 @@ class ExtractionState:
             if non_unknown:
                 matches = non_unknown
         return str(max(matches, key=lambda item: item.confidence).value)
+
+    def _allowed_context_updates(
+        self,
+        updates: dict[str, Any],
+        evidence: ExtractionEvidence,
+    ) -> dict[str, Any]:
+        allowed: dict[str, Any] = {}
+        for key, value in updates.items():
+            key_evidence = (
+                evidence
+                if evidence.field == f"context.{key}"
+                else replace(evidence, field=f"context.{key}", value=value)
+            )
+            if not self.has_stronger_or_equal(key_evidence):
+                allowed[key] = value
+        return allowed
 
     def to_analysis(self, lexicon: TaskLexicon) -> TaskAnalysis:
         """Finalize state into a TaskAnalysis."""

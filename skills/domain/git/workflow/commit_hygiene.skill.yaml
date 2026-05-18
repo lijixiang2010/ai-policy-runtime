@@ -1,0 +1,245 @@
+# Skill: Git Commit Hygiene
+# File: skills/domain/git/workflow/commit_hygiene.skill.yaml
+
+skill:
+  id: git.workflow.commit_hygiene
+  name: Git Commit Hygiene
+  version: 1.0.0
+  status: stable
+  description: Create focused, reviewable commits with accurate messages and clean scope.
+
+  level: domain
+  domain: git
+  category: workflow
+  priority: 90
+
+  tags:
+    - git
+    - commit
+    - review
+    - collaboration
+
+  capabilities:
+    - git_workflow
+    - code_review
+
+  activation:
+    when:
+      language: git
+    triggers:
+      - prepare_commit
+      - write_commit_message
+      - review_git_history
+
+  dependencies:
+    - git.workflow.working_tree_safety
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - git
+    - version control
+    - source control
+
+  domain_semantics:
+    - Git commit workflow task
+    - version control history task
+
+  trigger_aliases:
+    prepare_commit:
+      - create commit
+      - split commit
+      - stage commit
+      - git add
+    write_commit_message:
+      - commit message
+      - commit title
+      - conventional commit
+      - changelog entry
+    review_git_history:
+      - review commits
+      - audit history
+      - clean history
+      - git log
+
+  trigger_semantics:
+    prepare_commit:
+      - create a focused Git commit from related changes
+      - split unrelated changes into separate commits
+      - prepare a reviewable commit
+    write_commit_message:
+      - write a clear Git commit subject and body
+      - summarize the intent and impact of a code change for version control history
+    review_git_history:
+      - review whether Git commits are small coherent and understandable
+      - clean up local commit history before sharing it
+
+  trigger_capabilities:
+    prepare_commit:
+      - git_workflow
+    write_commit_message:
+      - git_workflow
+    review_git_history:
+      - git_workflow
+      - code_review
+
+  context_rules:
+    - id: detect_commit_message_task
+      when_text_matches:
+        - commit message
+        - conventional commit
+        - commit title
+        - write commit
+      set:
+        git_commit_message_requested: true
+      tags:
+        - commit
+      semantic_match:
+        - write a concise commit message for the staged changes
+        - generate a commit title and body that explain why the change exists
+      confidence: 0.88
+
+    - id: detect_commit_splitting_task
+      when_text_matches:
+        - split commit
+        - separate commits
+        - atomic commit
+        - logical commit
+      set:
+        git_atomic_commit_required: true
+      tags:
+        - commit
+        - review
+      semantic_match:
+        - separate unrelated changes into small logical commits
+        - make the commit history easier to review by splitting scope
+      confidence: 0.88
+
+    - id: detect_conventional_commit_task
+      when_text_matches:
+        - conventional commit
+        - commit type
+        - commit scope
+        - changelog entry
+      set:
+        git_conventional_commit_requested: true
+      tags:
+        - commit
+        - changelog
+      semantic_match:
+        - write a commit message using conventional type scope and subject
+        - choose the correct conventional commit type for a change
+      confidence: 0.88
+
+rules:
+  hard:
+    - id: git.commit.message_must_match_changes
+      title: Match the message to the committed changes
+      when: domain == "git" and git_commit_message_requested == true
+      must: >-
+        Make the commit message accurately describe the changes being committed;
+        do not mention work that is not included in the staged diff.
+      target: commit_message
+      action: require
+      rationale: A commit message is part of the project history and must remain trustworthy.
+
+    - id: git.commit.do_not_commit_arbitrary_wip
+      title: Do not commit arbitrary work in progress
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message"]
+      must_not: >-
+        Do not create a normal commit for incomplete, arbitrary, or mixed work in
+        progress when the user's goal is only to clear the working tree temporarily.
+      target: commit_scope
+      action: forbid
+      rationale: Project history should communicate coherent project changes, not temporary local state.
+
+  soft:
+    - id: git.commit.keep_commits_logical
+      title: Keep commits logical
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "review_git_history"]
+      should: >-
+        Keep each commit focused on one coherent reason for change, separating
+        unrelated edits, generated files, formatting-only changes, and behavior
+        changes when practical.
+      target: commit_scope
+      action: recommend
+      rationale: Small coherent commits are easier to review, revert, bisect, and explain.
+
+    - id: git.commit.write_useful_subject
+      title: Write a useful subject
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "review_git_history"]
+      should: >-
+        Write a short imperative commit subject that names the change, then add a
+        body only when the motivation, tradeoffs, migration notes, or test impact
+        are not obvious from the diff.
+      target: commit_message
+      action: recommend
+      rationale: Good commit messages explain both what changed and why it matters.
+
+    - id: git.commit.use_conventional_format_when_requested
+      title: Use Conventional Commit format when requested
+      when: domain == "git" and git_conventional_commit_requested == true
+      should: >-
+        Use the form type(scope): subject when the project or user asks for
+        Conventional Commits, choosing a precise type such as feat, fix, docs,
+        refactor, test, chore, build, ci, perf, or revert.
+      target: commit_message_format
+      action: recommend
+      rationale: Consistent commit types make changelogs and review history easier to scan.
+
+    - id: git.commit.keep_subject_and_body_useful
+      title: Keep subject and body useful
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "review_git_history"]
+      should: >-
+        Keep the subject concise and imperative without a trailing period; use
+        the body to explain motivation, tradeoffs, compatibility, migration, or
+        testing details that are not obvious from the diff.
+      target: commit_message
+      action: recommend
+      rationale: A useful message explains intent without duplicating the patch.
+
+    - id: git.commit.review_diff_before_commit
+      title: Review the staged diff
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "review_git_history"]
+      should: >-
+        Review the staged diff before committing, checking that the commit
+        contains the intended paths and no incidental debug output, secrets,
+        generated noise, or unrelated edits.
+      target: staged_diff
+      action: recommend
+      rationale: The staged diff is the exact content that will become history.
+
+    - id: git.commit.run_lightweight_checks_before_commit
+      title: Run lightweight checks before committing
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message"]
+      should: >-
+        Run or recommend low-cost checks such as whitespace validation and
+        project-appropriate tests or linters before committing when they are
+        available and practical; report checks that were skipped.
+      target: commit_verification
+      action: recommend
+      rationale: A commit should be easy to review and should not knowingly preserve avoidable breakage.
+
+  preference:
+    - id: git.commit.preference_small_reviewable_commits
+      title: Prefer small reviewable commits
+      when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "review_git_history"]
+      prefer: small_coherent_commits
+      over:
+        - large_mixed_commits
+      target: commit_scope
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: git.commit.review_commit_quality
+      type: llm_self_check
+      applies_to:
+        - commit_scope
+        - commit_message
+      severity: advisory
+      prompt: >-
+        Check that the commit scope is coherent, the staged diff matches the
+        proposed message, and unrelated changes are not included.
