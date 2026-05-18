@@ -1,0 +1,186 @@
+# Skill: CMake Presets and Toolchains
+# File: skills/domain/cmake/reproducibility/presets_toolchains.skill.yaml
+
+skill:
+  id: cmake.reproducibility.presets_toolchains
+  name: CMake Presets and Toolchains
+  version: 1.0.0
+  status: stable
+  description: Make CMake configuration reproducible with presets, out-of-source builds, and explicit toolchains.
+
+  level: domain
+  domain: cmake
+  category: reproducibility
+  priority: 80
+
+  tags:
+    - cmake
+    - presets
+    - toolchains
+    - reproducibility
+
+  capabilities:
+    - cmake_build_design
+    - code_review
+
+  activation:
+    when:
+      language: cmake
+    triggers:
+      - configure_build
+      - setup_toolchain
+      - add_tests
+      - configure_quality
+      - review_build
+
+  dependencies:
+    - cmake.project.target_model
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - cmake
+    - cmakepresets
+    - cmakepresets.json
+    - toolchain file
+
+  domain_semantics:
+    - CMake preset and toolchain configuration task
+    - reproducible CMake configure build test package workflow
+    - cross compilation with CMake toolchain files
+
+  trigger_aliases:
+    configure_build:
+      - cmake preset
+      - cmakepresets
+      - configure preset
+      - build preset
+      - workflow preset
+      - out of source build
+    setup_toolchain:
+      - toolchain file
+      - cross compile
+      - sysroot
+      - cmake toolchain
+    review_build:
+      - review presets
+      - reproducible build
+
+  trigger_semantics:
+    configure_build:
+      - create CMakePresets for repeatable local and CI builds
+      - configure out of source CMake builds consistently across environments
+    setup_toolchain:
+      - define a CMake toolchain file for cross compilation
+      - keep compiler sysroot and target platform settings in a toolchain or preset
+    review_build:
+      - review CMake configuration for reproducibility across developer and CI machines
+
+  trigger_capabilities:
+    configure_build:
+      - cmake_build_design
+    setup_toolchain:
+      - cmake_build_design
+    add_tests:
+      - cmake_build_design
+    configure_quality:
+      - cmake_build_design
+    review_build:
+      - cmake_build_design
+      - code_review
+
+  context_rules:
+    - id: detect_cmake_presets_task
+      when_text_matches:
+        - cmakepresets
+        - cmake preset
+        - 预设
+        - configure preset
+        - build preset
+        - workflow preset
+      set:
+        cmake_presets_requested: true
+      tags:
+        - presets
+        - reproducibility
+      semantic_match:
+        - use configure build test and package presets for reproducible workflows
+        - share project presets while keeping user local presets out of version control
+      confidence: 0.9
+
+    - id: detect_cmake_toolchain_task
+      when_text_matches:
+        - toolchain file
+        - cross compile
+        - sysroot
+        - cmake toolchain
+      set:
+        cmake_toolchain_requested: true
+      tags:
+        - toolchains
+        - cross-compilation
+      semantic_match:
+        - configure cross compilation through a toolchain file
+        - keep compiler target platform and sysroot settings explicit
+      confidence: 0.9
+
+rules:
+  hard:
+    - id: cmake.reproducibility.keep_builds_out_of_source
+      title: Keep builds out of source
+      when: >-
+        domain == "cmake" and (
+          cmake_presets_requested == true or
+          cmake_toolchain_requested == true
+        )
+      must: >-
+        Keep generated build files outside the source tree and avoid writing
+        generated artifacts into source directories unless the project explicitly
+        treats them as source-controlled generated files.
+      target: build_tree
+      action: require
+      rationale: Out-of-source builds keep repositories clean and make multiple configurations possible.
+
+  soft:
+    - id: cmake.presets.share_project_presets
+      title: Share project presets
+      when: domain == "cmake" and cmake_presets_requested == true
+      should: >-
+        Put stable project configure, build, test, package, or workflow presets
+        in CMakePresets.json, and keep developer-specific overrides in
+        CMakeUserPresets.json.
+      target: presets
+      action: recommend
+      rationale: Presets align local and CI configuration while preserving per-user customization.
+
+    - id: cmake.presets.encode_ci_workflows
+      title: Encode common workflows in presets
+      when: domain == "cmake" and cmake_presets_requested == true
+      should: >-
+        Encode common configure, build, test, and package flows in presets so
+        CI and developers run the same named configurations.
+      target: workflow_reproducibility
+      action: recommend
+      rationale: Named presets reduce command-line drift across environments.
+
+    - id: cmake.toolchain.keep_cross_settings_in_toolchain
+      title: Keep cross settings in the toolchain
+      when: domain == "cmake" and cmake_toolchain_requested == true
+      should: >-
+        Put target system, compiler, sysroot, and platform discovery settings in
+        a toolchain file or preset instead of scattering them through project logic.
+      target: toolchain
+      action: recommend
+      rationale: Toolchain files separate host project logic from target platform configuration.
+
+  preference:
+    - id: cmake.presets.preference_named_presets
+      title: Prefer named presets
+      when: domain == "cmake" and cmake_presets_requested == true
+      prefer: named_project_presets
+      over:
+        - undocumented_manual_command_lines
+      target: presets
+      action: prefer

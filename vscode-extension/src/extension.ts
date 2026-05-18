@@ -97,6 +97,12 @@ const KNOWN_PACKS: PackItem[] = [
     description: 'Git commits, branches, conflicts, and history safety',
     category: 'Workflow',
     tags: ['Git', 'Review', 'Safety']
+  },
+  {
+    label: 'cmake.best_practices',
+    description: 'CMake targets, dependencies, packaging, presets, and tests',
+    category: 'Build',
+    tags: ['CMake', 'C++', 'Build']
   }
 ];
 

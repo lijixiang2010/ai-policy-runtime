@@ -171,6 +171,53 @@ cases:
     exclude:
       - selected C++ standard
 
+  - id: en_cmake_target_usage
+    provider: deterministic
+    prompt: Modernize this CMakeLists.txt to use target-based CMake with correct PUBLIC PRIVATE INTERFACE usage.
+    include:
+      - Express include directories, compile definitions
+      - Use PRIVATE for implementation-only requirements
+      - Provide namespaced aliases
+      - Avoid changing global variables
+    exclude:
+      - selected C++ standard
+      - force-with-lease
+
+  - id: en_cmake_dependency
+    provider: deterministic
+    prompt: Add a third party dependency with find_package or FetchContent and keep the build reproducible.
+    include:
+      - Prefer dependency consumption through imported targets
+      - Use find_package with config packages
+      - Pin FetchContent or ExternalProject dependencies
+    exclude:
+      - selected C++ standard
+      - pull request
+
+  - id: zh_cmake_presets_tests
+    provider: local
+    prompt: 给这个 CMake 项目加预设和 CTest 测试，把 sanitizer 做成可选质量检查
+    include:
+      - Keep generated build files outside the source tree
+      - Put stable project configure, build, test, package
+      - Add tests through CTest-compatible entrypoints
+      - Keep sanitizers, coverage, static analysis
+    exclude:
+      - selected C++ standard
+      - Do not rebase
+
+  - id: en_cmake_flags_and_glob
+    provider: deterministic
+    prompt: Replace CMAKE_CXX_FLAGS and file(GLOB) with target_compile_features and explicit target_sources.
+    include:
+      - Prefer target_compile_features
+      - Prefer explicit target_sources entries
+      - Use generator expressions
+      - broad file globbing
+    exclude:
+      - selected C++ standard
+      - force-with-lease
+
   - id: en_non_code_copy
     provider: deterministic
     prompt: Improve this landing page copy for launch, no code changes.

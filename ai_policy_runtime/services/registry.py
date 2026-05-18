@@ -14,6 +14,7 @@ from ai_policy_runtime.infrastructure.loader import load_packs_from_dir, load_sk
 GENERIC_ACTIVATION_TAGS = frozenset(
     {
         "cpp",
+        "cmake",
         "git",
         "generation",
         "review",
@@ -36,6 +37,27 @@ GENERIC_CONTEXT_GATES = {
     "generic.refactoring.duplication_extraction": ("duplicated_logic",),
     "generic.code_quality.expressive_implementation": ("expressive_implementation",),
     "generic.refactoring.parameterized_abstraction": ("similar_logic_with_small_variation",),
+}
+
+CMAKE_CONTEXT_GATES = {
+    "cmake.project.target_model": ("cmake_target_model_requested",),
+    "cmake.project.usage_requirements": ("cmake_usage_requirements_requested",),
+    "cmake.project.compiler_options": ("cmake_compiler_options_requested",),
+    "cmake.project.sources_options_modules": (
+        "cmake_source_management_requested",
+        "cmake_generated_files_requested",
+        "cmake_options_modules_requested",
+    ),
+    "cmake.dependencies.package_management": ("cmake_dependency_requested",),
+    "cmake.distribution.install_export_package": ("cmake_distribution_requested",),
+    "cmake.reproducibility.presets_toolchains": (
+        "cmake_presets_requested",
+        "cmake_toolchain_requested",
+    ),
+    "cmake.quality.testing_and_analysis": (
+        "cmake_testing_requested",
+        "cmake_quality_requested",
+    ),
 }
 
 
@@ -113,9 +135,14 @@ class SkillRegistry:
             return False
         if not _generic_code_skill_allowed(skill, task):
             return False
-        if skill.triggers and task.task_type not in skill.triggers:
+        context_gate_match = _cmake_context_gate_matches(skill, task)
+        if skill.triggers and task.task_type not in skill.triggers and not context_gate_match:
             return False
-        if skill.capabilities and not set(skill.capabilities).intersection(task.capabilities):
+        if (
+            skill.capabilities
+            and not set(skill.capabilities).intersection(task.capabilities)
+            and not context_gate_match
+        ):
             return False
         if not _tags_match(skill.tags, task.tags):
             return False
@@ -162,6 +189,14 @@ def _generic_code_skill_allowed(skill: Skill, task: TaskContext) -> bool:
     if skill.skill_id in GENERIC_CORE_SKILLS:
         return True
     return any(task.context.get(key) is True for key in GENERIC_CONTEXT_GATES.get(skill.skill_id, ()))
+
+
+def _cmake_context_gate_matches(skill: Skill, task: TaskContext) -> bool:
+    if "cmake" not in skill.domains:
+        return False
+    if task.domain != "cmake" and task.context.get("language") != "cmake":
+        return False
+    return any(task.context.get(key) is True for key in CMAKE_CONTEXT_GATES.get(skill.skill_id, ()))
 
 
 def _tags_match(skill_tags: tuple[str, ...], task_tags: tuple[str, ...]) -> bool:

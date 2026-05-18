@@ -314,6 +314,118 @@ class KeywordConceptEmbeddingProvider:
                 "清理未跟踪文件",
             ),
         ),
+        (
+            "cmake",
+            (
+                "cmake",
+                "cmakelists",
+                "cmakelists.txt",
+                "build system",
+                "cmakepresets",
+                "ctest",
+                "构建系统",
+            ),
+        ),
+        (
+            "cmake_target",
+            (
+                "target based",
+                "target-based",
+                "modern cmake",
+                "target_link_libraries",
+                "target_include_directories",
+                "target_sources",
+                "usage requirements",
+                "public private interface",
+                "目标",
+            ),
+        ),
+        (
+            "cmake_compiler",
+            (
+                "compile features",
+                "cxx standard",
+                "compiler flags",
+                "cmake_cxx_flags",
+                "warnings as errors",
+                "generator expressions",
+                "multi config",
+                "编译选项",
+            ),
+        ),
+        (
+            "cmake_sources_modules",
+            (
+                "file glob",
+                "file_set",
+                "source list",
+                "generated files",
+                "project option",
+                "cache variable",
+                "cmake module",
+                "cmake function",
+                "custom command",
+                "源码列表",
+            ),
+        ),
+        (
+            "cmake_dependency",
+            (
+                "find_package",
+                "fetchcontent",
+                "externalproject",
+                "imported target",
+                "third party",
+                "dependency",
+                "vcpkg",
+                "conan",
+                "依赖",
+            ),
+        ),
+        (
+            "cmake_distribution",
+            (
+                "install target",
+                "cmake install",
+                "export targets",
+                "package config",
+                "cpack",
+                "build interface",
+                "install interface",
+                "安装",
+                "打包",
+            ),
+        ),
+        (
+            "cmake_repro",
+            (
+                "cmake preset",
+                "cmakepresets",
+                "cmakepresets.json",
+                "configure preset",
+                "build preset",
+                "workflow preset",
+                "toolchain file",
+                "cross compile",
+                "sysroot",
+                "预设",
+                "工具链",
+            ),
+        ),
+        (
+            "cmake_quality",
+            (
+                "add_test",
+                "enable_testing",
+                "discover tests",
+                "sanitizer",
+                "code coverage",
+                "static analysis",
+                "clang-tidy",
+                "cppcheck",
+                "测试",
+            ),
+        ),
     )
 
     def encode(self, texts: list[str] | tuple[str, ...]) -> list[list[float]]:
@@ -597,6 +709,60 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("Check that the branch contains only relevant commits", prompt)
         self.assertIn("Make the pull request title follow", prompt)
         self.assertIn("Use short branch names", prompt)
+
+    def test_cmake_best_practices_pack_outputs_target_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Modernize this CMakeLists.txt to use target-based CMake with correct PUBLIC PRIVATE INTERFACE usage.",
+            ("cmake.best_practices",),
+        )
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+        sources = _sources(result.structured["effective_rules"])
+
+        self.assertIn("cmake.project.target_model", sources)
+        self.assertIn("cmake.project.usage_requirements", sources)
+        self.assertIn("Express include directories, compile definitions", prompt)
+        self.assertIn("Use PRIVATE for implementation-only requirements", prompt)
+        self.assertNotIn("selected C++ standard", prompt)
+
+    def test_cmake_dependency_pack_outputs_imported_target_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Add a third party dependency with find_package or FetchContent and keep the build reproducible.",
+            ("cmake.best_practices",),
+        )
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+
+        self.assertIn("Prefer dependency consumption through imported targets", prompt)
+        self.assertIn("Pin FetchContent or ExternalProject dependencies", prompt)
+
+    def test_cmake_presets_and_testing_rules_are_task_specific(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Add CMakePresets and CTest entries with sanitizer builds as opt-in quality presets.",
+            ("cmake.best_practices",),
+        )
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+
+        self.assertIn("Keep generated build files outside the source tree", prompt)
+        self.assertIn("Put stable project configure, build, test, package", prompt)
+        self.assertIn("Keep sanitizers, coverage, static analysis", prompt)
+        self.assertIn("Add tests through CTest-compatible entrypoints", prompt)
+
+    def test_cmake_compiler_and_source_rules_cover_common_antipatterns(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Replace CMAKE_CXX_FLAGS and file(GLOB) with target_compile_features and explicit target_sources.",
+            ("cmake.best_practices",),
+        )
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+        sources = _sources(result.structured["effective_rules"])
+
+        self.assertIn("cmake.project.compiler_options", sources)
+        self.assertIn("cmake.project.sources_options_modules", sources)
+        self.assertIn("Prefer target_compile_features", prompt)
+        self.assertIn("Prefer explicit target_sources entries", prompt)
+        self.assertIn("Use generator expressions", prompt)
 
     def test_semantic_index_reuses_cached_vectors(self) -> None:
         lexicon = TaskLexicon(

@@ -1,0 +1,173 @@
+# Skill: CMake Testing and Analysis
+# File: skills/domain/cmake/quality/testing_and_analysis.skill.yaml
+
+skill:
+  id: cmake.quality.testing_and_analysis
+  name: CMake Testing and Analysis
+  version: 1.0.0
+  status: stable
+  description: Integrate tests, CTest, sanitizers, coverage, and static analysis without polluting normal builds.
+
+  level: domain
+  domain: cmake
+  category: quality
+  priority: 78
+
+  tags:
+    - cmake
+    - testing
+    - ctest
+    - quality
+
+  capabilities:
+    - cmake_build_design
+    - code_review
+
+  activation:
+    when:
+      language: cmake
+    triggers:
+      - add_tests
+      - configure_quality
+      - review_build
+
+  dependencies:
+    - cmake.project.target_model
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - cmake
+    - ctest
+    - cmakelists
+
+  domain_semantics:
+    - CMake testing and code quality integration task
+    - CTest sanitizer coverage static analysis CMake workflow
+
+  trigger_aliases:
+    add_tests:
+      - ctest
+      - add_test
+      - enable_testing
+      - discover tests
+    configure_quality:
+      - sanitizer
+      - code coverage
+      - static analysis
+      - clang-tidy
+      - cppcheck
+    review_build:
+      - review tests
+      - review quality tools
+
+  trigger_semantics:
+    add_tests:
+      - add tests to a CMake project using CTest
+      - integrate test discovery and test presets in CMake
+    configure_quality:
+      - configure sanitizers coverage or static analysis in CMake without affecting normal builds
+      - add code quality tools to CMake as opt in target or preset behavior
+    review_build:
+      - review CMake test and quality tool integration
+
+  trigger_capabilities:
+    add_tests:
+      - cmake_build_design
+    configure_quality:
+      - cmake_build_design
+      - code_review
+    review_build:
+      - cmake_build_design
+      - code_review
+
+  context_rules:
+    - id: detect_cmake_testing_task
+      when_text_matches:
+        - ctest
+        - add_test
+        - enable_testing
+        - discover tests
+      set:
+        cmake_testing_requested: true
+      tags:
+        - testing
+        - ctest
+      semantic_match:
+        - add CTest based testing and test discovery
+        - discover and run tests through test presets
+      confidence: 0.9
+
+    - id: detect_cmake_quality_task
+      when_text_matches:
+        - sanitizer
+        - code coverage
+        - static analysis
+        - clang-tidy
+        - cppcheck
+      set:
+        cmake_quality_requested: true
+      tags:
+        - quality
+        - analysis
+      semantic_match:
+        - integrate sanitizers coverage clang tidy or static analysis into build workflows
+        - configure code quality tools without polluting normal release builds
+      confidence: 0.9
+
+rules:
+  hard:
+    - id: cmake.quality.keep_quality_tools_opt_in
+      title: Keep quality tooling opt-in
+      when: domain == "cmake" and cmake_quality_requested == true
+      must: >-
+        Keep sanitizers, coverage, static analysis, and unusually strict warning
+        policies opt-in through presets, options, targets, or dedicated build
+        types unless the project explicitly requires them for all builds.
+      target: quality_tooling
+      action: require
+      rationale: Quality tools are valuable but can break portability or normal consumer builds when forced globally.
+
+  soft:
+    - id: cmake.testing.use_ctest_entrypoints
+      title: Use CTest entrypoints
+      when: domain == "cmake" and cmake_testing_requested == true
+      should: >-
+        Add tests through CTest-compatible entrypoints so they can be selected,
+        filtered, timed out, repeated, parallelized, and run consistently by CI.
+      target: testing
+      action: recommend
+      rationale: CTest provides a standard test runner surface for CMake projects.
+
+    - id: cmake.testing.keep_tests_targeted
+      title: Keep tests targeted and discoverable
+      when: domain == "cmake" and cmake_testing_requested == true
+      should: >-
+        Keep test targets and discovery explicit enough that developers can run
+        relevant subsets locally and CI can report clear failures.
+      target: test_discovery
+      action: recommend
+      rationale: Test integration should improve feedback rather than hide it behind opaque build steps.
+
+    - id: cmake.quality.attach_analysis_to_targets
+      title: Attach analysis to relevant targets
+      when: domain == "cmake" and cmake_quality_requested == true
+      should: >-
+        Attach analysis, sanitizer, coverage, and warning behavior to the
+        relevant targets or presets instead of changing every target through
+        global flags.
+      target: quality_tooling
+      action: recommend
+      rationale: Target-local quality tooling avoids surprising dependencies and consumers.
+
+  preference:
+    - id: cmake.quality.preference_preset_quality_gates
+      title: Prefer preset quality gates
+      when: domain == "cmake" and cmake_quality_requested == true
+      prefer: opt_in_quality_presets_or_targets
+      over:
+        - unconditional_global_quality_flags
+      target: quality_tooling
+      action: prefer

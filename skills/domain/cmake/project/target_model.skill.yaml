@@ -1,0 +1,202 @@
+# Skill: CMake Target Model
+# File: skills/domain/cmake/project/target_model.skill.yaml
+
+skill:
+  id: cmake.project.target_model
+  name: CMake Target Model
+  version: 1.0.0
+  status: stable
+  description: Model CMake projects around explicit targets rather than global directory state.
+
+  level: domain
+  domain: cmake
+  category: project
+  priority: 90
+
+  tags:
+    - cmake
+    - targets
+    - build-system
+
+  capabilities:
+    - cmake_build_design
+    - code_review
+
+  activation:
+    when:
+      language: cmake
+    triggers:
+      - design_build
+      - modernize_cmake
+      - review_build
+
+  dependencies: []
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - cmake
+    - cmakelists
+    - cmakelists.txt
+    - cmake build
+    - build system
+
+  domain_semantics:
+    - CMake build system task
+    - CMakeLists target based project configuration
+    - modern CMake project structure
+
+  trigger_aliases:
+    design_build:
+      - write cmake
+      - create cmakelists
+      - add cmake target
+      - build system
+    modernize_cmake:
+      - modernize cmake
+      - clean up cmake
+      - target based cmake
+    review_build:
+      - review cmake
+      - audit cmake
+      - cmake best practices
+
+  trigger_semantics:
+    design_build:
+      - create a target based CMake build for a C++ project
+      - define libraries and executables with modern CMake targets
+    modernize_cmake:
+      - migrate CMake code from global variables to target properties
+      - clean up legacy CMakeLists into maintainable target based structure
+    review_build:
+      - review a CMake project for maintainability and best practices
+
+  trigger_capabilities:
+    design_build:
+      - cmake_build_design
+    modernize_cmake:
+      - cmake_build_design
+      - refactor_code
+    review_build:
+      - cmake_build_design
+      - code_review
+
+  context_rules:
+    - id: detect_target_based_cmake_task
+      when_text_matches:
+        - target based cmake
+        - target-based cmake
+        - modern cmake
+        - cmakelists
+      set:
+        cmake_target_model_requested: true
+      tags:
+        - targets
+        - build-system
+      semantic_match:
+        - design around explicit library and executable targets
+        - modernize build scripts to use target properties instead of global settings
+      confidence: 0.88
+
+rules:
+  hard:
+    - id: cmake.target_model.prefer_targets_over_globals
+      title: Prefer target-local build state
+      when: >-
+        domain == "cmake" and (
+          cmake_target_model_requested == true or
+          cmake_usage_requirements_requested == true or
+          cmake_compiler_options_requested == true or
+          cmake_source_management_requested == true or
+          cmake_generated_files_requested == true or
+          cmake_dependency_requested == true or
+          cmake_distribution_requested == true
+        )
+      must: >-
+        Express include directories, compile definitions, compile features,
+        compile options, link options, sources, and dependencies on the specific
+        targets that need them rather than through broad directory-global state.
+      target: target_model
+      action: require
+      rationale: Modern CMake is organized around target properties and usage requirements.
+
+  soft:
+    - id: cmake.target_model.use_namespaced_aliases
+      title: Use namespaced target aliases
+      when: >-
+        domain == "cmake" and (
+          cmake_target_model_requested == true or
+          cmake_dependency_requested == true or
+          cmake_distribution_requested == true
+        )
+      should: >-
+        Provide namespaced aliases for project libraries that are consumed by
+        other targets or packages, so dependency origins and diagnostics remain clear.
+      target: target_naming
+      action: recommend
+      rationale: Namespaced targets make package and dependency boundaries explicit.
+
+    - id: cmake.target_model.keep_top_level_small
+      title: Keep top-level CMakeLists focused
+      when: >-
+        domain == "cmake" and (
+          cmake_target_model_requested == true or
+          cmake_options_modules_requested == true
+        )
+      should: >-
+        Keep the top-level CMakeLists focused on project metadata, options,
+        high-level target composition, and subdirectories; move reusable logic
+        into functions or modules when it has a clear responsibility.
+      target: project_structure
+      action: recommend
+      rationale: A focused top level makes nested projects and maintenance easier.
+
+    - id: cmake.target_model.avoid_mutating_consumer_state
+      title: Avoid surprising parent or consumer state
+      when: >-
+        domain == "cmake" and (
+          cmake_target_model_requested == true or
+          cmake_compiler_options_requested == true or
+          cmake_source_management_requested == true or
+          cmake_generated_files_requested == true or
+          cmake_options_modules_requested == true
+        )
+      should_not: >-
+        Avoid changing global variables, compiler flags, policies, or cache
+        entries in ways that surprise parent projects or downstream consumers.
+      target: global_state
+      action: discourage
+      rationale: CMake projects are often embedded, packaged, or consumed by other projects.
+
+  preference:
+    - id: cmake.target_model.preference_target_properties
+      title: Prefer target properties
+      when: >-
+        domain == "cmake" and (
+          cmake_target_model_requested == true or
+          cmake_usage_requirements_requested == true or
+          cmake_compiler_options_requested == true or
+          cmake_source_management_requested == true or
+          cmake_generated_files_requested == true or
+          cmake_dependency_requested == true or
+          cmake_distribution_requested == true
+        )
+      prefer: target_properties_and_usage_requirements
+      over:
+        - global_directory_flags
+      target: target_model
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: cmake.target_model.review_global_state
+      type: llm_self_check
+      applies_to:
+        - target_model
+        - global_state
+      severity: advisory
+      prompt: >-
+        Check whether build requirements are attached to targets rather than
+        leaked through global variables or directory-wide commands.

@@ -172,12 +172,15 @@ class PromptRuleSelector:
             or context.get("language") == "generic_code"
         )
         self.git_workflow = context.get("domain") == "git" or context.get("language") == "git"
+        self.cmake_workflow = context.get("domain") == "cmake" or context.get("language") == "cmake"
 
     def hard(self, rules: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
         return self._limit(self._collapse(rules), limit, self._hard_score)
 
     def soft_limit(self, default: int) -> int:
         if self.git_workflow:
+            return min(default, 8)
+        if self.cmake_workflow:
             return min(default, 8)
         if self.context.get("unclear_hierarchy") and not self.context.get("duplicated_logic"):
             return min(default, 7)
@@ -188,6 +191,8 @@ class PromptRuleSelector:
 
     def preference_limit(self, default: int) -> int:
         if self.git_workflow:
+            return min(default, 2)
+        if self.cmake_workflow:
             return min(default, 2)
         if self.context.get("unclear_hierarchy") and not self.context.get("duplicated_logic"):
             return min(default, 2)
@@ -332,6 +337,17 @@ class PromptRuleSelector:
                 "commit_scope": 95,
                 "undo_strategy": 90,
             }.get(target, 0)
+        if self.cmake_workflow:
+            score += {
+                "target_model": 150,
+                "usage_requirements": 145,
+                "compiler_selection": 140,
+                "build_tree": 135,
+                "relocatable_package": 130,
+                "quality_tooling": 125,
+                "generated_files": 120,
+                "dependency_targets": 115,
+            }.get(target, 0)
         if "observable behavior" in text or target == "behavior_preservation":
             score += 120
         if target in {"undefined_behavior", "standard_availability", "ownership", "resource_lifetime", "type_safety"}:
@@ -386,6 +402,116 @@ class PromptRuleSelector:
             ):
                 if needle in text:
                     score += 20
+        if self.cmake_workflow:
+            score += {
+                "target_model": 140,
+                "usage_requirements": 135,
+                "source_lists": 95,
+                "generated_files": 75,
+                "language_standard": 120,
+                "compiler_options": 115,
+                "warnings_policy": 105,
+                "generator_compatibility": 100,
+                "dependency_targets": 130,
+                "dependency_reproducibility": 120,
+                "dependency_strategy": 105,
+                "package_discovery": 100,
+                "relocatable_package": 125,
+                "install_export": 120,
+                "package_config": 115,
+                "presets": 125,
+                "workflow_reproducibility": 120,
+                "toolchain": 115,
+                "testing": 125,
+                "test_discovery": 110,
+                "quality_tooling": 125,
+                "project_options": 95,
+                "cmake_modules": 90,
+                "custom_commands": 90,
+                "target_naming": 85,
+                "project_structure": 80,
+                "global_state": 75,
+            }.get(target, 0)
+            if self.context.get("cmake_target_model_requested"):
+                score += {
+                    "target_model": 90,
+                    "target_naming": 85,
+                    "usage_requirements": 70,
+                    "project_structure": 30,
+                    "global_state": 25,
+                }.get(target, 0)
+            if self.context.get("cmake_usage_requirements_requested"):
+                score += {
+                    "usage_requirements": 105,
+                    "target_naming": 75,
+                    "dependency_targets": 55,
+                    "target_model": 40,
+                }.get(target, 0)
+            if self.context.get("cmake_compiler_options_requested"):
+                score += {
+                    "language_standard": 110,
+                    "compiler_options": 105,
+                    "warnings_policy": 90,
+                    "generator_compatibility": 80,
+                }.get(target, 0)
+            if self.context.get("cmake_source_management_requested"):
+                score += {
+                    "source_lists": 130,
+                }.get(target, 0)
+            if self.context.get("cmake_generated_files_requested"):
+                score += {
+                    "generated_files": 125,
+                    "custom_commands": 65,
+                    "source_lists": 35,
+                }.get(target, 0)
+            if self.context.get("cmake_options_modules_requested"):
+                score += {
+                    "project_options": 95,
+                    "cmake_modules": 85,
+                    "custom_commands": 75,
+                    "generated_files": 35,
+                }.get(target, 0)
+            if self.context.get("cmake_dependency_requested"):
+                score += {
+                    "dependency_targets": 115,
+                    "dependency_reproducibility": 100,
+                    "dependency_strategy": 90,
+                    "package_discovery": 80,
+                }.get(target, 0)
+            if self.context.get("cmake_distribution_requested"):
+                score += {
+                    "relocatable_package": 115,
+                    "install_export": 105,
+                    "package_config": 95,
+                }.get(target, 0)
+            if self.context.get("cmake_presets_requested"):
+                score += {
+                    "presets": 115,
+                    "workflow_reproducibility": 95,
+                    "toolchain": 45,
+                }.get(target, 0)
+            if self.context.get("cmake_toolchain_requested"):
+                score += {"toolchain": 105, "presets": 45}.get(target, 0)
+            if self.context.get("cmake_testing_requested"):
+                score += {"testing": 115, "test_discovery": 95}.get(target, 0)
+            if self.context.get("cmake_quality_requested"):
+                score += {"quality_tooling": 115, "workflow_reproducibility": 45}.get(target, 0)
+            for needle in (
+                "target",
+                "public",
+                "private",
+                "interface",
+                "generator expressions",
+                "out of source",
+                "find_package",
+                "imported targets",
+                "fetchcontent",
+                "ctest",
+                "presets",
+                "relocatable",
+            ):
+                if needle in text:
+                    score += 15
         if self.refinement:
             target_bonus = {
                 "complexity": 90,
@@ -477,6 +603,17 @@ class PromptRuleSelector:
                 "undo_strategy": 95,
                 "branch_structure": 90,
                 "staging": 80,
+            }.get(target, 0)
+        if self.cmake_workflow:
+            score += {
+                "target_model": 120,
+                "usage_requirements": 115,
+                "source_lists": 110,
+                "compiler_options": 105,
+                "dependency_targets": 105,
+                "relocatable_package": 100,
+                "presets": 100,
+                "quality_tooling": 95,
             }.get(target, 0)
         if self.refinement:
             score += {

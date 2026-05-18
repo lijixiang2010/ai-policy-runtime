@@ -71,12 +71,23 @@ class SemanticTaskIndex:
             for (rule, entry_text), vector in zip(self._entries, self._vectors)
             if scope is None or rule.skill_id in scope
         ]
-        selected = [item for item in matches if item.score >= self._threshold]
+        selected = [item for item in matches if self._passes_threshold(item)]
         selected.sort(
             key=lambda item: (_field_priority(item.rule.field), item.score),
             reverse=True,
         )
         return tuple(_best_per_field(selected))[:limit]
+
+    def _passes_threshold(self, match: SemanticMatch) -> bool:
+        if match.score < self._threshold:
+            return False
+        if (
+            match.rule.field.startswith("context.")
+            and match.rule.skill_id.startswith("cmake.")
+            and match.score < 0.5
+        ):
+            return False
+        return True
 
     def _load_or_encode(self, cache_dir: str | Path | None) -> list[list[float]]:
         texts = [entry[1] for entry in self._entries]
@@ -141,11 +152,17 @@ def _iter_entries(lexicon: TaskLexicon) -> Iterable[tuple[LexiconRule, str]]:
 def _best_per_field(matches: Sequence[SemanticMatch]) -> Iterable[SemanticMatch]:
     seen: set[tuple[str, str]] = set()
     for match in matches:
-        key = (match.rule.field, str(match.rule.value))
+        key = _dedupe_key(match.rule)
         if key in seen:
             continue
         seen.add(key)
         yield match
+
+
+def _dedupe_key(rule: LexiconRule) -> tuple[str, str]:
+    if rule.field.startswith("context."):
+        return (rule.field, rule.skill_id)
+    return (rule.field, str(rule.value))
 
 
 def _field_priority(field: str) -> int:

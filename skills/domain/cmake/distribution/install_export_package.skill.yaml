@@ -1,0 +1,156 @@
+# Skill: CMake Install Export and Package
+# File: skills/domain/cmake/distribution/install_export_package.skill.yaml
+
+skill:
+  id: cmake.distribution.install_export_package
+  name: CMake Install Export and Package
+  version: 1.0.0
+  status: stable
+  description: Make CMake targets installable, exportable, relocatable, and consumable.
+
+  level: domain
+  domain: cmake
+  category: distribution
+  priority: 82
+
+  tags:
+    - cmake
+    - install
+    - package
+    - export
+
+  capabilities:
+    - cmake_build_design
+    - code_review
+
+  activation:
+    when:
+      language: cmake
+    triggers:
+      - package_project
+      - design_build
+      - review_build
+
+  dependencies:
+    - cmake.project.usage_requirements
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - cmake
+    - cmakelists
+
+  domain_semantics:
+    - CMake install export and package configuration task
+    - make CMake library consumable after installation
+
+  trigger_aliases:
+    package_project:
+      - install target
+      - cmake install
+      - export targets
+      - package config
+      - cpack
+      - install interface
+    design_build:
+      - installable library
+      - relocatable package
+    review_build:
+      - review cmake install
+      - review package config
+
+  trigger_semantics:
+    package_project:
+      - make CMake targets installable exportable and consumable with find_package
+      - create a relocatable CMake config package for downstream consumers
+    design_build:
+      - design CMake install rules for a reusable library
+    review_build:
+      - review CMake install and export rules for downstream package correctness
+
+  trigger_capabilities:
+    package_project:
+      - cmake_build_design
+    design_build:
+      - cmake_build_design
+    review_build:
+      - cmake_build_design
+      - code_review
+
+  context_rules:
+    - id: detect_cmake_package_task
+      when_text_matches:
+        - install target
+        - cmake install
+        - export targets
+        - package config
+        - cpack
+        - build interface
+        - install interface
+      set:
+        cmake_distribution_requested: true
+      tags:
+        - install
+        - package
+        - export
+      semantic_match:
+        - install and export targets for downstream find_package consumption
+        - create relocatable package config files with build and install interfaces
+      confidence: 0.9
+
+rules:
+  hard:
+    - id: cmake.install.keep_packages_relocatable
+      title: Keep installed packages relocatable
+      when: domain == "cmake" and cmake_distribution_requested == true
+      must: >-
+        Avoid hard-coding build-tree paths into installed target interfaces;
+        separate build-tree and install-tree paths with appropriate generator
+        expressions and install rules.
+      target: relocatable_package
+      action: require
+      rationale: Downstream consumers must be able to use installed packages outside the original build tree.
+
+  soft:
+    - id: cmake.install.export_targets
+      title: Export installable targets
+      when: domain == "cmake" and cmake_distribution_requested == true
+      should: >-
+        Install targets, headers, and generated export metadata together so
+        downstream projects can consume the package through namespaced CMake targets.
+      target: install_export
+      action: recommend
+      rationale: Install rules and export sets are the bridge from build-tree targets to package consumers.
+
+    - id: cmake.install.provide_config_package
+      title: Provide a config package for reusable libraries
+      when: domain == "cmake" and cmake_distribution_requested == true
+      should: >-
+        Provide package configuration and version files for reusable libraries
+        rather than requiring downstream users to guess include paths, library
+        files, or compile definitions.
+      target: package_config
+      action: recommend
+      rationale: Config packages preserve the same target-based contract used inside the project.
+
+    - id: cmake.install.keep_cpack_secondary
+      title: Keep CPack secondary to install rules
+      when: domain == "cmake" and cmake_distribution_requested == true
+      should: >-
+        Build CPack packaging on top of correct install rules instead of using
+        packaging scripts to compensate for incomplete target installation.
+      target: binary_package
+      action: recommend
+      rationale: Correct install rules make packaging, testing, and downstream consumption consistent.
+
+  preference:
+    - id: cmake.install.preference_relocatable_targets
+      title: Prefer relocatable target packages
+      when: domain == "cmake" and cmake_distribution_requested == true
+      prefer: relocatable_namespaced_target_package
+      over:
+        - hard_coded_build_tree_paths
+      target: relocatable_package
+      action: prefer

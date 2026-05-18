@@ -1,0 +1,157 @@
+# Skill: CMake Dependency and Package Management
+# File: skills/domain/cmake/dependencies/package_management.skill.yaml
+
+skill:
+  id: cmake.dependencies.package_management
+  name: CMake Dependency and Package Management
+  version: 1.0.0
+  status: stable
+  description: Integrate CMake dependencies through imported targets, package config files, and controlled vendoring.
+
+  level: domain
+  domain: cmake
+  category: dependencies
+  priority: 84
+
+  tags:
+    - cmake
+    - dependencies
+    - packages
+
+  capabilities:
+    - cmake_build_design
+    - code_review
+
+  activation:
+    when:
+      language: cmake
+    triggers:
+      - manage_dependencies
+      - design_build
+      - review_build
+
+  dependencies:
+    - cmake.project.usage_requirements
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - cmake
+    - cmakelists
+
+  domain_semantics:
+    - CMake dependency management task
+    - find_package imported target dependency workflow
+    - FetchContent and package manager integration in CMake
+
+  trigger_aliases:
+    manage_dependencies:
+      - find_package
+      - fetchcontent
+      - externalproject
+      - add dependency
+      - third party library
+      - vcpkg
+      - conan
+    design_build:
+      - imported target
+      - package config
+    review_build:
+      - review dependencies
+      - dependency management
+
+  trigger_semantics:
+    manage_dependencies:
+      - add a third party dependency to a CMake project safely
+      - integrate dependencies with find_package imported targets or FetchContent
+    design_build:
+      - expose dependencies through CMake targets without leaking global state
+    review_build:
+      - review CMake dependency usage for reproducibility and consumer safety
+
+  trigger_capabilities:
+    manage_dependencies:
+      - cmake_build_design
+    design_build:
+      - cmake_build_design
+    review_build:
+      - cmake_build_design
+      - code_review
+
+  context_rules:
+    - id: detect_cmake_dependency_task
+      when_text_matches:
+        - find_package
+        - fetchcontent
+        - externalproject
+        - imported target
+        - vcpkg
+        - conan
+        - third party library
+      set:
+        cmake_dependency_requested: true
+      tags:
+        - dependencies
+        - packages
+      semantic_match:
+        - add third party dependencies using imported targets and controlled versions
+        - choose between find_package FetchContent package manager and superbuild dependency flows
+      confidence: 0.9
+
+rules:
+  hard:
+    - id: cmake.dependencies.prefer_targets_for_dependencies
+      title: Prefer imported targets for dependencies
+      when: domain == "cmake" and cmake_dependency_requested == true
+      must: >-
+        Prefer dependency consumption through imported targets or well-defined
+        project targets rather than raw include directories, library paths, or
+        manually assembled compiler and linker flags.
+      target: dependency_targets
+      action: require
+      rationale: Target-based dependency usage preserves usage requirements and package boundaries.
+
+  soft:
+    - id: cmake.dependencies.find_package_first_for_installed_packages
+      title: Prefer package discovery for installed packages
+      when: domain == "cmake" and cmake_dependency_requested == true
+      should: >-
+        Use find_package with config packages or maintained find modules when a
+        dependency is expected to be provided by the system, package manager, or toolchain.
+      target: package_discovery
+      action: recommend
+      rationale: Package discovery keeps dependency ownership outside the project when appropriate.
+
+    - id: cmake.dependencies.pin_fetched_content
+      title: Pin fetched source dependencies
+      when: domain == "cmake" and cmake_dependency_requested == true
+      should: >-
+        Pin FetchContent or ExternalProject dependencies to explicit versions,
+        tags, commits, or verified archives; avoid floating branches for
+        reproducible builds.
+      target: dependency_reproducibility
+      action: recommend
+      rationale: Unpinned source dependencies make builds difficult to reproduce and audit.
+
+    - id: cmake.dependencies.choose_fetchcontent_or_externalproject_intentionally
+      title: Choose vendoring mechanism intentionally
+      when: domain == "cmake" and cmake_dependency_requested == true
+      should: >-
+        Use FetchContent for dependencies that should participate in the same
+        configure and build graph, and use ExternalProject-style superbuilds only
+        when isolation or non-CMake build steps are needed.
+      target: dependency_strategy
+      action: recommend
+      rationale: FetchContent and ExternalProject solve different integration problems.
+
+  preference:
+    - id: cmake.dependencies.preference_imported_targets
+      title: Prefer imported targets
+      when: domain == "cmake" and cmake_dependency_requested == true
+      prefer: imported_or_project_targets
+      over:
+        - raw_paths_and_flags
+      target: dependency_targets
+      action: prefer

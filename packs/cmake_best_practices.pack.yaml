@@ -1,0 +1,24 @@
+kind: pack
+api_version: policy.skill/v1
+
+pack:
+  id: cmake.best_practices
+  name: CMake Best Practices
+  version: 1.0.0
+  description: >-
+    Task-aware CMake policies for target-based project structure, usage
+    requirements, dependency management, install/export packaging,
+    presets/toolchains, and testing or quality-tool integration.
+
+includes:
+  - cmake.project.target_model
+  - cmake.project.usage_requirements
+  - cmake.project.compiler_options
+  - cmake.project.sources_options_modules
+  - cmake.dependencies.package_management
+  - cmake.distribution.install_export_package
+  - cmake.reproducibility.presets_toolchains
+  - cmake.quality.testing_and_analysis
+
+excludes: []
+overrides: []

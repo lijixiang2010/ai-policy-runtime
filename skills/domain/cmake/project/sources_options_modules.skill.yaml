@@ -1,0 +1,198 @@
+# Skill: CMake Sources Options and Modules
+# File: skills/domain/cmake/project/sources_options_modules.skill.yaml
+
+skill:
+  id: cmake.project.sources_options_modules
+  name: CMake Sources Options and Modules
+  version: 1.0.0
+  status: stable
+  description: Keep source lists, project options, generated files, and reusable CMake modules explicit and maintainable.
+
+  level: domain
+  domain: cmake
+  category: project
+  priority: 83
+
+  tags:
+    - cmake
+    - sources
+    - options
+    - modules
+
+  capabilities:
+    - cmake_build_design
+    - code_review
+
+  activation:
+    when:
+      language: cmake
+    triggers:
+      - design_build
+      - modernize_cmake
+      - review_build
+
+  dependencies:
+    - cmake.project.target_model
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.86
+
+  domain_aliases:
+    - cmake
+    - cmakelists
+    - cmakelists.txt
+
+  domain_semantics:
+    - CMake source list option module and custom command task
+    - maintainable CMake project layout and reusable functions
+
+  trigger_aliases:
+    design_build:
+      - target_sources
+      - project option
+      - add_custom_command
+      - cmake module
+    modernize_cmake:
+      - file glob
+      - cmake function
+      - cmake macro
+      - cache variable
+    review_build:
+      - review cmake options
+      - review generated files
+
+  trigger_semantics:
+    design_build:
+      - define source files options generated outputs and reusable CMake modules
+    modernize_cmake:
+      - replace fragile source globbing global cache options or macros with explicit target aware CMake
+    review_build:
+      - review source lists generated file rules options and CMake module reuse
+
+  trigger_capabilities:
+    design_build:
+      - cmake_build_design
+    modernize_cmake:
+      - cmake_build_design
+      - refactor_code
+    review_build:
+      - cmake_build_design
+      - code_review
+
+  context_rules:
+    - id: detect_source_list_task
+      when_text_matches:
+        - target_sources
+        - file glob
+        - file_set
+        - source list
+      set:
+        cmake_source_management_requested: true
+      tags:
+        - sources
+      semantic_match:
+        - manage explicit source lists header file sets generated outputs and file glob alternatives
+        - avoid file globbing for primary source files by listing sources explicitly
+      confidence: 0.88
+
+    - id: detect_generated_file_task
+      when_text_matches:
+        - generated files
+        - generated source
+        - generated header
+        - add_custom_command
+        - add_custom_target
+      set:
+        cmake_generated_files_requested: true
+      tags:
+        - sources
+        - generated-files
+      semantic_match:
+        - declare generated source and header outputs with accurate dependencies
+        - make generated build outputs explicit and portable
+      confidence: 0.88
+
+    - id: detect_options_modules_task
+      when_text_matches:
+        - project option
+        - cache variable
+        - cmake module
+        - cmake function
+        - cmake macro
+      set:
+        cmake_options_modules_requested: true
+      tags:
+        - options
+        - modules
+      semantic_match:
+        - design prefixed cache options reusable functions modules and custom command wrappers
+        - declare generated outputs dependencies and portable custom command behavior
+      confidence: 0.88
+
+rules:
+  hard:
+    - id: cmake.sources.generated_outputs_must_be_declared
+      title: Declare generated outputs
+      when: domain == "cmake" and cmake_generated_files_requested == true
+      must: >-
+        Declare generated files as explicit outputs with accurate dependencies
+        and attach them to targets rather than relying on implicit side effects.
+      target: generated_files
+      action: require
+      rationale: CMake generators need declared outputs and dependencies to build incrementally and portably.
+
+  soft:
+    - id: cmake.sources.prefer_explicit_sources
+      title: Prefer explicit source lists
+      when: domain == "cmake" and cmake_source_management_requested == true
+      should: >-
+        Prefer explicit target_sources entries for primary project sources and
+        headers, using file sets where appropriate, instead of broad file globbing.
+      target: source_lists
+      action: recommend
+      rationale: Explicit source lists make build changes visible in review and reliable across generators.
+
+    - id: cmake.options.prefix_project_options
+      title: Prefix project options
+      when: domain == "cmake" and cmake_options_modules_requested == true
+      should: >-
+        Prefix project options and cache variables with the project name and
+        choose defaults that do not surprise parent projects when embedded.
+      target: project_options
+      action: recommend
+      rationale: Unprefixed cache variables can collide with parent projects and dependencies.
+
+    - id: cmake.modules.prefer_functions_over_macros
+      title: Prefer functions over macros
+      when: domain == "cmake" and cmake_options_modules_requested == true
+      should: >-
+        Prefer functions for reusable CMake logic because they provide scope;
+        use macros only when their textual expansion semantics are truly needed.
+      target: cmake_modules
+      action: recommend
+      rationale: Macros can leak variables and make build logic harder to reason about.
+
+    - id: cmake.custom_commands.keep_portable
+      title: Keep custom commands portable
+      when: >-
+        domain == "cmake" and (
+          cmake_generated_files_requested == true or
+          cmake_options_modules_requested == true
+        )
+      should: >-
+        Use VERBATIM, accurate DEPENDS, declared OUTPUT, and CMake portable
+        commands where possible for custom commands and custom targets.
+      target: custom_commands
+      action: recommend
+      rationale: Custom commands are build graph edges and should be portable and reproducible.
+
+  preference:
+    - id: cmake.sources.preference_explicit_sources
+      title: Prefer explicit sources
+      when: domain == "cmake" and cmake_source_management_requested == true
+      prefer: explicit_target_sources
+      over:
+        - broad_file_glob_for_primary_sources
+      target: source_lists
+      action: prefer

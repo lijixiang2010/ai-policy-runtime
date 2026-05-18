@@ -1,0 +1,178 @@
+# Skill: CMake Compiler Options
+# File: skills/domain/cmake/project/compiler_options.skill.yaml
+
+skill:
+  id: cmake.project.compiler_options
+  name: CMake Compiler Options
+  version: 1.0.0
+  status: stable
+  description: Configure language standards, warnings, ABI-affecting options, and generator-specific behavior safely.
+
+  level: domain
+  domain: cmake
+  category: project
+  priority: 86
+
+  tags:
+    - cmake
+    - compiler
+    - warnings
+    - generators
+
+  capabilities:
+    - cmake_build_design
+    - code_review
+
+  activation:
+    when:
+      language: cmake
+    triggers:
+      - configure_compiler
+      - design_build
+      - modernize_cmake
+      - review_build
+
+  dependencies:
+    - cmake.project.target_model
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.88
+
+  domain_aliases:
+    - cmake
+    - cmakelists
+
+  domain_semantics:
+    - CMake compiler standard warning flag and generator expression task
+    - portable CMake compiler options and build configuration task
+
+  trigger_aliases:
+    configure_compiler:
+      - cxx standard
+      - compile features
+      - compiler flags
+      - cmake_cxx_flags
+      - warnings as errors
+      - generator expressions
+      - build type
+      - multi config
+    design_build:
+      - target_compile_features
+      - target_compile_options
+      - target_compile_definitions
+    modernize_cmake:
+      - replace cmake_cxx_flags
+      - global compiler flags
+    review_build:
+      - review compiler options
+      - review build types
+
+  trigger_semantics:
+    configure_compiler:
+      - configure CMake compiler standards warnings options and generator specific behavior
+    design_build:
+      - attach compile features definitions and options to CMake targets portably
+    modernize_cmake:
+      - replace global CMAKE_CXX_FLAGS mutation with target compile features and options
+    review_build:
+      - review compiler options for portability ABI safety and multi config generators
+
+  trigger_capabilities:
+    configure_compiler:
+      - cmake_build_design
+    design_build:
+      - cmake_build_design
+    modernize_cmake:
+      - cmake_build_design
+      - refactor_code
+    review_build:
+      - cmake_build_design
+      - code_review
+
+  context_rules:
+    - id: detect_compiler_option_task
+      when_text_matches:
+        - cxx standard
+        - compile features
+        - compiler flags
+        - cmake_cxx_flags
+        - warnings as errors
+        - generator expressions
+        - build type
+        - multi config
+      set:
+        cmake_compiler_options_requested: true
+      tags:
+        - compiler
+        - warnings
+      semantic_match:
+        - replace global CMAKE_CXX_FLAGS or raw compiler flags with compile features and options
+        - configure warning policies warnings-as-errors and ABI-affecting compiler options
+        - handle single config and multi config generators without fragile CMAKE_BUILD_TYPE assumptions
+      confidence: 0.9
+
+rules:
+  hard:
+    - id: cmake.compiler.do_not_set_compiler_in_project_logic
+      title: Do not set compilers in project logic
+      when: domain == "cmake" and cmake_compiler_options_requested == true
+      must_not: >-
+        Do not set C or C++ compilers directly inside normal project CMakeLists
+        logic; use presets, command-line configuration, environment setup, or
+        toolchain files for compiler selection.
+      target: compiler_selection
+      action: forbid
+      rationale: Compiler selection must happen before project language enablement and belongs to configuration.
+
+  soft:
+    - id: cmake.compiler.prefer_compile_features
+      title: Prefer compile features
+      when: domain == "cmake" and cmake_compiler_options_requested == true
+      should: >-
+        Prefer target_compile_features for language standard requirements rather
+        than manually mutating CMAKE_CXX_FLAGS with standard flags.
+      target: language_standard
+      action: recommend
+      rationale: CMake can translate compile features into the right compiler flags per toolchain.
+
+    - id: cmake.compiler.keep_warnings_opt_in_for_consumers
+      title: Keep warnings-as-errors opt-in
+      when: domain == "cmake" and cmake_compiler_options_requested == true
+      should: >-
+        Keep warnings-as-errors and unusually strict warning policies opt-in for
+        consumers, typically through options, presets, or project-only interface targets.
+      target: warnings_policy
+      action: recommend
+      rationale: Consumers should not unexpectedly inherit strict policies that break their builds.
+
+    - id: cmake.compiler.handle_multi_config_generators
+      title: Handle multi-config generators
+      when: domain == "cmake" and cmake_compiler_options_requested == true
+      should: >-
+        Use generator expressions for configuration-specific behavior instead of
+        assuming CMAKE_BUILD_TYPE exists for all generators.
+      target: generator_compatibility
+      action: recommend
+      rationale: Visual Studio, Xcode, and Ninja Multi-Config choose configurations at build time.
+
+    - id: cmake.compiler.treat_abi_options_consistently
+      title: Treat ABI-affecting options consistently
+      when: domain == "cmake" and cmake_compiler_options_requested == true
+      should: >-
+        Apply ABI-affecting options consistently across related targets and avoid
+        casually changing runtime library, exception, RTTI, packing, visibility,
+        or standard-library settings on isolated targets.
+      target: abi_options
+      action: recommend
+      rationale: ABI mismatches can create link or runtime failures that CMake cannot fully diagnose.
+
+  preference:
+    - id: cmake.compiler.preference_target_features
+      title: Prefer target compile features
+      when: domain == "cmake" and cmake_compiler_options_requested == true
+      prefer: target_compile_features_and_generator_expressions
+      over:
+        - global_string_flag_mutation
+      target: compiler_options
+      action: prefer

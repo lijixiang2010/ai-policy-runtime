@@ -66,12 +66,13 @@ task_analysis:
         unclear_hierarchy: true
         artifact_type: code
         refinement_requested: true
+        behavior_preservation_required: true
       tags:
         - architecture
         - refactoring
       semantic_match:
         - clarify component hierarchy and dependency direction
-        - avoid circular dependencies and confusing call chains
+        - avoid circular dependencies and confusing call chains while preserving behavior
       confidence: 0.84
 
 rules:

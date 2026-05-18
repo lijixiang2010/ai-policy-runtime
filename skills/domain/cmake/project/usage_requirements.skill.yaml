@@ -1,0 +1,155 @@
+# Skill: CMake Usage Requirements
+# File: skills/domain/cmake/project/usage_requirements.skill.yaml
+
+skill:
+  id: cmake.project.usage_requirements
+  name: CMake Usage Requirements
+  version: 1.0.0
+  status: stable
+  description: Use PUBLIC, PRIVATE, and INTERFACE correctly for CMake target requirements.
+
+  level: domain
+  domain: cmake
+  category: project
+  priority: 88
+
+  tags:
+    - cmake
+    - targets
+    - usage-requirements
+
+  capabilities:
+    - cmake_build_design
+    - code_review
+
+  activation:
+    when:
+      language: cmake
+    triggers:
+      - design_build
+      - modernize_cmake
+      - review_build
+
+  dependencies:
+    - cmake.project.target_model
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.86
+
+  domain_aliases:
+    - cmake
+    - cmakelists
+    - cmakelists.txt
+
+  domain_semantics:
+    - CMake target usage requirements task
+    - PUBLIC PRIVATE INTERFACE propagation in CMake
+
+  trigger_aliases:
+    design_build:
+      - target_link_libraries
+      - target_include_directories
+      - target_compile_features
+    modernize_cmake:
+      - public private interface
+      - usage requirements
+      - interface library
+    review_build:
+      - review target dependencies
+      - review cmake propagation
+
+  trigger_semantics:
+    design_build:
+      - set CMake include directories link libraries and compile features with correct visibility
+    modernize_cmake:
+      - fix PUBLIC PRIVATE INTERFACE usage requirements in CMake targets
+    review_build:
+      - review CMake target dependencies for incorrect propagation
+
+  trigger_capabilities:
+    design_build:
+      - cmake_build_design
+    modernize_cmake:
+      - cmake_build_design
+      - refactor_code
+    review_build:
+      - cmake_build_design
+      - code_review
+
+  context_rules:
+    - id: detect_usage_requirement_task
+      when_text_matches:
+        - public private interface
+        - usage requirements
+        - target_include_directories
+        - target_link_libraries
+      set:
+        cmake_usage_requirements_requested: true
+      tags:
+        - usage-requirements
+      semantic_match:
+        - choose correct PUBLIC PRIVATE INTERFACE visibility for target requirements
+        - prevent dependencies and include directories from leaking to consumers
+      confidence: 0.88
+
+rules:
+  hard:
+    - id: cmake.usage_requirements.visibility_must_match_contract
+      title: Match visibility to the target contract
+      when: >-
+        domain == "cmake" and (
+          cmake_usage_requirements_requested == true or
+          cmake_target_model_requested == true
+        )
+      must: >-
+        Use PRIVATE for implementation-only requirements, PUBLIC for requirements
+        needed both to build the target and consume it, and INTERFACE for
+        requirements that apply only to consumers.
+      target: usage_requirements
+      action: require
+      rationale: Incorrect visibility either breaks consumers or leaks implementation details.
+
+  soft:
+    - id: cmake.usage_requirements.model_headers_and_features
+      title: Model headers and language features as usage requirements
+      when: >-
+        domain == "cmake" and (
+          cmake_usage_requirements_requested == true or
+          cmake_target_model_requested == true
+        )
+      should: >-
+        Attach include directories, compile features, and required definitions to
+        the target with the narrowest correct visibility rather than assuming
+        consumers inherit them accidentally.
+      target: usage_requirements
+      action: recommend
+      rationale: Consumers should receive exactly the requirements needed by the target API.
+
+    - id: cmake.usage_requirements.avoid_unnecessary_transitive_links
+      title: Avoid unnecessary transitive dependencies
+      when: >-
+        domain == "cmake" and (
+          cmake_usage_requirements_requested == true or
+          cmake_dependency_requested == true
+        )
+      should: >-
+        Keep link dependencies PRIVATE unless their headers, compile definitions,
+        ABI, or link interface are part of the consuming target's contract.
+      target: dependency_propagation
+      action: recommend
+      rationale: Unnecessary transitive dependencies make consumers fragile and harder to package.
+
+  preference:
+    - id: cmake.usage_requirements.preference_minimal_propagation
+      title: Prefer minimal propagation
+      when: >-
+        domain == "cmake" and (
+          cmake_usage_requirements_requested == true or
+          cmake_target_model_requested == true
+        )
+      prefer: minimal_correct_usage_requirements
+      over:
+        - broad_transitive_build_state
+      target: usage_requirements
+      action: prefer

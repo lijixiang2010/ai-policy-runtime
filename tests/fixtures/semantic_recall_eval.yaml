@@ -224,6 +224,56 @@ cases:
       - git
       - pull-request
 
+  - id: en_cmake_target_usage
+    prompt: Modernize this CMakeLists.txt to use target-based CMake with correct PUBLIC PRIVATE INTERFACE usage.
+    activation_ready: true
+    domain: cmake
+    task_type_not: unknown
+    required_context:
+      language: cmake
+      cmake_target_model_requested: true
+      cmake_usage_requirements_requested: true
+    required_tags:
+      - cmake
+      - targets
+
+  - id: en_cmake_dependency
+    prompt: Add a third party dependency with find_package or FetchContent and keep the build reproducible.
+    activation_ready: true
+    domain: cmake
+    task_type: manage_dependencies
+    required_context:
+      language: cmake
+      cmake_dependency_requested: true
+    required_tags:
+      - cmake
+      - dependencies
+
+  - id: zh_cmake_presets_tests
+    prompt: 给这个 CMake 项目加预设和 CTest 测试，把 sanitizer 做成可选质量检查
+    activation_ready: true
+    domain: cmake
+    task_type_not: unknown
+    required_context:
+      language: cmake
+      cmake_presets_requested: true
+      cmake_testing_requested: true
+      cmake_quality_requested: true
+    required_tags:
+      - cmake
+
+  - id: en_cmake_flags_and_glob
+    prompt: Replace CMAKE_CXX_FLAGS and file(GLOB) with target_compile_features and explicit target_sources.
+    activation_ready: true
+    domain: cmake
+    task_type_not: unknown
+    required_context:
+      language: cmake
+      cmake_compiler_options_requested: true
+      cmake_source_management_requested: true
+    required_tags:
+      - cmake
+
   - id: zh_irrelevant_meeting_notes
     prompt: 帮我总结一下这段会议纪要，提炼三个行动项
     activation_ready: false

@@ -111,11 +111,14 @@ Bundled packs include:
 - `cpp.production_refinement`
 - `generic.production_refinement`
 - `git.best_practices`
+- `cmake.best_practices`
 
 C++ has the most complete code-generation coverage today. Generic refinement
 packs are available for broader coding workflows. Git workflow policies cover
 commit hygiene, staging, stashing, cleaning, branching, pull request readiness,
-conflict resolution, and history rewrite safety.
+conflict resolution, and history rewrite safety. CMake policies cover
+target-based project structure, usage requirements, source lists, compiler
+options, dependencies, packaging, presets, toolchains, testing, and quality tooling.
 
 ## Useful Commands
 
@@ -164,6 +167,8 @@ policy-claude --pack cpp.production_refinement "Refactor this module safely."
   modes and verification flow.
 - [Git Best Practices](docs/git_best_practices.md): Git workflow policies for
   commits, branches, conflict resolution, and history safety.
+- [CMake Best Practices](docs/cmake_best_practices.md): CMake policies for
+  targets, dependencies, packaging, presets, toolchains, and quality tooling.
 - [Skill Policy Runtime](docs/skill_policy_runtime.md): runtime model and core
   concepts.
 - [Skill DSL Syntax](docs/skill_dsl_syntax_specification.md): Skill file format.
