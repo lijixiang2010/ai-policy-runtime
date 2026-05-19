@@ -58,7 +58,7 @@ class SemanticTaskIndex:
 
         if not self._entries or not self._vectors:
             return ()
-        query_vectors = self._provider.encode([text])
+        query_vectors = self._provider.encode([_expand_query_text(text)])
         if not query_vectors:
             return ()
         query = query_vectors[0]
@@ -85,6 +85,16 @@ class SemanticTaskIndex:
             match.rule.field.startswith("context.")
             and match.rule.skill_id.startswith("cmake.")
             and match.score < 0.5
+        ):
+            return False
+        if (
+            match.rule.skill_id == "git.workflow.commit_hygiene"
+            and match.rule.field
+            in {
+                "context.git_atomic_commit_required",
+                "context.git_conventional_commit_requested",
+            }
+            and match.score < 0.65
         ):
             return False
         return True
@@ -173,3 +183,36 @@ def _field_priority(field: str) -> int:
     if field == "skill":
         return 2
     return 1
+
+
+def _expand_query_text(text: str) -> str:
+    """Append English task hints for common multilingual agent requests."""
+
+    lowered = text.lower()
+    hints: list[str] = []
+    if _has_any(lowered, ("提交消息", "提交说明", "提交标题", "commit message", "commit title")):
+        hints.extend(
+            (
+                "write git commit message",
+                "rewrite recent commit messages",
+                "polish the last few commit messages",
+            )
+        )
+    if _has_any(lowered, ("最近", "last few", "recent")) and _has_any(
+        lowered,
+        ("提交", "commit"),
+    ):
+        hints.extend(
+            (
+                "review recent git commits",
+                "improve recent git commit messages",
+                "clean up commit history messages",
+            )
+        )
+    if not hints:
+        return text
+    return f"{text}\n" + "\n".join(dict.fromkeys(hints))
+
+
+def _has_any(text: str, needles: Sequence[str]) -> bool:
+    return any(needle in text for needle in needles)

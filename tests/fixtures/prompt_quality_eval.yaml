@@ -126,6 +126,19 @@ cases:
     exclude:
       - selected C++ standard
       - Preserve the existing observable behavior
+      - Resolve conflict markers
+
+  - id: zh_git_recent_commit_messages
+    provider: local
+    prompt: 优化一下最近的几条提交消息
+    include:
+      - Make the commit message accurately describe the changes being committed
+      - Write a short imperative commit subject
+      - Review the staged diff before committing
+    exclude:
+      - Resolve conflict markers
+      - Inspect ours, theirs
+      - selected C++ standard
 
   - id: en_git_history_rewrite
     provider: deterministic

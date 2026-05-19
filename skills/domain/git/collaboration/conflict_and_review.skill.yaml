@@ -30,7 +30,6 @@ skill:
     triggers:
       - resolve_conflict
       - prepare_pull_request
-      - review_git_history
 
   dependencies:
     - git.workflow.working_tree_safety
@@ -60,11 +59,6 @@ task_analysis:
       - merge request
       - review branch
       - prepare pr
-    review_git_history:
-      - review branch
-      - review commits
-      - review diff
-
   trigger_semantics:
     resolve_conflict:
       - resolve Git merge or rebase conflicts without losing either side's intent
@@ -74,10 +68,6 @@ task_analysis:
       - prepare a Git branch and commits for collaborative review
       - make a pull request easy to review and integrate
       - get the branch ready to open a PR with a useful title and description
-    review_git_history:
-      - review a branch diff and commit history before integration
-      - check whether the branch is clean and reviewable before sharing
-
   trigger_capabilities:
     resolve_conflict:
       - git_workflow
@@ -85,10 +75,6 @@ task_analysis:
     prepare_pull_request:
       - git_workflow
       - code_review
-    review_git_history:
-      - git_workflow
-      - code_review
-
   context_rules:
     - id: detect_conflict_task
       when_text_matches:
@@ -162,7 +148,7 @@ rules:
 
     - id: git.review.summarize_review_scope
       title: Summarize review scope
-      when: domain == "git" and (git_pull_request_requested == true or task_type in ["prepare_pull_request", "review_git_history"])
+      when: domain == "git" and (git_pull_request_requested == true or task_type == "prepare_pull_request")
       should: >-
         For pull requests or merge requests, summarize the branch purpose, main
         files changed, risk areas, and verification performed.
@@ -172,7 +158,7 @@ rules:
 
     - id: git.review.keep_pr_diff_reviewable
       title: Keep review diff focused
-      when: domain == "git" and (git_pull_request_requested == true or task_type in ["prepare_pull_request", "review_git_history"])
+      when: domain == "git" and (git_pull_request_requested == true or task_type == "prepare_pull_request")
       should: >-
         Keep pull request diffs focused by separating unrelated cleanup, generated
         artifacts, formatting churn, and dependency updates when practical.
@@ -204,7 +190,7 @@ rules:
   preference:
     - id: git.review.preference_reviewable_diff
       title: Prefer reviewable diffs
-      when: domain == "git" and (git_pull_request_requested == true or task_type in ["prepare_pull_request", "review_git_history"])
+      when: domain == "git" and (git_pull_request_requested == true or task_type == "prepare_pull_request")
       prefer: focused_reviewable_diff
       over:
         - mixed_unreviewable_diff

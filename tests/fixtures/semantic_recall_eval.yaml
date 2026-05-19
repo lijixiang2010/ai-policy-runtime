@@ -175,6 +175,22 @@ cases:
       - git
       - commit
 
+  - id: zh_git_recent_commit_messages
+    prompt: 优化一下最近的几条提交消息
+    activation_ready: true
+    domain: git
+    task_type: write_commit_message
+    required_context:
+      language: git
+      git_commit_message_requested: true
+    forbidden_context:
+      - git_conflict_resolution_requested
+    required_tags:
+      - git
+      - commit
+    forbidden_tags:
+      - conflict
+
   - id: en_git_daily_commit_code
     prompt: Commit this code after checking the diff.
     activation_ready: true

@@ -96,13 +96,16 @@ class DeterministicTaskExtractor:
             self._apply_semantic_task_bootstrap(text, state)
             gate = self._semantic_gate(state)
         if gate is None:
-            bootstrapped_scope = self._lexicon.generic_semantic_scope()
-            for match in self._semantic_index.search_scoped(text, scope=bootstrapped_scope):
-                if match.rule.field == "task_type":
-                    state.apply_rule(match.rule, match.evidence())
+            self._apply_semantic_task_bootstrap(text, state)
             gate = self._semantic_gate(state)
             if gate is None:
-                return
+                bootstrapped_scope = self._lexicon.generic_semantic_scope()
+                for match in self._semantic_index.search_scoped(text, scope=bootstrapped_scope):
+                    if match.rule.field == "task_type":
+                        state.apply_rule(match.rule, match.evidence())
+                gate = self._semantic_gate(state)
+                if gate is None:
+                    return
         scope = bootstrapped_scope or self._lexicon.semantic_scope(gate)
         if gate.domain is None:
             scope = scope | self._lexicon.generic_semantic_scope()
@@ -142,6 +145,16 @@ class DeterministicTaskExtractor:
                         domain,
                         str(match.rule.value),
                     )
+                ):
+                    continue
+            if not current_domain and (not domain or domain == "generic_code"):
+                continue
+            if domain and not current_domain:
+                if (
+                    domain != "git"
+                    or evidence.confidence < 0.64
+                    or str(match.rule.value)
+                    not in _GIT_NO_SIGNAL_SEMANTIC_BOOTSTRAP_TASKS
                 ):
                     continue
             state.apply_rule(match.rule, evidence)
@@ -246,6 +259,15 @@ def _can_cross_project_domain_from_semantic_task(domain: str, task_type: str) ->
             "sync_branch",
         }
     return domain == "cmake"
+
+
+_GIT_NO_SIGNAL_SEMANTIC_BOOTSTRAP_TASKS = {
+    "prepare_commit",
+    "write_commit_message",
+    "review_git_history",
+    "rewrite_history",
+    "undo_change",
+}
 
 
 def _is_explicit_non_code_change_request(text: str) -> bool:
