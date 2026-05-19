@@ -1,0 +1,162 @@
+# Skill: Python Performance Engineering
+# File: skills/domain/python/performance/performance_engineering.skill.yaml
+
+skill:
+  id: python.performance.performance_engineering
+  name: Python Performance Engineering
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python performance policy for profiling, benchmarking, memory use,
+    algorithmic optimization, startup time, and native/vectorized escapes.
+
+  level: domain
+  domain: python
+  category: performance
+  priority: 88
+
+  tags:
+    - python
+    - performance
+    - profiling
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  trigger_aliases:
+    improve_code_quality:
+      - python performance
+      - profiling
+      - benchmark
+      - cprofile
+      - timeit
+      - tracemalloc
+      - optimization
+
+  context_rules:
+    - id: detect_python_performance_request
+      when_text_matches:
+        - python performance
+        - performance
+        - optimize
+        - profiling
+        - profile python
+        - benchmark
+        - benchmarks
+        - cprofile
+        - timeit
+        - tracemalloc
+        - memoryview
+        - optimization
+        - memory use
+        - startup time
+      set:
+        python_performance_requested: true
+        performance_critical: true
+      tags:
+        - python
+        - performance
+      confidence: 0.86
+
+sources:
+  - python_skills_professional:python-performance
+  - effective_python_3e:topics
+  - fluent_python_2e:topics
+
+rules:
+  hard:
+    - id: python.performance.no_unmeasured_complex_optimization
+      title: Do not add complex optimization without evidence
+      when: language == "python" and python_performance_requested == true
+      must_not: >-
+        Do not introduce complex caching, concurrency, native extensions,
+        vectorized rewrites, or low-level memory tricks without a measured or
+        clearly stated bottleneck and correctness plan.
+      target: performance
+      action: forbid
+      rationale: Unmeasured optimization often adds risk without improving the real bottleneck.
+
+  soft:
+    - id: python.performance.measure_before_after
+      title: Measure before and after
+      when: language == "python" and python_performance_requested == true
+      should: >-
+        Define the metric, measure a baseline, identify the bottleneck, apply
+        the smallest meaningful change, measure again, and report tradeoffs.
+      target: performance_method
+      action: recommend
+      rationale: Performance work needs evidence.
+
+    - id: python.performance.fix_algorithms_before_micro_optimizing
+      title: Fix algorithms before micro-optimizing
+      when: language == "python" and python_performance_requested == true
+      should: >-
+        Check data structure choice, N+1 I/O, unnecessary materialization,
+        repeated parsing, sorting/search strategy, caching opportunities, and
+        streaming before micro-optimizing expressions.
+      target: performance
+      action: recommend
+      rationale: Algorithmic and I/O fixes usually dominate Python micro-optimizations.
+
+    - id: python.performance.use_builtins_and_stdlib
+      title: Use built-ins and standard modules
+      when: language == "python" and python_performance_requested == true
+      should: >-
+        Prefer efficient built-ins and standard-library tools such as any, all,
+        sorted with key functions, deque, Counter, heapq, bisect, itertools, and
+        functools caches when they fit the problem.
+      target: performance
+      action: recommend
+      rationale: Built-ins often move work into optimized implementation paths.
+
+    - id: python.performance.stream_large_data
+      title: Stream large data
+      when: language == "python" and python_performance_requested == true
+      should: >-
+        Stream large or unbounded data and use tracemalloc or equivalent tools
+        for memory growth instead of materializing everything by default.
+      target: memory_use
+      action: recommend
+      rationale: Memory behavior is often the limiting factor in Python systems.
+
+  preference:
+    - id: python.performance.preference_algorithmic_fix
+      title: Prefer algorithmic fixes
+      when: language == "python" and python_performance_requested == true
+      prefer: measured_algorithmic_or_io_fix
+      over:
+        - cosmetic_micro_optimization
+      target: performance
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.performance.verify_performance
+      type: llm_self_check
+      applies_to:
+        - performance
+        - performance_method
+        - memory_use
+      severity: advisory
+      prompt: >-
+        Check that Python performance changes are based on a metric or stated
+        bottleneck, keep correctness intact, improve algorithms or I/O before
+        micro-optimizing, and report before/after evidence when available.

@@ -1,0 +1,151 @@
+# Skill: Python CLI Applications
+# File: skills/domain/python/cli/cli_applications.skill.yaml
+
+skill:
+  id: python.cli.cli_applications
+  name: Python CLI Applications
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python CLI policy for argparse, main(argv), exit codes, logging, entry
+    points, subprocess orchestration, and import-safe script structure.
+
+  level: domain
+  domain: python
+  category: cli
+  priority: 82
+
+  tags:
+    - python
+    - cli
+    - scripts
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  trigger_aliases:
+    write_code:
+      - python cli
+      - argparse
+      - command line
+      - python script
+      - entry point
+      - console_scripts
+
+  context_rules:
+    - id: detect_python_cli_request
+      when_text_matches:
+        - python cli
+        - argparse
+        - command line
+        - python script
+        - __main__
+        - entry point
+        - console_scripts
+      set:
+        python_cli_requested: true
+        user_facing_api: true
+      tags:
+        - python
+        - cli
+      confidence: 0.86
+
+sources:
+  - python_skills_professional:python-cli
+  - effective_python_3e:topics
+
+rules:
+  hard:
+    - id: python.cli.no_work_at_import_time
+      title: Do not execute CLI work at import time
+      when: language == "python" and python_cli_requested == true
+      must_not: >-
+        Do not execute CLI work at import time: do not parse arguments, perform
+        I/O, start subprocesses, mutate the environment, or run the command
+        merely because a CLI module was imported.
+      target: import_time_behavior
+      action: forbid
+      rationale: CLI modules must be import-safe and testable.
+
+  soft:
+    - id: python.cli.use_main_argv
+      title: Use main argv and explicit exit codes
+      when: language == "python" and python_cli_requested == true
+      should: >-
+        Structure CLIs around parse_args(argv) and main(argv) returning an
+        explicit process exit code, with execution guarded by if __name__ == "__main__".
+      target: cli_structure
+      action: recommend
+      rationale: argv injection and explicit exits make CLIs testable.
+
+    - id: python.cli.separate_parsing_from_business_logic
+      title: Separate parsing from business logic
+      when: language == "python" and python_cli_requested == true
+      should: >-
+        Keep argument parsing, configuration loading, and process exit handling
+        separate from the business function that performs the work.
+      target: cli_structure
+      action: recommend
+      rationale: Business logic should be callable from tests and other APIs.
+
+    - id: python.cli.use_logging_for_diagnostics
+      title: Use logging for diagnostics
+      when: language == "python" and python_cli_requested == true
+      should: >-
+        Use print or stdout for intended command output and logging or stderr for
+        diagnostics, progress, and errors.
+      target: cli_output
+      action: recommend
+      rationale: Clear output channels help scripting and automation.
+
+    - id: python.cli.define_entry_points_for_packages
+      title: Define package entry points
+      when: language == "python" and python_cli_requested == true
+      should: >-
+        For packaged CLIs, expose stable project entry points through packaging
+        metadata instead of relying only on ad hoc script paths.
+      target: packaging
+      action: recommend
+      rationale: Entry points improve installation and invocation consistency.
+
+  preference:
+    - id: python.cli.preference_testable_main
+      title: Prefer testable main
+      when: language == "python" and python_cli_requested == true
+      prefer: main_argv_entrypoint
+      over:
+        - import_time_script_execution
+      target: cli_structure
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.cli.verify_cli
+      type: llm_self_check
+      applies_to:
+        - cli_structure
+        - cli_output
+        - import_time_behavior
+      severity: advisory
+      prompt: >-
+        Check that the CLI is import-safe, has injectable argv, separates parsing
+        from business logic, returns meaningful exit codes, and can be tested
+        through parse_args or main.

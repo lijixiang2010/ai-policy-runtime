@@ -1,0 +1,145 @@
+# Skill: Python Data Model And Control Flow
+# File: skills/domain/python/quality/data_model_and_control_flow.skill.yaml
+
+skill:
+  id: python.quality.data_model_and_control_flow
+  name: Python Data Model And Control Flow
+  version: 1.0.0
+  status: stable
+  description: >-
+    Pythonic policy for comparisons, truthiness, loops, comprehensions,
+    generators, containers, and data modeling.
+
+  level: domain
+  domain: python
+  category: quality
+  priority: 76
+
+  tags:
+    - python
+    - pythonic
+    - data-structures
+    - control-flow
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_python_control_flow_request
+      when_text_matches:
+        - list comprehension
+        - generator
+        - iterator
+        - truthy
+        - falsy
+        - dataclass
+        - dictionary
+        - slicing
+      set:
+        python_control_flow_requested: true
+      tags:
+        - python
+        - pythonic
+      confidence: 0.82
+
+sources:
+  - https://gist.github.com/ruimaranhao/4e18cbe3dad6f68040c32ed6709090a3
+  - fluent_python_2e:topics
+  - effective_python_3e:topics
+
+rules:
+  soft:
+    - id: python.quality.use_truthiness_intentionally
+      title: Use truthiness intentionally
+      when: language == "python"
+      should: >-
+        Use truthiness for ordinary emptiness checks, use is None for None
+        checks, and avoid comparing values directly to True, False, or None.
+      target: comparisons
+      action: recommend
+      rationale: Python's truth-value protocol is expressive when None is handled explicitly.
+
+    - id: python.quality.prefer_comprehensions_when_simple
+      title: Prefer simple comprehensions
+      when: language == "python"
+      should: >-
+        Prefer list, set, dict comprehensions or generator expressions for simple
+        mapping and filtering, but use an explicit loop when branching, mutation,
+        error handling, or nesting would make the expression hard to read.
+      target: control_flow
+      action: recommend
+      rationale: Comprehensions are good for direct transformations, not hidden workflows.
+
+    - id: python.quality.prefer_iteration_protocols
+      title: Prefer iteration protocols
+      when: language == "python"
+      should: >-
+        Iterate directly over containers, items, enumerate, zip, and generators
+        instead of managing indexes manually unless indexes are the real domain data.
+      target: iteration
+      action: recommend
+      rationale: Python iteration protocols make common traversal clearer and safer.
+
+    - id: python.quality.choose_standard_collections
+      title: Choose standard collection types by semantics
+      when: language == "python"
+      should: >-
+        Choose standard collection and data-model tools by semantics, such as
+        dict for lookup, set for membership, tuple for fixed records, dataclass
+        for simple value objects, and collections helpers for specialized needs.
+      target: data_model
+      action: recommend
+      rationale: Built-in and standard-library types communicate intent and avoid custom code.
+
+    - id: python.quality.stream_with_generators
+      title: Stream data with generators when appropriate
+      when: language == "python"
+      should: >-
+        Use generators or iterators for large, lazy, or streaming data flows when
+        materializing a full list is unnecessary.
+      target: memory_use
+      action: recommend
+      rationale: Lazy iteration can improve memory behavior without adding much complexity.
+
+  preference:
+    - id: python.quality.preference_clear_loop_over_dense_expression
+      title: Prefer clear loops over dense expressions
+      when: language == "python"
+      prefer: clear_explicit_loop
+      over:
+        - dense_nested_expression
+      target: control_flow
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.quality.verify_data_and_control_flow
+      type: llm_self_check
+      applies_to:
+        - comparisons
+        - control_flow
+        - iteration
+        - data_model
+      severity: advisory
+      prompt: >-
+        Check for mutable default arguments, unclear truthiness checks, overly
+        dense comprehensions, unnecessary indexes, and custom data structures
+        that duplicate standard Python tools.

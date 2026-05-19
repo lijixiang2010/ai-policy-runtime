@@ -1,0 +1,145 @@
+# Skill: Python Static Typing
+# File: skills/domain/python/typing/static_typing.skill.yaml
+
+skill:
+  id: python.typing.static_typing
+  name: Python Static Typing
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python typing policy for public contracts, Any containment, TypedDict,
+    Protocol, overloads, casts, and type-checker hygiene.
+
+  level: domain
+  domain: python
+  category: typing
+  priority: 84
+
+  tags:
+    - python
+    - typing
+    - type-checking
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_python_typing_request
+      when_text_matches:
+        - type hint
+        - type hints
+        - typing
+        - mypy
+        - pyright
+        - typed dict
+        - typeddict
+        - overload
+        - cast
+        - any
+      set:
+        python_typing_requested: true
+      tags:
+        - python
+        - typing
+      confidence: 0.86
+
+sources:
+  - effective_python_3e:topics
+  - fluent_python_2e:topics
+  - python_skills_professional:python-typing
+  - pep:484
+  - pep:544
+
+rules:
+  hard:
+    - id: python.typing.no_unexplained_type_ignore
+      title: Do not add unexplained type ignores
+      when: language == "python" and python_typing_requested == true
+      must_not: >-
+        Do not add type ignores, broad casts, or Any annotations merely to silence
+        a type checker without a local reason or validation boundary.
+      target: typing
+      action: forbid
+      rationale: Type suppression without justification creates fake safety.
+
+  soft:
+    - id: python.typing.type_public_boundaries_first
+      title: Type public and external boundaries first
+      when: language == "python" and (python_typing_requested == true or user_facing_api == true)
+      should: >-
+        Prioritize type hints for public functions, constructors, dataclasses,
+        protocols, async APIs, library APIs, external input/output boundaries,
+        and complex return values.
+      target: typing
+      action: recommend
+      rationale: Boundary types provide the highest contract value.
+
+    - id: python.typing.contain_any
+      title: Contain Any at boundaries
+      when: language == "python" and python_typing_requested == true
+      should: >-
+        Keep Any at untyped boundaries, validate or narrow it promptly, and avoid
+        letting Any leak through core logic or public APIs.
+      target: typing
+      action: recommend
+      rationale: Any is a boundary escape hatch, not a design model.
+
+    - id: python.typing.model_external_dicts
+      title: Model external dictionary data explicitly
+      when: language == "python" and python_typing_requested == true
+      should: >-
+        Use TypedDict, dataclasses, or validated domain objects for dictionary-
+        shaped external data instead of passing dict[str, Any] through domain logic.
+      target: external_data
+      action: recommend
+      rationale: Explicit models make validation and optional fields visible.
+
+    - id: python.typing.use_overloads_selectively
+      title: Use overloads selectively
+      when: language == "python" and python_typing_requested == true
+      should: >-
+        Use overloads only when the return type truly depends on argument shape;
+        prefer simpler unions, generics, or separate functions when they are clearer.
+      target: typing
+      action: recommend
+      rationale: Overloads should clarify call contracts, not mimic every implementation branch.
+
+  preference:
+    - id: python.typing.preference_validation_over_cast
+      title: Prefer validation over cast
+      when: language == "python" and python_typing_requested == true
+      prefer: validation_or_narrowing
+      over:
+        - unchecked_cast
+      target: typing
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.typing.verify_static_typing
+      type: llm_self_check
+      applies_to:
+        - typing
+        - external_data
+      severity: advisory
+      prompt: >-
+        Check that type hints clarify contracts, Any is contained, casts and type
+        ignores are justified, and external dictionary-shaped data is modeled explicitly.

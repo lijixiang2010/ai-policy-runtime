@@ -173,14 +173,19 @@ class PromptRuleSelector:
         )
         self.git_workflow = context.get("domain") == "git" or context.get("language") == "git"
         self.cmake_workflow = context.get("domain") == "cmake" or context.get("language") == "cmake"
+        self.python_workflow = context.get("domain") == "python" or context.get("language") == "python"
 
     def hard(self, rules: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+        if self.python_workflow:
+            limit = min(limit, 6)
         return self._limit(self._collapse(rules), limit, self._hard_score)
 
     def soft_limit(self, default: int) -> int:
         if self.git_workflow:
             return min(default, 8)
         if self.cmake_workflow:
+            return min(default, 8)
+        if self.python_workflow:
             return min(default, 8)
         if self.context.get("unclear_hierarchy") and not self.context.get("duplicated_logic"):
             return min(default, 7)
@@ -194,6 +199,8 @@ class PromptRuleSelector:
             return min(default, 2)
         if self.cmake_workflow:
             return min(default, 2)
+        if self.python_workflow:
+            return min(default, 3)
         if self.context.get("unclear_hierarchy") and not self.context.get("duplicated_logic"):
             return min(default, 2)
         return min(default, 4) if self.generic_code_refinement else default
@@ -210,6 +217,8 @@ class PromptRuleSelector:
         if self.refinement:
             return {"required": self._refinement_verification(items, limit), "recommended": []}
         collapsed = self._collapse_verification(items)
+        if self.python_workflow:
+            limit = min(limit, 4)
         selected = self._limit(collapsed, limit, self._verification_score)
         return {"required": selected, "recommended": []}
 
@@ -322,6 +331,7 @@ class PromptRuleSelector:
     def _hard_score(self, rule: dict[str, Any]) -> int:
         text = _rule_text(rule)
         target = str(rule.get("target", ""))
+        source = str(rule.get("source", {}).get("skill", ""))
         score = 0
         if self.git_workflow:
             score += {
@@ -348,6 +358,48 @@ class PromptRuleSelector:
                 "generated_files": 120,
                 "dependency_targets": 115,
             }.get(target, 0)
+        if self.python_workflow:
+            score += {
+                "validation_integrity": 185,
+                "imports": 180,
+                "code_execution": 175,
+                "deserialization": 170,
+                "secrets": 165,
+                "subprocess": 160,
+                "filesystem": 155,
+                "input_validation": 150,
+                "import_time_behavior": 145,
+                "packaging_tooling": 140,
+                "environment": 135,
+                "concurrency_bounds": 130,
+                "async_blocking": 125,
+                "function_defaults": 120,
+                "typing": 115,
+                "mutability": 110,
+                "exceptions": 105,
+                "resource_lifetime": 100,
+                "performance": 95,
+            }.get(target, 0)
+            if self.context.get("python_security_sensitive") and source.startswith("python.security."):
+                score += 180
+            if self.context.get("python_cli_requested") and source.startswith("python.cli."):
+                score += 180
+            if self.context.get("python_packaging_requested") and source.startswith("python.packaging."):
+                score += 160
+            if self.context.get("python_concurrency_requested") and source.startswith("python.concurrency."):
+                score += 160
+            if self.context.get("python_performance_requested") and source.startswith("python.performance."):
+                score += 160
+            if self.context.get("python_typing_requested") and source.startswith("python.typing."):
+                score += 140
+            if self.context.get("python_style_requested") and source.startswith("python.style."):
+                score += 140
+            if self.context.get("python_testing_requested") and source.startswith("python.testing."):
+                score += 120
+            if "wildcard imports" in text:
+                score += 160
+            if "disable, delete, skip" in text:
+                score += 120
         if "observable behavior" in text or target == "behavior_preservation":
             score += 120
         if target in {"undefined_behavior", "standard_availability", "ownership", "resource_lifetime", "type_safety"}:
@@ -512,6 +564,95 @@ class PromptRuleSelector:
             ):
                 if needle in text:
                     score += 15
+        if self.python_workflow:
+            score += {
+                "project_conventions": 155,
+                "dependencies": 145,
+                "import_time_behavior": 140,
+                "validation": 135,
+                "style": 130,
+                "naming": 125,
+                "imports": 125,
+                "documentation": 120,
+                "comments": 110,
+                "typing": 135,
+                "external_data": 130,
+                "tests": 135,
+                "testing": 135,
+                "api_usability": 145,
+                "cli_structure": 135,
+                "cli_output": 120,
+                "input_validation": 150,
+                "subprocess": 150,
+                "filesystem": 145,
+                "sql": 140,
+                "secrets": 140,
+                "packaging_tooling": 135,
+                "package_metadata": 125,
+                "concurrency_model": 140,
+                "shared_state": 135,
+                "cancellation": 130,
+                "performance_method": 140,
+                "performance": 135,
+                "memory_use": 125,
+                "function_design": 125,
+                "function_arguments": 120,
+                "return_contract": 115,
+                "decorators": 110,
+                "class_design": 115,
+                "object_model": 115,
+                "interface_design": 115,
+                "data_model": 110,
+                "resource_lifetime": 125,
+                "exceptions": 120,
+                "error_model": 115,
+                "readability": 105,
+                "pythonic_idioms": 100,
+            }.get(target, 0)
+            if self.context.get("python_security_sensitive") and source.startswith("python.security."):
+                score += 170
+            if self.context.get("external_input_sensitive") and target == "input_validation":
+                score += 170
+            if self.context.get("python_cli_requested") and source.startswith("python.cli."):
+                score += 160
+            if self.context.get("python_packaging_requested") and source.startswith("python.packaging."):
+                score += 150
+            if self.context.get("python_concurrency_requested") and source.startswith("python.concurrency."):
+                score += 150
+            if self.context.get("python_performance_requested") and source.startswith("python.performance."):
+                score += 150
+            if self.context.get("python_typing_requested") and source.startswith("python.typing."):
+                score += 135
+            if self.context.get("python_testing_requested") and source.startswith("python.testing."):
+                score += 135
+            if self.context.get("python_style_requested") and source.startswith("python.style."):
+                score += 130
+            if self.context.get("python_function_design_requested") and source.startswith("python.functions."):
+                score += 120
+            if self.context.get("python_classes_protocols_requested") and source.startswith("python.classes."):
+                score += 120
+            if self.context.get("python_api_design_requested") or self.context.get("designing_api"):
+                if source.startswith("python.api_design."):
+                    score += 180
+                if source.startswith("python.functions."):
+                    score += 120
+                if target in {"api_usability", "function_arguments", "return_contract", "side_effects"}:
+                    score += 120
+            for needle in (
+                "type hints",
+                "subprocess argument lists",
+                "parse_args(argv)",
+                "main(argv)",
+                "isolated",
+                "project-native validation",
+                "standard-library",
+                "context managers",
+                "measure a baseline",
+                "bounded",
+                "package metadata",
+            ):
+                if needle in text:
+                    score += 30
         if self.refinement:
             target_bonus = {
                 "complexity": 90,
@@ -614,6 +755,19 @@ class PromptRuleSelector:
                 "relocatable_package": 100,
                 "presets": 100,
                 "quality_tooling": 95,
+            }.get(target, 0)
+        if self.python_workflow:
+            score += {
+                "security": 130,
+                "concurrency": 120,
+                "performance": 115,
+                "resource_lifetime": 110,
+                "packaging_tooling": 105,
+                "typing": 100,
+                "tests": 95,
+                "cli_structure": 90,
+                "implementation_style": 85,
+                "style": 80,
             }.get(target, 0)
         if self.refinement:
             score += {

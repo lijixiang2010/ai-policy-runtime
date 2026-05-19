@@ -1,0 +1,156 @@
+# Skill: Python Interfaces And Typing
+# File: skills/domain/python/api_design/interfaces_and_typing.skill.yaml
+
+skill:
+  id: python.api_design.interfaces_and_typing
+  name: Python Interfaces And Typing
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python API design policy for caller ergonomics, type hints, protocols,
+    mutability, and public contracts.
+
+  level: domain
+  domain: python
+  category: api_design
+  priority: 82
+
+  tags:
+    - python
+    - api-design
+    - typing
+
+  capabilities:
+    - api_design
+    - code_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - design_api
+      - write_code
+      - review_code
+      - refactor_code
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_python_api_design_request
+      when_text_matches:
+        - python api
+        - public api
+        - caller ergonomics
+        - api ergonomics
+        - library api
+      set:
+        python_api_design_requested: true
+        user_facing_api: true
+      tags:
+        - python
+        - api-design
+      confidence: 0.86
+
+sources:
+  - fluent_python_2e:topics
+  - effective_python_3e:topics
+  - pep:484
+  - pep:544
+
+rules:
+  hard:
+    - id: python.api.no_shared_mutable_public_state
+      title: Avoid accidental shared mutable public state
+      when: language == "python" and user_facing_api == true
+      must_not: >-
+        Do not expose accidental shared mutable state through defaults, class
+        attributes, cached values, or returned internals unless the sharing is
+        intentional and documented.
+      target: mutability
+      action: forbid
+      rationale: Shared mutable state creates surprising cross-call and cross-instance behavior.
+
+  soft:
+    - id: python.api.design_for_common_case
+      title: Design Python APIs for the common case
+      when: language == "python" and user_facing_api == true
+      should: >-
+        Make the common API path simple, explicit, and hard to misuse while
+        keeping advanced configuration available through clear parameters or
+        separate objects.
+      target: api_usability
+      action: recommend
+      rationale: Python APIs should feel lightweight without hiding important choices.
+
+    - id: python.api.use_type_hints_for_public_contracts
+      title: Use type hints for public contracts
+      when: language == "python" and (python_api_design_requested == true or user_facing_api == true)
+      should: >-
+        Use type hints on public functions, methods, dataclasses, protocols, and
+        important internal boundaries when they clarify accepted inputs, returned
+        values, optionality, and callable shapes.
+      target: typing
+      action: recommend
+      rationale: Type hints document contracts and improve editor, test, and review feedback.
+
+    - id: python.api.prefer_protocols_for_structural_contracts
+      title: Prefer protocols for structural contracts
+      when: language == "python" and (python_api_design_requested == true or user_facing_api == true)
+      should: >-
+        Prefer protocols, abstract base classes, or small documented interfaces
+        when callers need substitutable behavior, instead of requiring concrete
+        implementation classes unnecessarily.
+      target: interface_design
+      action: recommend
+      rationale: Python often benefits from structural contracts and loose coupling.
+
+    - id: python.api.keep_side_effects_visible
+      title: Keep side effects visible
+      when: language == "python" and (python_api_design_requested == true or user_facing_api == true)
+      should: >-
+        Make mutation, I/O, caching, retries, global state, and other side
+        effects visible through naming, API shape, or documentation.
+      target: side_effects
+      action: recommend
+      rationale: Dynamic dispatch and flexible objects make hidden side effects costly.
+
+    - id: python.api.prefer_properties_over_trivial_accessors
+      title: Prefer properties over trivial accessors
+      when: language == "python" and (python_api_design_requested == true or user_facing_api == true)
+      should: >-
+        Prefer direct attributes or properties over trivial get_*/set_* methods,
+        while using methods for operations that do meaningful work.
+      target: api_usability
+      action: recommend
+      rationale: Python APIs normally expose data through attributes or properties.
+
+  preference:
+    - id: python.api.preference_explicit_contract_over_implicit_convention
+      title: Prefer explicit contracts
+      when: language == "python" and (python_api_design_requested == true or user_facing_api == true)
+      prefer: explicit_contract
+      over:
+        - implicit_convention
+      target: api_design
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.api.verify_interfaces_and_typing
+      type: llm_self_check
+      applies_to:
+        - api_usability
+        - typing
+        - mutability
+        - side_effects
+      severity: advisory
+      prompt: >-
+        Check that the Python API has clear type hints where useful, no
+        accidental shared mutable state, visible side effects, and an ergonomic
+        common path.

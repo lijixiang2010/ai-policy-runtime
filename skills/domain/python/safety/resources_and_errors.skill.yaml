@@ -1,0 +1,146 @@
+# Skill: Python Resources And Errors
+# File: skills/domain/python/safety/resources_and_errors.skill.yaml
+
+skill:
+  id: python.safety.resources_and_errors
+  name: Python Resources And Errors
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python safety policy for resource lifetime, context managers, exceptions,
+    and explicit failure behavior.
+
+  level: domain
+  domain: python
+  category: safety
+  priority: 88
+
+  tags:
+    - python
+    - safety
+    - resources
+    - errors
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_python_resource_or_error_request
+      when_text_matches:
+        - with open
+        - context manager
+        - exception
+        - error handling
+        - resource
+        - file handle
+        - cleanup
+      set:
+        python_resource_safety_requested: true
+      tags:
+        - python
+        - safety
+      semantic_match:
+        - manage Python resource lifetime and cleanup safely
+        - make Python exception behavior explicit
+      confidence: 0.84
+
+sources:
+  - https://gist.github.com/ruimaranhao/4e18cbe3dad6f68040c32ed6709090a3
+  - effective_python_3e:topics
+
+rules:
+  hard:
+    - id: python.safety.no_silent_broad_exception
+      title: Do not silently swallow broad exceptions
+      when: language == "python"
+      must_not: >-
+        Do not catch broad exceptions and silently continue unless the task
+        explicitly requires best-effort behavior and the failure is observable
+        through logging, return state, or documented policy.
+      target: exceptions
+      action: forbid
+      rationale: Silent failures hide data loss and make debugging unreliable.
+
+    - id: python.safety.no_unmanaged_external_resource
+      title: Do not leak external resources
+      when: language == "python"
+      must_not: >-
+        Do not leave files, sockets, locks, subprocess handles, temporary
+        resources, or transactions without a clear close, release, rollback, or
+        cleanup path.
+      target: resource_lifetime
+      action: forbid
+      rationale: Python garbage collection is not a substitute for explicit resource lifetime.
+
+  soft:
+    - id: python.safety.use_context_managers
+      title: Use context managers for scoped resources
+      when: language == "python"
+      should: >-
+        Use context managers for scoped resources such as files, locks,
+        transactions, temporary directories, and managed connections.
+      target: resource_lifetime
+      action: recommend
+      rationale: Context managers make cleanup visible and exception-safe.
+
+    - id: python.safety.catch_specific_exceptions
+      title: Catch specific exceptions
+      when: language == "python"
+      should: >-
+        Catch the narrowest practical exception type, handle it at the layer
+        that can recover or add useful context, and preserve traceback context
+        when re-raising.
+      target: exceptions
+      action: recommend
+      rationale: Specific exception handling keeps failure modes understandable.
+
+    - id: python.safety.make_failure_contract_explicit
+      title: Make failure behavior explicit
+      when: language == "python"
+      should: >-
+        Document or encode important failure behavior, including whether an API
+        raises, returns None or a sentinel, retries, logs, or performs partial work.
+      target: error_model
+      action: recommend
+      rationale: Callers need to know how to handle failed operations safely.
+
+  preference:
+    - id: python.safety.preference_context_manager_over_manual_cleanup
+      title: Prefer context managers over manual cleanup
+      when: language == "python"
+      prefer: context_manager
+      over:
+        - manual_cleanup_convention
+      target: resource_lifetime
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.safety.verify_resources_and_errors
+      type: llm_self_check
+      applies_to:
+        - resource_lifetime
+        - exceptions
+        - error_model
+      severity: advisory
+      prompt: >-
+        Check that resources are scoped and cleaned up, exceptions are specific,
+        broad catches are not silent, and public failure behavior is explicit.

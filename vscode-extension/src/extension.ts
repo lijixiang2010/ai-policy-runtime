@@ -25,6 +25,8 @@ type AgentTarget = 'codex' | 'claude';
 type PolicyPaths = {
   root: string;
   config: string;
+  codexHooks: string;
+  codexConfig: string;
   effectivePrompt: string;
 };
 
@@ -52,6 +54,8 @@ type PackItem = vscode.QuickPickItem & {
 
 const CONFIG_SECTION = 'aiPolicy';
 const POLICY_CONFIG_FILE = path.join('.policy', 'config.json');
+const CODEX_HOOKS_FILE = path.join('.codex', 'hooks.json');
+const CODEX_CONFIG_FILE = path.join('.codex', 'config.toml');
 const EFFECTIVE_PROMPT_FILE = path.join('.policy', 'current', 'effective-prompt.md');
 const DEFAULT_AGENTS: AgentTarget[] = ['codex'];
 const DEFAULT_PACKS = ['cpp.safe_generation'];
@@ -121,6 +125,12 @@ const KNOWN_PACKS: PackItem[] = [
     description: 'CMake targets, dependencies, packaging, presets, and tests',
     category: 'Build',
     tags: ['CMake', 'C++', 'Build']
+  },
+  {
+    label: 'python.best_practices',
+    description: 'Python professional engineering, APIs, typing, packaging, security, and tests',
+    category: 'Development',
+    tags: ['Python', 'API', 'Testing', 'Packaging']
   }
 ];
 
@@ -161,8 +171,10 @@ class PolicyWorkspace {
       return;
     }
 
+    const config = this.readConfig();
     await fs.mkdir(path.dirname(paths.config), { recursive: true });
-    await fs.writeFile(paths.config, `${JSON.stringify(projectConfig(this.readConfig()), null, 2)}\n`, 'utf8');
+    await fs.writeFile(paths.config, `${JSON.stringify(projectConfig(config), null, 2)}\n`, 'utf8');
+    await syncCodexAgentHooks(paths, config);
   }
 
   async saveConfig(config: PolicyConfig): Promise<void> {
@@ -220,6 +232,8 @@ class PolicyWorkspace {
     return {
       root,
       config: path.join(root, POLICY_CONFIG_FILE),
+      codexHooks: path.join(root, CODEX_HOOKS_FILE),
+      codexConfig: path.join(root, CODEX_CONFIG_FILE),
       effectivePrompt: path.join(root, EFFECTIVE_PROMPT_FILE)
     };
   }
@@ -260,8 +274,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     if (message.type === 'save' && message.config) {
       await this.workspace.saveConfig(normalizeConfig(message.config));
       this.status.refresh();
-      this.render();
-      vscode.window.showInformationMessage('AI Policy Runtime configuration saved.');
+      await this.view?.webview.postMessage({ type: 'saved' });
       return;
     }
     if (message.type === 'showEffectiveRules') {
@@ -442,29 +455,6 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       line-height: 1.45;
       padding: 4px 0;
     }
-    .actions {
-      display: grid;
-      gap: 8px;
-      padding-top: 16px;
-    }
-    button {
-      width: 100%;
-      border: 0;
-      padding: 8px 10px;
-      color: var(--accent-text);
-      background: var(--accent);
-      font: inherit;
-      cursor: pointer;
-    }
-    button.secondary {
-      color: var(--vscode-button-secondaryForeground);
-      background: var(--vscode-button-secondaryBackground);
-    }
-    .status {
-      min-height: 18px;
-      color: var(--muted);
-      font-size: 12px;
-    }
     [hidden] {
       display: none !important;
     }
@@ -572,13 +562,6 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     </div>
   </div>
 
-  <div class="actions">
-    <button id="save">Save Configuration</button>
-    <button id="show" class="secondary">Show Effective Rules</button>
-    <button id="validate" class="secondary">Validate Runtime</button>
-    <div id="status" class="status"></div>
-  </div>
-
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const state = ${state};
@@ -649,6 +632,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
         }
         syncPackInputs();
         renderSelected();
+        scheduleSave();
       });
       return row;
     }
@@ -691,13 +675,37 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
         provider.dataset.previousProvider = provider.value;
       }
       syncEmbeddingProviderFields();
+      scheduleSave();
     });
     byId('postRefineEnabled').addEventListener('change', () => {
       if (byId('postRefineEnabled').checked && byId('postRefine').value === 'off') {
         byId('postRefine').value = 'standard';
       }
       syncPostRefineControls();
+      scheduleSave();
     });
+
+    const configFieldIds = [
+      'enabled',
+      'autoInstall',
+      'agentCodex',
+      'agentClaude',
+      'postRefine',
+      'verifyTarget',
+      'policyRoot',
+      'embeddingProvider',
+      'embeddingBaseUrl',
+      'embeddingApiKey',
+      'embeddingModel',
+      'embeddingTimeout'
+    ];
+    for (const id of configFieldIds) {
+      const field = byId(id);
+      field.addEventListener('change', scheduleSave);
+      if (field.type === 'text' || field.type === 'password') {
+        field.addEventListener('input', scheduleSave);
+      }
+    }
 
     function syncPostRefineControls() {
       byId('postRefineControls').hidden = !byId('postRefineEnabled').checked;
@@ -794,13 +802,14 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       return value;
     }
 
-    byId('save').addEventListener('click', () => {
-      byId('status').textContent = 'Saving...';
-      vscode.postMessage({ type: 'save', config: readConfig() });
-      setTimeout(() => { byId('status').textContent = 'Saved'; }, 120);
-    });
-    byId('show').addEventListener('click', () => vscode.postMessage({ type: 'showEffectiveRules' }));
-    byId('validate').addEventListener('click', () => vscode.postMessage({ type: 'validateRuntime' }));
+    let saveTimer;
+    function scheduleSave() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        vscode.postMessage({ type: 'save', config: readConfig() });
+      }, 350);
+    }
+
   </script>
 </body>
 </html>`;
@@ -935,6 +944,172 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
     ? `AI Policy Runtime config is ready: ${paths.config}`
     : 'AI Policy Runtime config was not created.';
   vscode.window.showInformationMessage(message);
+}
+
+async function syncCodexAgentHooks(paths: PolicyPaths, config: PolicyConfig): Promise<void> {
+  const enabled = config.enabled && config.agents.includes('codex');
+  if (!enabled && !(await exists(paths.codexHooks)) && !(await exists(paths.codexConfig))) {
+    return;
+  }
+  await Promise.all([
+    configureCodexHooks(paths, config, enabled),
+    configureCodexConfig(paths.codexConfig, enabled)
+  ]);
+}
+
+async function configureCodexHooks(paths: PolicyPaths, config: PolicyConfig, enabled: boolean): Promise<void> {
+  await fs.mkdir(path.dirname(paths.codexHooks), { recursive: true });
+  const hooksConfig = await readJsonObject(paths.codexHooks);
+  const hooks = objectValue(hooksConfig, 'hooks');
+  hooksConfig.hooks = hooks;
+
+  const policyRoot = resolvePolicyRoot(config, paths.root);
+  const userPromptHook = codexHookEntry(policyRoot, 'codex-user-prompt-submit', 'Generating Effective Rules');
+  const stopHook = codexHookEntry(policyRoot, 'codex-stop-refinement', 'Checking post-task refinement');
+
+  if (enabled) {
+    upsertEventHook(hooks, 'UserPromptSubmit', userPromptHook);
+    upsertEventHook(hooks, 'Stop', stopHook);
+  } else {
+    removeEventHook(hooks, 'UserPromptSubmit');
+    removeEventHook(hooks, 'Stop');
+  }
+
+  await fs.writeFile(paths.codexHooks, `${JSON.stringify(hooksConfig, null, 2)}\n`, 'utf8');
+}
+
+function codexHookEntry(policyRoot: string, hookName: string, statusMessage: string): Record<string, unknown> {
+  const hookRunner = path.join(policyRoot, 'bin', 'ai-policy-hook.js');
+  return {
+    hooks: [
+      {
+        type: 'command',
+        command: shellCommand(process.env.AI_POLICY_NODE || 'node', hookRunner, hookName),
+        timeout: 30,
+        statusMessage
+      }
+    ]
+  };
+}
+
+function upsertEventHook(
+  hooks: Record<string, unknown>,
+  event: 'UserPromptSubmit' | 'Stop',
+  entry: Record<string, unknown>
+): void {
+  const entries = hookEventEntries(hooks, event);
+  removeAiPolicyEntries(entries);
+  entries.push(entry);
+  hooks[event] = entries;
+}
+
+function removeEventHook(hooks: Record<string, unknown>, event: 'UserPromptSubmit' | 'Stop'): void {
+  const value = hooks[event];
+  if (!Array.isArray(value)) {
+    return;
+  }
+  removeAiPolicyEntries(value);
+  if (!value.length) {
+    delete hooks[event];
+  }
+}
+
+function hookEventEntries(hooks: Record<string, unknown>, event: 'UserPromptSubmit' | 'Stop'): unknown[] {
+  const value = hooks[event];
+  return Array.isArray(value) ? value : [];
+}
+
+function removeAiPolicyEntries(entries: unknown[]): void {
+  const kept = entries.filter((entry) => !isAiPolicyHookEntry(entry));
+  entries.splice(0, entries.length, ...kept);
+}
+
+function isAiPolicyHookEntry(entry: unknown): boolean {
+  if (!isRecord(entry)) {
+    return false;
+  }
+  const hooks = entry.hooks;
+  if (!Array.isArray(hooks)) {
+    return false;
+  }
+  return hooks.some((item) => isRecord(item) && String(item.command ?? '').includes('ai-policy-hook.js'));
+}
+
+async function configureCodexConfig(filePath: string, enabled: boolean): Promise<void> {
+  const original = (await exists(filePath)) ? await fs.readFile(filePath, 'utf8') : '';
+  const updated = setTomlBool(original, 'features', 'codex_hooks', enabled);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, updated, 'utf8');
+}
+
+async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
+  if (!(await exists(filePath))) {
+    return {};
+  }
+  const parsed: unknown = JSON.parse(await fs.readFile(filePath, 'utf8'));
+  return isRecord(parsed) ? parsed : {};
+}
+
+function objectValue(record: Record<string, unknown>, key: string): Record<string, unknown> {
+  const value = record[key];
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function shellCommand(command: string, script: string, hookName: string): string {
+  return [command, script, hookName].map(quoteShell).join(' ');
+}
+
+function quoteShell(value: string): string {
+  const escaped = value.replace(/"/g, '\\"');
+  return /\s|\\|:/.test(escaped) ? `"${escaped}"` : escaped;
+}
+
+function setTomlBool(text: string, section: string, key: string, value: boolean): string {
+  const lines = text.split(/\r?\n/);
+  const target = `${key} = ${value ? 'true' : 'false'}`;
+  const sectionHeader = `[${section}]`;
+  let inSection = false;
+  let sectionFound = false;
+  let keyWritten = false;
+  const output: string[] = [];
+
+  for (const [index, line] of lines.entries()) {
+    if (!line && index === lines.length - 1) {
+      continue;
+    }
+    const stripped = line.trim();
+    if (stripped.startsWith('[') && stripped.endsWith(']')) {
+      if (inSection && !keyWritten) {
+        output.push(target);
+        keyWritten = true;
+      }
+      inSection = stripped === sectionHeader;
+      sectionFound = sectionFound || inSection;
+      output.push(line);
+      continue;
+    }
+    if (inSection && stripped.startsWith(`${key} `) && stripped.includes('=')) {
+      output.push(target);
+      keyWritten = true;
+      continue;
+    }
+    output.push(line);
+  }
+
+  if (!sectionFound) {
+    if (output.length && output[output.length - 1].trim()) {
+      output.push('');
+    }
+    output.push(sectionHeader, target);
+  } else if (inSection && !keyWritten) {
+    output.push(target);
+  }
+
+  return `${output.join('\n').trimEnd()}\n`;
 }
 
 function cleanOptionalString(value: string): string | undefined {

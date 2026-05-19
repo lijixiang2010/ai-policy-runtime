@@ -426,6 +426,93 @@ class KeywordConceptEmbeddingProvider:
                 "测试",
             ),
         ),
+        (
+            "python",
+            (
+                "python",
+                "pythonic",
+                "python best practices",
+                "python 最佳实践",
+            ),
+        ),
+        (
+            "python_style",
+            (
+                "pep8",
+                "pep 8",
+                "imports",
+                "import order",
+                "docstring",
+                "naming",
+                "整理 imports",
+            ),
+        ),
+        (
+            "python_typing",
+            (
+                "type hints",
+                "type hint",
+                "typing",
+                "mypy",
+                "pyright",
+                "typed dict",
+            ),
+        ),
+        (
+            "python_testing",
+            (
+                "pytest",
+                "unittest",
+                "python tests",
+                "fixture",
+                "mock",
+                "测试",
+            ),
+        ),
+        (
+            "python_security",
+            (
+                "security",
+                "subprocess",
+                "shell injection",
+                "secret",
+                "secrets",
+                "path traversal",
+                "validates paths",
+                "redacts",
+            ),
+        ),
+        (
+            "python_packaging",
+            (
+                "pyproject.toml",
+                "python packaging",
+                "requirements.txt",
+                "wheel",
+                "package manager",
+            ),
+        ),
+        (
+            "python_concurrency",
+            (
+                "asyncio",
+                "bounded concurrency",
+                "thread",
+                "multiprocessing",
+                "cancellation",
+            ),
+        ),
+        (
+            "python_performance",
+            (
+                "performance",
+                "optimize",
+                "benchmark",
+                "benchmarks",
+                "profiling",
+                "cprofile",
+            ),
+        ),
     )
 
     def encode(self, texts: list[str] | tuple[str, ...]) -> list[list[float]]:
@@ -620,6 +707,8 @@ class PolicyRuntimeTests(unittest.TestCase):
                     self.assertNotIn(key, task.context)
                 for tag in case.get("required_tags", ()):
                     self.assertIn(tag, task.tags)
+                for tag in case.get("forbidden_tags", ()):
+                    self.assertNotIn(tag, task.tags)
 
                 expected_any_skill = set(case.get("expected_any_skill", ()))
                 if expected_any_skill:
@@ -632,6 +721,34 @@ class PolicyRuntimeTests(unittest.TestCase):
                 if task.domain != "cpp":
                     self.assertNotIn("cpp", task.tags)
 
+    def test_python_semantic_recall_quality_eval_set(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=KeywordConceptEmbeddingProvider(),
+        )
+        fixture = _load_fixture("python_semantic_recall_eval.yaml")
+
+        for case in fixture["cases"]:
+            with self.subTest(case=case["id"]):
+                analysis = analyzer.analyze(str(case["prompt"]))
+                task = analysis.task
+
+                self.assertEqual(analysis.activation_ready, case["activation_ready"])
+                if "domain" in case:
+                    self.assertEqual(task.domain, case["domain"])
+                if "task_type" in case:
+                    self.assertEqual(task.task_type, case["task_type"])
+                if "task_type_not" in case:
+                    self.assertNotEqual(task.task_type, case["task_type_not"])
+                for key, value in case.get("required_context", {}).items():
+                    self.assertEqual(task.context.get(key), value, key)
+                for key in case.get("forbidden_context", ()):
+                    self.assertNotIn(key, task.context)
+                for tag in case.get("required_tags", ()):
+                    self.assertIn(tag, task.tags)
+                for tag in case.get("forbidden_tags", ()):
+                    self.assertNotIn(tag, task.tags)
+
     def test_task_analyzer_understands_git_commit_workflow(self) -> None:
         task = analyze(
             "Prepare a git commit message for the staged diff and split unrelated changes."
@@ -642,6 +759,72 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(task.context["git_commit_message_requested"])
         self.assertIn("git_workflow", task.capabilities)
         self.assertIn("commit", task.tags)
+
+    def test_task_analyzer_understands_python_best_practices(self) -> None:
+        task = analyze(
+            "Apply Python best practices: clean up imports, add type hints, and write pytest tests."
+        ).task
+
+        self.assertEqual(task.domain, "python")
+        self.assertEqual(task.task_type, "improve_code_quality")
+        self.assertEqual(task.context["language"], "python")
+        self.assertTrue(task.context["python_best_practices_requested"])
+        self.assertIn("python", task.tags)
+        self.assertIn("best-practices", task.tags)
+        self.assertIn("code_review", task.capabilities)
+
+    def test_python_best_practices_pack_outputs_python_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Apply Python best practices: clean up imports, add type hints, and write pytest tests.",
+            ("python.best_practices",),
+        )
+        effective = result.structured["effective_rules"]
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+        sources = _sources(effective)
+
+        self.assertIn("python.core.pythonic_baseline", sources)
+        self.assertIn("python.style.readability_and_naming", sources)
+        self.assertIn("python.typing.static_typing", sources)
+        self.assertIn("python.testing.testing_practices", sources)
+        self.assertIn("Do not use wildcard imports", prompt)
+        self.assertIn("Prioritize type hints for public functions", prompt)
+        self.assertIn("Keep tests isolated from real networks", prompt)
+        self.assertNotIn("selected C++ standard", prompt)
+
+    def test_python_professional_pack_outputs_security_and_cli_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Build a Python CLI with argparse that validates paths, avoids shell injection in subprocess calls, and redacts secrets.",
+            ("python.best_practices",),
+        )
+        effective = result.structured["effective_rules"]
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+        sources = _sources(effective)
+
+        self.assertIn("python.cli.cli_applications", sources)
+        self.assertIn("python.security.security_boundaries", sources)
+        self.assertIn("Do not execute CLI work at import time", prompt)
+        self.assertIn("Do not use eval, exec, dynamic import", prompt)
+        self.assertIn("Use subprocess argument lists", prompt)
+        self.assertIn("Do not log, print, serialize, or expose passwords", prompt)
+
+    def test_python_professional_pack_outputs_packaging_async_and_performance_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Improve Python packaging in pyproject.toml and optimize asyncio performance with bounded concurrency and benchmarks.",
+            ("python.best_practices",),
+        )
+        effective = result.structured["effective_rules"]
+        prompt = (result.current / "effective-prompt.md").read_text(encoding="utf-8")
+        sources = _sources(effective)
+
+        self.assertIn("python.packaging.project_packaging", sources)
+        self.assertIn("python.concurrency.async_and_concurrency", sources)
+        self.assertIn("python.performance.performance_engineering", sources)
+        self.assertIn("Do not change package manager", prompt)
+        self.assertIn("Do not create unbounded threads, processes, tasks", prompt)
+        self.assertIn("Define the metric, measure a baseline", prompt)
 
     def test_git_best_practices_pack_outputs_commit_rules(self) -> None:
         runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
@@ -2888,6 +3071,11 @@ class PolicyRuntimeTests(unittest.TestCase):
                     self.assertIn(text, prompt)
                 for text in case.get("exclude", ()):
                     self.assertNotIn(text, prompt)
+                if "max_hard_rules" in case:
+                    self.assertLessEqual(
+                        _section_bullet_count(prompt, "HARD Rules"),
+                        case["max_hard_rules"],
+                    )
                 if "max_soft_rules" in case:
                     self.assertLessEqual(
                         _section_bullet_count(prompt, "SOFT Rules"),
@@ -2897,6 +3085,67 @@ class PolicyRuntimeTests(unittest.TestCase):
                     self.assertLessEqual(
                         _section_bullet_count(prompt, "Preferences"),
                         case["max_preferences"],
+                    )
+                if "max_verification" in case:
+                    self.assertLessEqual(
+                        _section_bullet_count(prompt, "Verification Requirements"),
+                        case["max_verification"],
+                    )
+
+    def test_python_prompt_quality_eval_set(self) -> None:
+        fixture = _load_fixture("python_prompt_quality_eval.yaml")
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=KeywordConceptEmbeddingProvider(),
+        )
+        registry = SkillRegistry.from_dirs("skills", "packs")
+        renderer = EffectiveRulesRenderer()
+
+        for case in fixture["cases"]:
+            with self.subTest(case=case["id"]):
+                analysis = analyzer.analyze(str(case["prompt"]))
+                effective = PolicyEngine(registry).evaluate(
+                    analysis.task,
+                    ("python.best_practices",),
+                )
+                if case.get("applicable", True) is False:
+                    self.assertFalse(analysis.activation_ready)
+                    self.assertFalse(_has_policy_content_for_test(effective))
+                    continue
+                self.assertTrue(analysis.activation_ready, analysis.to_dict())
+                self.assertTrue(_has_policy_content_for_test(effective))
+                rendered = renderer.to_mapping(
+                    task=analysis.task,
+                    task_id=str(case["id"]),
+                    summary=str(case["prompt"]),
+                    rules=effective,
+                    trace={"active_skills": [], "packs": ["python.best_practices"]},
+                )
+                prompt = renderer.to_prompt(rendered)
+
+                for text in case.get("include", ()):
+                    self.assertIn(text, prompt)
+                for text in case.get("exclude", ()):
+                    self.assertNotIn(text, prompt)
+                if "max_hard_rules" in case:
+                    self.assertLessEqual(
+                        _section_bullet_count(prompt, "HARD Rules"),
+                        case["max_hard_rules"],
+                    )
+                if "max_soft_rules" in case:
+                    self.assertLessEqual(
+                        _section_bullet_count(prompt, "SOFT Rules"),
+                        case["max_soft_rules"],
+                    )
+                if "max_preferences" in case:
+                    self.assertLessEqual(
+                        _section_bullet_count(prompt, "Preferences"),
+                        case["max_preferences"],
+                    )
+                if "max_verification" in case:
+                    self.assertLessEqual(
+                        _section_bullet_count(prompt, "Verification Requirements"),
+                        case["max_verification"],
                     )
 
     def test_effective_rules_schema_validator_reports_missing_field(self) -> None:

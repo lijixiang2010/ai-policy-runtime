@@ -1,0 +1,157 @@
+# Skill: Python Classes And Protocols
+# File: skills/domain/python/classes/classes_protocols.skill.yaml
+
+skill:
+  id: python.classes.classes_protocols
+  name: Python Classes And Protocols
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python object-model policy for classes, dataclasses, inheritance,
+    composition, protocols, ABCs, properties, and special methods.
+
+  level: domain
+  domain: python
+  category: classes
+  priority: 80
+
+  tags:
+    - python
+    - classes
+    - protocols
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_python_classes_protocols_request
+      when_text_matches:
+        - python class
+        - dataclass
+        - protocol
+        - abc
+        - inheritance
+        - composition
+        - property
+        - descriptor
+        - special method
+      set:
+        python_classes_protocols_requested: true
+        user_facing_api: true
+      tags:
+        - python
+        - classes
+      confidence: 0.84
+
+sources:
+  - fluent_python_2e:topics
+  - effective_python_3e:topics
+  - python_skills_professional:python-classes-protocols
+
+rules:
+  soft:
+    - id: python.classes.prefer_functions_for_simple_interfaces
+      title: Prefer functions for simple interfaces
+      when: language == "python" and python_classes_protocols_requested == true
+      should: >-
+        Prefer functions, callables, or small modules over classes when no
+        persistent state, protocol participation, or cohesive object behavior is needed.
+      target: class_design
+      action: recommend
+      rationale: Not every Python abstraction needs a class.
+
+    - id: python.classes.use_dataclasses_for_lightweight_data
+      title: Use dataclasses for lightweight data
+      when: language == "python" and python_classes_protocols_requested == true
+      should: >-
+        Use dataclasses or similar domain objects for lightweight structured data
+        with clear fields, while avoiding broad bags of optional fields with weak invariants.
+      target: data_model
+      action: recommend
+      rationale: Dataclasses are strongest when they communicate a compact schema.
+
+    - id: python.classes.prefer_composition
+      title: Prefer composition over inheritance
+      when: language == "python" and python_classes_protocols_requested == true
+      should: >-
+        Prefer composition for sharing behavior and use inheritance only when
+        substitutability is real, intended, and tested.
+      target: object_model
+      action: recommend
+      rationale: Python inheritance hierarchies become fragile when they do not model substitution.
+
+    - id: python.classes.use_protocols_for_behavior
+      title: Use protocols for behavior-based interfaces
+      when: language == "python" and python_classes_protocols_requested == true
+      should: >-
+        Use Protocol, ABC, or a small documented interface when callers need
+        substitutable behavior; prefer Protocol for structural contracts and ABCs
+        when nominal runtime behavior or shared implementation matters.
+      target: interface_design
+      action: recommend
+      rationale: Python APIs often benefit from structural behavior contracts.
+
+    - id: python.classes.avoid_concrete_builtin_subclassing
+      title: Avoid subclassing concrete built-ins casually
+      when: language == "python" and python_classes_protocols_requested == true
+      should_not: >-
+        Avoid subclassing concrete built-ins such as dict, list, or str unless
+        the behavior is deliberately tested; prefer composition, collections
+        wrapper types, or relevant ABCs.
+      target: object_model
+      action: discourage
+      rationale: Concrete built-in subclasses can bypass overridden methods in surprising ways.
+
+    - id: python.classes.special_methods_match_protocols
+      title: Match special method expectations
+      when: language == "python" and python_classes_protocols_requested == true
+      should: >-
+        Implement special methods only to participate in Python protocols and
+        keep their behavior consistent with built-in expectations for repr, str,
+        len, iteration, containment, equality, and hashing.
+      target: data_model
+      action: recommend
+      rationale: Special methods should make objects feel native, not hide side effects.
+
+  preference:
+    - id: python.classes.preference_composition_over_inheritance
+      title: Prefer composition over inheritance
+      when: language == "python" and python_classes_protocols_requested == true
+      prefer: composition
+      over:
+        - unnecessary_inheritance
+      target: object_model
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.classes.verify_object_model
+      type: llm_self_check
+      applies_to:
+        - class_design
+        - object_model
+        - interface_design
+        - data_model
+      severity: advisory
+      prompt: >-
+        Check that classes are justified by cohesive behavior, dataclasses have
+        clear schemas, inheritance represents substitutability, and special
+        methods follow Python protocol expectations.

@@ -1,0 +1,163 @@
+# Skill: Python Async And Concurrency
+# File: skills/domain/python/concurrency/async_and_concurrency.skill.yaml
+
+skill:
+  id: python.concurrency.async_and_concurrency
+  name: Python Async And Concurrency
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python concurrency policy for asyncio, threads, processes, subprocesses,
+    queues, locks, cancellation, timeouts, and workload model selection.
+
+  level: domain
+  domain: python
+  category: concurrency
+  priority: 90
+
+  tags:
+    - python
+    - concurrency
+    - async
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  trigger_aliases:
+    write_code:
+      - asyncio
+      - async python
+      - python thread
+      - threadpoolexecutor
+      - processpoolexecutor
+      - multiprocessing
+      - python concurrency
+      - python queue
+
+  context_rules:
+    - id: detect_python_concurrency_request
+      when_text_matches:
+        - asyncio
+        - async python
+        - async def
+        - thread
+        - threadpoolexecutor
+        - processpoolexecutor
+        - multiprocessing
+        - subprocess
+        - queue
+        - concurrency
+        - parallelism
+        - cancellation
+        - timeout
+      set:
+        python_concurrency_requested: true
+      tags:
+        - python
+        - concurrency
+      confidence: 0.86
+
+sources:
+  - python_skills_professional:python-async-concurrency
+  - fluent_python_2e:topics
+  - effective_python_3e:topics
+
+rules:
+  hard:
+    - id: python.concurrency.no_unbounded_concurrency
+      title: Do not create unbounded concurrency
+      when: language == "python" and python_concurrency_requested == true
+      must_not: >-
+        Do not create unbounded threads, processes, tasks, queue growth, retries,
+        or subprocesses without a concurrency limit or backpressure strategy.
+      target: concurrency_bounds
+      action: forbid
+      rationale: Unbounded concurrency causes resource exhaustion and unstable latency.
+
+    - id: python.concurrency.no_blocking_async_calls
+      title: Do not block the event loop
+      when: language == "python" and python_concurrency_requested == true
+      must_not: >-
+        Do not call blocking sleep, synchronous network clients, synchronous file
+        reads for large work, or blocking subprocess APIs directly inside async
+        functions when they can stall the event loop.
+      target: async_blocking
+      action: forbid
+      rationale: Blocking the event loop defeats async concurrency.
+
+  soft:
+    - id: python.concurrency.choose_model_by_workload
+      title: Choose concurrency model by workload
+      when: language == "python" and python_concurrency_requested == true
+      should: >-
+        Choose the concurrency model by bottleneck: asyncio for many concurrent
+        async I/O operations, threads for blocking I/O libraries, processes or
+        native/vectorized code for CPU-bound Python, subprocess for external commands,
+        and queues for producer-consumer coordination.
+      target: concurrency_model
+      action: recommend
+      rationale: Concurrency primitives solve different bottlenecks.
+
+    - id: python.concurrency.protect_shared_state
+      title: Protect shared mutable state
+      when: language == "python" and python_concurrency_requested == true
+      should: >-
+        Avoid shared mutable state where practical; otherwise protect it with
+        locks, queues, immutable messages, ownership transfer, or process boundaries.
+      target: shared_state
+      action: recommend
+      rationale: Race conditions remain possible even with Python's runtime constraints.
+
+    - id: python.concurrency.handle_timeouts_and_cancellation
+      title: Handle timeouts and cancellation
+      when: language == "python" and python_concurrency_requested == true
+      should: >-
+        Define timeout, cancellation, cleanup, retry, and error-reporting behavior
+        for long-running or concurrent operations.
+      target: cancellation
+      action: recommend
+      rationale: Product concurrent code must fail and stop predictably.
+
+  preference:
+    - id: python.concurrency.preference_message_passing
+      title: Prefer message passing
+      when: language == "python" and python_concurrency_requested == true
+      prefer: message_passing_or_queues
+      over:
+        - shared_mutable_state
+      target: concurrency
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.concurrency.verify_concurrency
+      type: llm_self_check
+      applies_to:
+        - concurrency_model
+        - concurrency_bounds
+        - async_blocking
+        - shared_state
+        - cancellation
+      severity: advisory
+      prompt: >-
+        Check that Python concurrency is bounded, matches the workload, avoids
+        blocking async event loops, protects shared state, and handles timeout,
+        cancellation, failure, and cleanup paths.

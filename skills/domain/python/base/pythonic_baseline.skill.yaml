@@ -1,0 +1,300 @@
+# Skill: Pythonic Baseline
+# File: skills/domain/python/base/pythonic_baseline.skill.yaml
+
+skill:
+  id: python.core.pythonic_baseline
+  name: Pythonic Baseline
+  version: 1.0.0
+  status: stable
+  description: >-
+    Baseline Python policy for readable, explicit, idiomatic code generation,
+    review, refactoring, and API design.
+
+  level: domain
+  domain: python
+  category: base
+  priority: 62
+
+  tags:
+    - python
+    - pythonic
+    - readability
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+      - write_tests
+
+  dependencies: []
+  incompatibilities: []
+
+task_analysis:
+  trigger_confidence: 0.9
+
+  domain_aliases:
+    - python
+    - py
+    - python3
+    - Python
+
+  domain_semantics:
+    - Python source code task
+    - Python package, module, script, or test task
+    - Pythonic implementation or refactoring task
+
+  trigger_aliases:
+    write_code:
+      - write python
+      - implement python
+      - generate python
+      - 写 python
+      - 实现 python
+    review_code:
+      - review python
+      - inspect python
+      - python review
+      - 检查 python
+    refactor_code:
+      - refactor python
+      - python refactor
+      - 重构 python
+    design_api:
+      - design python api
+      - python api
+      - python interface
+      - 设计 python api
+    improve_code_quality:
+      - python best practices
+      - python code quality
+      - pythonic
+      - pep8
+      - pep 8
+      - 最佳实践
+      - best practices
+    write_tests:
+      - pytest
+      - unittest
+      - write python tests
+      - python tests
+      - 写 python 测试
+
+  trigger_semantics:
+    write_code:
+      - write Python code
+      - implement a Python module or script
+      - generate Python source code
+    review_code:
+      - review Python code for correctness, readability, and maintainability
+    refactor_code:
+      - refactor Python code while preserving behavior
+    design_api:
+      - design a Python API with clear caller ergonomics
+    improve_code_quality:
+      - apply Python best practices and make code more Pythonic
+      - improve Python readability, naming, imports, and structure
+    write_tests:
+      - write Python unit tests or pytest tests
+
+  trigger_capabilities:
+    write_code:
+      - code_generation
+    review_code:
+      - code_review
+    refactor_code:
+      - refactor_code
+    design_api:
+      - api_design
+    improve_code_quality:
+      - code_review
+      - refactor_code
+    write_tests:
+      - code_generation
+      - test_generation
+
+  context_rules:
+    - id: detect_python_best_practices
+      when_text_matches:
+        - python best practices
+        - pythonic
+        - pep8
+        - pep 8
+        - python 最佳实践
+      set:
+        python_best_practices_requested: true
+        artifact_type: code
+      tags:
+        - python
+        - best-practices
+      semantic_match:
+        - apply idiomatic Python best practices
+        - improve Python code according to PEP 8 and Pythonic conventions
+      confidence: 0.86
+
+    - id: detect_python_project_tooling
+      when_text_matches:
+        - pyproject.toml
+        - requirements.txt
+        - ruff
+        - black
+        - mypy
+        - pyright
+        - pytest.ini
+        - tox.ini
+        - noxfile.py
+      set:
+        python_project_tooling_relevant: true
+        artifact_type: code
+      tags:
+        - python
+        - tooling
+      semantic_match:
+        - inspect Python project tooling before changing code
+        - preserve existing Python formatter, linter, type checker, and package manager conventions
+      confidence: 0.84
+
+sources:
+  - https://gist.github.com/sloria/7001839
+  - https://gist.github.com/ruimaranhao/4e18cbe3dad6f68040c32ed6709090a3
+  - pep:20
+  - pep:8
+  - pep:257
+  - fluent_python_2e:topics
+  - effective_python_3e:topics
+  - python_skills_professional:python-core
+
+source_notes:
+  - Gist guidance, PEP references, and local book topic outlines were compressed
+    into project-owned AI execution rules.
+
+rules:
+  hard:
+    - id: python.core.preserve_behavior
+      title: Preserve observable behavior during Python refinement
+      when: language == "python" and refinement_requested == true
+      must: >-
+        Preserve the existing observable behavior unless the task explicitly asks
+        for a behavior change.
+      target: behavior_preservation
+      action: require
+      rationale: Refactoring and best-practice cleanup must not silently change semantics.
+
+    - id: python.core.do_not_disable_validation
+      title: Do not hide validation failures
+      when: language == "python"
+      must_not: >-
+        Do not disable, delete, skip, xfail, or weaken tests, lint rules, type
+        checks, or validation gates merely to make a Python change appear to pass.
+      target: validation_integrity
+      action: forbid
+      rationale: Product-quality changes preserve the signal from validation.
+
+  soft:
+    - id: python.core.prefer_explicit_readable_code
+      title: Prefer explicit readable Python
+      when: language == "python"
+      should: >-
+        Prefer explicit, readable Python that makes control flow, data flow, and
+        important assumptions easy to see.
+      target: readability
+      action: recommend
+      rationale: Python code is usually read more often than it is written.
+
+    - id: python.core.use_language_native_idioms
+      title: Use Python-native constructs
+      when: language == "python"
+      should: >-
+        Use Python-native constructs such as iteration, unpacking, context
+        managers, comprehensions, generators, and standard-library helpers when
+        they express the operation directly.
+      target: pythonic_idioms
+      action: recommend
+      rationale: Idiomatic Python reduces incidental code while keeping intent visible.
+
+    - id: python.core.inspect_project_conventions
+      title: Inspect project conventions before changing Python code
+      when: language == "python"
+      should: >-
+        Inspect the existing Python version, package layout, dependency manager,
+        formatter, linter, type checker, test runner, and nearby code style before
+        making non-trivial edits.
+      target: project_conventions
+      action: recommend
+      rationale: Python projects vary widely; product-level changes should align with the repo.
+
+    - id: python.core.prefer_standard_library_first
+      title: Prefer the standard library first
+      when: language == "python"
+      should: >-
+        Prefer standard-library modules and existing project dependencies before
+        adding new runtime dependencies.
+      target: dependencies
+      action: recommend
+      rationale: Avoiding unnecessary dependencies improves portability and maintenance.
+
+    - id: python.core.keep_import_time_light
+      title: Keep import-time behavior light
+      when: language == "python"
+      should: >-
+        Keep module import time free of expensive I/O, network calls, subprocess
+        launches, environment mutation, and application execution; put executable
+        work behind functions, entry points, or main guards.
+      target: import_time_behavior
+      action: recommend
+      rationale: Import-safe modules are easier to test, reuse, and package.
+
+    - id: python.core.avoid_clever_density
+      title: Avoid clever or overly dense Python
+      when: language == "python"
+      should_not: >-
+        Do not compress logic into clever one-liners, nested expressions, or
+        advanced language features when simpler statements would be clearer.
+      target: readability
+      action: discourage
+      rationale: Pythonic code values clarity over compactness.
+
+    - id: python.core.validate_appropriate_level
+      title: Validate at the appropriate level
+      when: language == "python"
+      should: >-
+        Run or recommend the project-native validation appropriate to the change,
+        such as affected tests for local logic, full tests and type checks for
+        public API changes, build or install smoke tests for packaging, and
+        targeted stress, benchmark, or security tests for high-risk changes.
+      target: validation
+      action: recommend
+      rationale: Validation should scale with the risk and blast radius of the change.
+
+  preference:
+    - id: python.core.preference_readability_over_cleverness
+      title: Prefer readability over cleverness
+      when: language == "python"
+      prefer: readability
+      over:
+        - cleverness
+      target: implementation_style
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.core.verify_readability
+      type: llm_self_check
+      applies_to:
+        - readability
+        - pythonic_idioms
+      severity: advisory
+      prompt: >-
+        Check that the Python code is explicit, readable, idiomatic, and does not
+        hide important behavior in clever expressions. Also check that existing
+        project tooling was respected and validation results were reported honestly.

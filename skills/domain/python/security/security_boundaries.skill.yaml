@@ -1,0 +1,187 @@
+# Skill: Python Security Boundaries
+# File: skills/domain/python/security/security_boundaries.skill.yaml
+
+skill:
+  id: python.security.security_boundaries
+  name: Python Security Boundaries
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python security policy for untrusted input, deserialization, subprocesses,
+    secrets, SQL, paths, archives, templates, and external boundaries.
+
+  level: domain
+  domain: python
+  category: security
+  priority: 96
+
+  tags:
+    - python
+    - security
+    - validation
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  trigger_aliases:
+    improve_code_quality:
+      - python security
+      - input validation
+      - subprocess
+      - pickle
+      - eval
+      - exec
+      - secret
+      - credential
+      - path traversal
+      - sql injection
+
+  context_rules:
+    - id: detect_python_security_sensitive_request
+      when_text_matches:
+        - python security
+        - subprocess
+        - pickle
+        - eval
+        - exec
+        - secret
+        - credential
+        - password
+        - token
+        - sql injection
+        - path traversal
+        - yaml.load
+        - input validation
+        - untrusted
+        - archive
+      set:
+        python_security_sensitive: true
+        external_input_sensitive: true
+      tags:
+        - python
+        - security
+      confidence: 0.9
+
+sources:
+  - python_skills_professional:python-security
+  - effective_python_3e:topics
+
+rules:
+  hard:
+    - id: python.security.no_eval_exec_for_untrusted_input
+      title: Do not execute untrusted input
+      when: language == "python" and python_security_sensitive == true
+      must_not: >-
+        Do not use eval, exec, dynamic import, or generated code execution on
+        untrusted input unless code execution is the explicit product purpose and
+        the authority boundary is documented.
+      target: code_execution
+      action: forbid
+      rationale: Dynamic execution is a direct code-injection boundary.
+
+    - id: python.security.no_unsafe_deserialization
+      title: Do not deserialize untrusted data unsafely
+      when: language == "python" and python_security_sensitive == true
+      must_not: >-
+        Do not use unsafe deserialization for untrusted data, including pickle,
+        marshal, or unsafe YAML loaders.
+      target: deserialization
+      action: forbid
+      rationale: Unsafe deserialization can execute code or construct dangerous objects.
+
+    - id: python.security.no_secret_leakage
+      title: Do not leak secrets
+      when: language == "python" and python_security_sensitive == true
+      must_not: >-
+        Do not log, print, serialize, or expose passwords, tokens, private keys,
+        cookies, authorization headers, or credential-bearing URLs.
+      target: secrets
+      action: forbid
+      rationale: Product code must treat credentials as sensitive by default.
+
+  soft:
+    - id: python.security.validate_external_input
+      title: Validate external input
+      when: language == "python" and external_input_sensitive == true
+      should: >-
+        Validate and normalize external input from CLI args, environment
+        variables, files, archives, JSON, YAML, TOML, HTTP, databases, queues,
+        subprocess output, and templates before trusting it.
+      target: input_validation
+      action: recommend
+      rationale: Most product security issues start at an unvalidated boundary.
+
+    - id: python.security.use_safe_subprocess_apis
+      title: Use safe subprocess APIs
+      when: language == "python" and python_security_sensitive == true
+      should: >-
+        Use subprocess argument lists with check, explicit capture/text behavior,
+        and no shell=True for user-controlled input.
+      target: subprocess
+      action: recommend
+      rationale: Argument lists avoid command-string injection.
+
+    - id: python.security.prevent_path_escape
+      title: Prevent path traversal
+      when: language == "python" and python_security_sensitive == true
+      should: >-
+        Resolve and validate user-controlled paths against an allowed root before
+        reading, writing, deleting, extracting, or executing files.
+      target: filesystem
+      action: recommend
+      rationale: Path normalization and containment checks prevent root escape.
+
+    - id: python.security.parameterize_queries
+      title: Parameterize database queries
+      when: language == "python" and python_security_sensitive == true
+      should: >-
+        Use parameterized database queries or ORM parameter binding instead of
+        string formatting for values.
+      target: sql
+      action: recommend
+      rationale: Query parameters prevent SQL injection and quoting bugs.
+
+  preference:
+    - id: python.security.preference_allowlist_over_dynamic_dispatch
+      title: Prefer allowlists
+      when: language == "python" and python_security_sensitive == true
+      prefer: allowlisted_dispatch
+      over:
+        - input_driven_dynamic_execution
+      target: security
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.security.verify_boundaries
+      type: llm_self_check
+      applies_to:
+        - code_execution
+        - deserialization
+        - subprocess
+        - secrets
+        - filesystem
+        - input_validation
+      severity: error
+      prompt: >-
+        Check untrusted input boundaries for eval/exec, unsafe deserialization,
+        shell command injection, path traversal, SQL formatting, secret leakage,
+        and missing malicious-input tests.

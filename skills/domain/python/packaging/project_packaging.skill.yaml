@@ -1,0 +1,175 @@
+# Skill: Python Project Packaging
+# File: skills/domain/python/packaging/project_packaging.skill.yaml
+
+skill:
+  id: python.packaging.project_packaging
+  name: Python Project Packaging
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python packaging policy for project layout, pyproject.toml, dependency
+    management, build backends, entry points, and reproducible installs.
+
+  level: domain
+  domain: python
+  category: packaging
+  priority: 86
+
+  tags:
+    - python
+    - packaging
+    - dependencies
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  trigger_aliases:
+    improve_code_quality:
+      - python packaging
+      - pyproject.toml
+      - requirements.txt
+      - setup.py
+      - setup.cfg
+      - python dependency
+      - python dependencies
+      - python package
+      - python build
+      - wheel
+
+  context_rules:
+    - id: detect_python_packaging_request
+      when_text_matches:
+        - pyproject.toml
+        - python packaging
+        - pip
+        - uv
+        - poetry
+        - pdm
+        - hatch
+        - setuptools
+        - requirements.txt
+        - virtualenv
+        - venv
+        - wheel
+        - build backend
+        - console_scripts
+      set:
+        python_packaging_requested: true
+        python_project_tooling_relevant: true
+        artifact_type: code
+      tags:
+        - python
+        - packaging
+      confidence: 0.86
+
+sources:
+  - python_skills_professional:python-packaging
+  - effective_python_3e:topics
+
+rules:
+  hard:
+    - id: python.packaging.do_not_switch_tools_casually
+      title: Do not switch Python packaging tools casually
+      when: language == "python" and python_packaging_requested == true
+      must_not: >-
+        Do not change package manager, build backend, lockfile strategy,
+        supported Python versions, package name, or public entry points unless
+        the task explicitly asks for that change.
+      target: packaging_tooling
+      action: forbid
+      rationale: Packaging tool changes affect installation, CI, release, and users.
+
+    - id: python.packaging.no_global_install_assumption
+      title: Do not assume global Python installs
+      when: language == "python" and python_packaging_requested == true
+      must_not: >-
+        Do not rely on global interpreter packages or global pip installs for
+        reproducible project behavior.
+      target: environment
+      action: forbid
+      rationale: Product Python projects need isolated, reproducible environments.
+
+  soft:
+    - id: python.packaging.follow_existing_packaging_tool
+      title: Follow existing packaging tooling
+      when: language == "python" and python_packaging_requested == true
+      should: >-
+        Follow the project's existing packaging and dependency toolchain, such
+        as pyproject.toml, requirements files, Poetry, uv, PDM, Hatch, setuptools,
+        tox, nox, or lockfiles.
+      target: packaging_tooling
+      action: recommend
+      rationale: One source of packaging truth reduces environment drift.
+
+    - id: python.packaging.declare_runtime_metadata
+      title: Declare runtime metadata
+      when: language == "python" and python_packaging_requested == true
+      should: >-
+        Keep package metadata explicit, including supported Python versions,
+        runtime dependencies, optional development dependencies, readme, license,
+        and entry points where relevant.
+      target: package_metadata
+      action: recommend
+      rationale: Clear metadata improves installability and release quality.
+
+    - id: python.packaging.separate_runtime_and_dev_deps
+      title: Separate runtime and development dependencies
+      when: language == "python" and python_packaging_requested == true
+      should: >-
+        Separate runtime dependencies from development, test, lint, build, and
+        type-check dependencies.
+      target: dependencies
+      action: recommend
+      rationale: Consumers should not inherit project development tooling unnecessarily.
+
+    - id: python.packaging.smoke_test_builds
+      title: Smoke test builds and imports
+      when: language == "python" and python_packaging_requested == true
+      should: >-
+        For packaging changes, run or recommend a build, install, and import
+        smoke test using project-native tooling.
+      target: validation
+      action: recommend
+      rationale: Packaging can pass unit tests while failing installation.
+
+  preference:
+    - id: python.packaging.preference_existing_toolchain
+      title: Prefer existing packaging toolchain
+      when: language == "python" and python_packaging_requested == true
+      prefer: existing_project_toolchain
+      over:
+        - new_packaging_toolchain
+      target: packaging_tooling
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.packaging.verify_packaging
+      type: llm_self_check
+      applies_to:
+        - packaging_tooling
+        - dependencies
+        - package_metadata
+      severity: advisory
+      prompt: >-
+        Check that packaging changes preserve the existing toolchain, avoid
+        global install assumptions, separate dependency scopes, and include an
+        install/build smoke-test plan when relevant.

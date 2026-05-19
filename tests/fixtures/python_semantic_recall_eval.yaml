@@ -1,0 +1,129 @@
+cases:
+  - id: en_python_best_practices_compact
+    prompt: Apply Python best practices by cleaning imports, adding type hints, and writing pytest tests.
+    activation_ready: true
+    domain: python
+    task_type: improve_code_quality
+    required_context:
+      language: python
+      python_best_practices_requested: true
+      python_style_requested: true
+      python_typing_requested: true
+      python_testing_requested: true
+    forbidden_context:
+      - python_cli_requested
+      - python_packaging_requested
+      - python_concurrency_requested
+      - python_performance_requested
+      - python_security_sensitive
+      - python_classes_protocols_requested
+    required_tags:
+      - python
+      - style
+      - typing
+      - testing
+    forbidden_tags:
+      - cli
+      - packaging
+      - concurrency
+      - performance
+      - security
+
+  - id: en_python_public_api
+    prompt: Design a Python public API with caller ergonomics and clear failure behavior.
+    activation_ready: true
+    domain: python
+    task_type: design_api
+    required_context:
+      language: python
+      python_api_design_requested: true
+      user_facing_api: true
+    forbidden_context:
+      - python_cli_requested
+      - python_packaging_requested
+      - python_performance_requested
+    required_tags:
+      - python
+      - api-design
+
+  - id: en_python_cli_security
+    prompt: Build a Python CLI with argparse that validates paths, avoids shell injection in subprocess calls, and redacts secrets.
+    activation_ready: true
+    domain: python
+    task_type: write_code
+    required_context:
+      language: python
+      python_cli_requested: true
+      python_security_sensitive: true
+      external_input_sensitive: true
+    required_tags:
+      - python
+      - cli
+      - security
+
+  - id: en_python_packaging_async_perf
+    prompt: Improve Python packaging in pyproject.toml and optimize asyncio performance with bounded concurrency and benchmarks.
+    activation_ready: true
+    domain: python
+    task_type_not: unknown
+    required_context:
+      language: python
+      python_packaging_requested: true
+      python_concurrency_requested: true
+      python_performance_requested: true
+    required_tags:
+      - python
+      - packaging
+      - concurrency
+      - performance
+
+  - id: en_python_classes_protocols
+    prompt: Refactor this Python class hierarchy into dataclasses and Protocol-based interfaces where appropriate.
+    activation_ready: true
+    domain: python
+    task_type_not: unknown
+    required_context:
+      language: python
+      python_classes_protocols_requested: true
+    forbidden_context:
+      - python_cli_requested
+      - python_packaging_requested
+      - python_security_sensitive
+    required_tags:
+      - python
+      - classes
+
+  - id: zh_python_typing_tests
+    prompt: 给这个 Python 模块补 type hints 和 pytest 测试，顺便整理 imports
+    activation_ready: true
+    domain: python
+    task_type_not: unknown
+    required_context:
+      language: python
+      python_typing_requested: true
+      python_testing_requested: true
+      python_style_requested: true
+    forbidden_context:
+      - python_cli_requested
+      - python_packaging_requested
+      - python_concurrency_requested
+      - python_performance_requested
+      - python_security_sensitive
+
+  - id: en_python_docs_only
+    prompt: Rewrite the Python package README overview only, no code changes.
+    activation_ready: false
+    task_type: unknown
+    forbidden_context:
+      - python_best_practices_requested
+      - artifact_type
+      - refinement_requested
+
+  - id: zh_python_explain_only
+    prompt: 只解释这段 Python 代码，不需要修改
+    activation_ready: false
+    task_type: unknown
+    forbidden_context:
+      - python_best_practices_requested
+      - artifact_type
+      - refinement_requested

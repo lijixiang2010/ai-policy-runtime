@@ -1,0 +1,177 @@
+# Skill: Python Readability And Naming
+# File: skills/domain/python/style/readability_and_naming.skill.yaml
+
+skill:
+  id: python.style.readability_and_naming
+  name: Python Readability And Naming
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python style policy for PEP 8 naming, imports, comments, docstrings, and
+    source layout.
+
+  level: domain
+  domain: python
+  category: style
+  priority: 72
+
+  tags:
+    - python
+    - style
+    - pep8
+    - naming
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_python_style_request
+      when_text_matches:
+        - pep8
+        - pep 8
+        - python style
+        - python naming
+        - docstring
+        - imports
+        - import order
+        - python readability
+      set:
+        python_style_requested: true
+      tags:
+        - python
+        - style
+      semantic_match:
+        - apply Python naming and source layout conventions
+        - improve Python imports, comments, and docstrings
+      confidence: 0.84
+
+sources:
+  - https://gist.github.com/sloria/7001839
+  - https://gist.github.com/ruimaranhao/4e18cbe3dad6f68040c32ed6709090a3
+  - pep:8
+  - pep:257
+
+rules:
+  hard:
+    - id: python.style.no_wildcard_imports
+      title: Do not use wildcard imports
+      when: language == "python"
+      must_not: >-
+        Do not use wildcard imports in production Python code.
+      target: imports
+      action: forbid
+      rationale: Wildcard imports hide dependencies, obscure names, and make review harder.
+
+  soft:
+    - id: python.style.follow_pep8_when_sensible
+      title: Follow PEP 8 when sensible
+      when: language == "python"
+      should: >-
+        Follow PEP 8 naming, indentation, whitespace, and layout conventions
+        when they fit the project and do not conflict with local style.
+      target: style
+      action: recommend
+      rationale: Consistent style keeps Python modules easy to scan.
+
+    - id: python.style.name_by_role
+      title: Use conventional Python names
+      when: language == "python"
+      should: >-
+        Use lower_case_with_underscores for functions, variables, modules, and
+        packages; CapWords for classes and exceptions; and ALL_CAPS for constants.
+      target: naming
+      action: recommend
+      rationale: Conventional names communicate object roles before reading bodies.
+
+    - id: python.style.avoid_ambiguous_short_names
+      title: Avoid ambiguous short names
+      when: language == "python"
+      should_not: >-
+        Avoid ambiguous one-letter names, especially l, O, and I, except in tiny
+        local scopes where the meaning is immediately obvious.
+      target: naming
+      action: discourage
+      rationale: Ambiguous names increase reading and review cost.
+
+    - id: python.style.organize_imports
+      title: Organize imports by origin
+      when: language == "python"
+      should: >-
+        Keep imports at module top level and group them as standard library,
+        third-party packages, and local modules, separated by blank lines.
+      target: imports
+      action: recommend
+      rationale: Import grouping makes dependency origin and module coupling visible.
+
+    - id: python.style.prefer_module_import_boundaries
+      title: Prefer clear import boundaries
+      when: language == "python"
+      should: >-
+        Prefer importing modules or explicit public names over importing deep
+        implementation symbols, unless the dependency's documented API recommends it.
+      target: imports
+      action: recommend
+      rationale: Clear import boundaries reduce circular-import and name-shadowing risk.
+
+    - id: python.style.use_docstrings_for_public_api
+      title: Document public Python APIs
+      when: language == "python"
+      should: >-
+        Use concise docstrings for public modules, classes, functions, and
+        methods, including arguments, return semantics, important exceptions,
+        and examples when they clarify usage.
+      target: documentation
+      action: recommend
+      rationale: Public Python APIs need contracts that readers and tools can consume.
+
+    - id: python.style.comments_explain_why
+      title: Comments explain why
+      when: language == "python"
+      should: >-
+        Use comments sparingly to explain non-obvious reasons, constraints, or
+        tradeoffs; prefer clearer names or smaller functions for restating what
+        code already says.
+      target: comments
+      action: recommend
+      rationale: Comments age better when they capture intent instead of mechanics.
+
+  preference:
+    - id: python.style.preference_project_style_over_external_defaults
+      title: Prefer project style over external defaults
+      when: language == "python"
+      prefer: project_local_style
+      over:
+        - generic_style_preference
+      target: style
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.style.verify_imports_and_names
+      type: llm_self_check
+      applies_to:
+        - imports
+        - naming
+        - documentation
+      severity: advisory
+      prompt: >-
+        Check that Python imports, names, docstrings, and comments follow local
+        style and remain readable without hidden dependencies.

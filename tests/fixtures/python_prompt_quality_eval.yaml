@@ -1,0 +1,76 @@
+cases:
+  - id: python_best_practices_compact
+    provider: deterministic
+    prompt: Apply Python best practices by cleaning imports, adding type hints, and writing pytest tests.
+    include:
+      - Do not use wildcard imports
+      - Prioritize type hints for public functions
+      - Keep tests isolated from real networks
+      - Do not disable, delete, skip, xfail
+    exclude:
+      - Do not execute CLI work at import time
+      - Do not change package manager
+      - Do not create unbounded threads
+      - Define the metric, measure a baseline
+      - Prefer composition over inheritance
+    max_hard_rules: 6
+    max_soft_rules: 8
+    max_preferences: 3
+    max_verification: 4
+
+  - id: python_cli_security
+    provider: deterministic
+    prompt: Build a Python CLI with argparse that validates paths, avoids shell injection in subprocess calls, and redacts secrets.
+    include:
+      - Do not execute CLI work at import time
+      - Do not use eval, exec, dynamic import
+      - Use subprocess argument lists
+      - Resolve and validate user-controlled paths
+      - Do not log, print, serialize, or expose passwords
+    exclude:
+      - Do not change package manager
+      - Define the metric, measure a baseline
+      - Prefer composition over inheritance
+    max_hard_rules: 6
+    max_soft_rules: 8
+    max_preferences: 3
+    max_verification: 4
+
+  - id: python_packaging_async_perf
+    provider: deterministic
+    prompt: Improve Python packaging in pyproject.toml and optimize asyncio performance with bounded concurrency and benchmarks.
+    include:
+      - Do not change package manager
+      - Do not create unbounded threads, processes, tasks
+      - Define the metric, measure a baseline
+      - Keep package metadata explicit
+    exclude:
+      - Do not use eval, exec
+      - Do not execute CLI work at import time
+      - Resolve and validate user-controlled paths
+    max_hard_rules: 6
+    max_soft_rules: 8
+    max_preferences: 3
+    max_verification: 4
+
+  - id: python_public_api
+    provider: deterministic
+    prompt: Design a Python public API with caller ergonomics, keyword-only options, and clear type hints.
+    include:
+      - Make the common API path simple
+      - Use keyword-only arguments
+      - Use type hints on public functions
+      - Do not expose accidental shared mutable state
+    exclude:
+      - Do not execute CLI work at import time
+      - Do not change package manager
+      - Do not create unbounded threads
+    max_hard_rules: 6
+    max_soft_rules: 8
+    max_preferences: 3
+    max_verification: 4
+
+  - id: python_docs_only
+    provider: deterministic
+    prompt: Rewrite the Python package README overview only, no code changes.
+    applicable: false

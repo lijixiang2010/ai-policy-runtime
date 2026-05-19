@@ -1,0 +1,154 @@
+# Skill: Python Function Contracts
+# File: skills/domain/python/functions/function_contracts.skill.yaml
+
+skill:
+  id: python.functions.function_contracts
+  name: Python Function Contracts
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python function policy for arguments, return contracts, decorators,
+    generators, and call-site clarity.
+
+  level: domain
+  domain: python
+  category: functions
+  priority: 80
+
+  tags:
+    - python
+    - functions
+    - api-design
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_python_function_design_request
+      when_text_matches:
+        - python function
+        - function arguments
+        - keyword-only
+        - decorator
+        - return none
+        - return value
+        - mutable default
+      set:
+        python_function_design_requested: true
+        user_facing_api: true
+      tags:
+        - python
+        - functions
+      confidence: 0.84
+
+sources:
+  - effective_python_3e:topics
+  - fluent_python_2e:topics
+  - python_skills_professional:python-functions
+
+rules:
+  hard:
+    - id: python.functions.no_mutable_default_arguments
+      title: Do not use mutable default arguments
+      when: language == "python"
+      must_not: >-
+        Do not use mutable default argument values for state that should be fresh
+        for each call.
+      target: function_defaults
+      action: forbid
+      rationale: Mutable defaults are evaluated once and can leak state across calls.
+
+  soft:
+    - id: python.functions.keep_coherent
+      title: Keep functions coherent
+      when: language == "python" and (python_function_design_requested == true or user_facing_api == true)
+      should: >-
+        Keep each function focused on one conceptual job and extract a helper
+        when a block deserves a domain name.
+      target: function_design
+      action: recommend
+      rationale: Coherent functions make behavior easier to test and review.
+
+    - id: python.functions.make_return_contract_explicit
+      title: Make return contracts explicit
+      when: language == "python" and (python_function_design_requested == true or user_facing_api == true)
+      should: >-
+        Make return shapes explicit and consistent; prefer a typed result object
+        over returning several unrelated positional values from public or complex
+        functions.
+      target: return_contract
+      action: recommend
+      rationale: Stable return contracts reduce caller mistakes.
+
+    - id: python.functions.use_keyword_only_for_ambiguous_arguments
+      title: Use keyword-only arguments for clarity
+      when: language == "python" and (python_function_design_requested == true or user_facing_api == true)
+      should: >-
+        Use keyword-only arguments for options, booleans, timeouts, modes, and
+        other values that are unclear or easy to swap at the call site.
+      target: function_arguments
+      action: recommend
+      rationale: Keyword-only arguments make calls self-documenting.
+
+    - id: python.functions.preserve_decorator_metadata
+      title: Preserve decorator metadata
+      when: language == "python" and python_function_design_requested == true
+      should: >-
+        Use functools.wraps or an equivalent mechanism when writing decorators
+        that wrap functions.
+      target: decorators
+      action: recommend
+      rationale: Preserving metadata keeps introspection, docs, debugging, and tooling accurate.
+
+    - id: python.functions.avoid_flag_multiplexing
+      title: Avoid flag-driven unrelated behavior
+      when: language == "python" and (python_function_design_requested == true or user_facing_api == true)
+      should_not: >-
+        Avoid boolean flags or mode parameters that make one function perform
+        unrelated jobs; split responsibilities when behavior diverges materially.
+      target: function_design
+      action: discourage
+      rationale: Flag-heavy functions are harder to understand and test.
+
+  preference:
+    - id: python.functions.preference_explicit_parameters
+      title: Prefer explicit parameters
+      when: language == "python" and (python_function_design_requested == true or user_facing_api == true)
+      prefer: explicit_parameters
+      over:
+        - broad_args_kwargs
+      target: function_arguments
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.functions.verify_contracts
+      type: llm_self_check
+      applies_to:
+        - function_design
+        - function_arguments
+        - return_contract
+        - decorators
+      severity: advisory
+      prompt: >-
+        Check that Python functions have coherent responsibilities, explicit
+        argument and return contracts, no mutable defaults, and decorator metadata
+        is preserved where wrapping occurs.

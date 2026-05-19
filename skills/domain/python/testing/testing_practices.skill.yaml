@@ -1,0 +1,141 @@
+# Skill: Python Testing Practices
+# File: skills/domain/python/testing/testing_practices.skill.yaml
+
+skill:
+  id: python.testing.testing_practices
+  name: Python Testing Practices
+  version: 1.0.0
+  status: stable
+  description: >-
+    Python testing policy for isolated, descriptive, behavior-focused unit and
+    functional tests.
+
+  level: domain
+  domain: python
+  category: testing
+  priority: 78
+
+  tags:
+    - python
+    - testing
+    - pytest
+
+  capabilities:
+    - code_generation
+    - test_generation
+    - code_review
+    - refactor_code
+
+  activation:
+    when:
+      language: python
+    triggers:
+      - write_tests
+      - write_code
+      - review_code
+      - refactor_code
+      - improve_code_quality
+
+  dependencies:
+    - python.core.pythonic_baseline
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_python_testing_request
+      when_text_matches:
+        - pytest
+        - python tests
+        - unittest
+        - test coverage
+        - unit test
+        - functional test
+        - fixture
+        - mock
+      set:
+        python_testing_requested: true
+      tags:
+        - python
+        - testing
+      confidence: 0.84
+
+sources:
+  - https://gist.github.com/sloria/7001839
+  - https://gist.github.com/ruimaranhao/4e18cbe3dad6f68040c32ed6709090a3
+  - effective_python_3e:topics
+
+rules:
+  hard:
+    - id: python.testing.no_incomplete_passing_tests
+      title: Do not leave incomplete tests passing
+      when: language == "python" and python_testing_requested == true
+      must_not: >-
+        Do not leave incomplete, placeholder, skipped, or xfailed tests passing
+        as if the behavior were verified.
+      target: testing
+      action: forbid
+      rationale: Passing placeholders create false confidence and are easy to forget.
+
+  soft:
+    - id: python.testing.write_behavior_named_tests
+      title: Name tests by behavior
+      when: language == "python" and python_testing_requested == true
+      should: >-
+        Use descriptive test names that state the behavior, condition, and
+        expected outcome clearly enough to reduce comment-only explanations.
+      target: tests
+      action: recommend
+      rationale: Test names are executable documentation.
+
+    - id: python.testing.keep_tests_isolated
+      title: Keep tests isolated
+      when: language == "python" and python_testing_requested == true
+      should: >-
+        Keep tests isolated from real networks, production databases, clocks,
+        random sources, and process-global state unless the task is explicitly an
+        integration test.
+      target: tests
+      action: recommend
+      rationale: Isolated tests are faster, more reliable, and easier to debug.
+
+    - id: python.testing.prefer_focused_unit_tests
+      title: Prefer focused unit tests
+      when: language == "python" and python_testing_requested == true
+      should: >-
+        Prefer focused unit tests for small behavior and add scenario or
+        functional tests for user-visible flows where integration matters.
+      target: tests
+      action: recommend
+      rationale: Good Python test suites balance fast feedback with realistic coverage.
+
+    - id: python.testing.cover_boundaries_and_failures
+      title: Cover boundaries and failures
+      when: language == "python" and python_testing_requested == true
+      should: >-
+        Cover boundary cases, error paths, empty inputs, optional values,
+        resource cleanup, and public contract behavior, not only the happy path.
+      target: tests
+      action: recommend
+      rationale: Best-practice tests verify the behavior most likely to regress.
+
+  preference:
+    - id: python.testing.preference_deterministic_tests
+      title: Prefer deterministic tests
+      when: language == "python" and python_testing_requested == true
+      prefer: deterministic_isolated_tests
+      over:
+        - environment_dependent_tests
+      target: tests
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: python.testing.verify_test_quality
+      type: llm_self_check
+      applies_to:
+        - tests
+        - testing
+      severity: advisory
+      prompt: >-
+        Check that Python tests are behavior-named, isolated, deterministic, and
+        cover important boundary and failure behavior.
