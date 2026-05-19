@@ -1911,6 +1911,89 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertFalse(user_prompt_submit._enabled_for(config, "codex"))
         self.assertTrue(user_prompt_submit._enabled_for(config, "claude"))
 
+    def test_user_prompt_hook_records_turn_state_for_non_applicable_prompt(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"enabled": True, "agents": ["codex"]}),
+                encoding="utf-8",
+            )
+
+            payload = {
+                "cwd": str(root),
+                "turn_id": "turn-probe",
+                "session_id": "session-probe",
+                "prompt": "验证 hook：policy-runtime-hook-probe-20260519",
+            }
+            with patch.object(user_prompt_submit, "_read_payload", return_value=payload):
+                with patch.object(
+                    user_prompt_submit,
+                    "_resolve_effective_prompt",
+                    return_value="",
+                ):
+                    with patch("sys.stdout", new=io.StringIO()) as stdout:
+                        exit_code = user_prompt_submit.main()
+
+            state = json.loads(
+                (root / user_prompt_submit.HOOK_STATE_PATH).read_text(encoding="utf-8")
+            )
+            response = json.loads(stdout.getvalue())
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(state["turn_id"], "turn-probe")
+        self.assertEqual(state["prompt"], "验证 hook：policy-runtime-hook-probe-20260519")
+        self.assertFalse(state["effective_rules_generated"])
+        self.assertIsNone(state["effective_prompt_path"])
+        self.assertEqual(state["additional_context_chars"], 0)
+        self.assertIsNone(state["hook_error"])
+        self.assertEqual(
+            response["hookSpecificOutput"],
+            {"hookEventName": "UserPromptSubmit", "additionalContext": ""},
+        )
+
+    def test_user_prompt_hook_records_effective_rules_generation(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"enabled": True, "agents": ["codex"]}),
+                encoding="utf-8",
+            )
+
+            payload = {
+                "cwd": str(root),
+                "turn_id": "turn-cpp",
+                "session_id": "session-cpp",
+                "prompt": "帮我设计一个 C++20 低延迟队列 API",
+            }
+            effective_prompt = "# Effective Rules for Current Task\n"
+            with patch.object(user_prompt_submit, "_read_payload", return_value=payload):
+                with patch.object(
+                    user_prompt_submit,
+                    "_resolve_effective_prompt",
+                    return_value=effective_prompt,
+                ):
+                    with patch("sys.stdout", new=io.StringIO()) as stdout:
+                        exit_code = user_prompt_submit.main()
+
+            state = json.loads(
+                (root / user_prompt_submit.HOOK_STATE_PATH).read_text(encoding="utf-8")
+            )
+            response = json.loads(stdout.getvalue())
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(state["effective_rules_generated"])
+        self.assertEqual(
+            state["effective_prompt_path"],
+            str((root / ".policy" / "current" / "effective-prompt.md").resolve()),
+        )
+        self.assertEqual(state["additional_context_chars"], len(effective_prompt))
+        self.assertIsNone(state["hook_error"])
+        self.assertEqual(response["hookSpecificOutput"]["additionalContext"], effective_prompt)
+
     def test_codex_hook_config_reads_post_refinement_options(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             config = user_prompt_submit.ProjectHookConfig.from_mapping(
@@ -2616,7 +2699,7 @@ class PolicyRuntimeTests(unittest.TestCase):
             content = config_path.read_text(encoding="utf-8")
 
         self.assertIn("[features]", content)
-        self.assertIn("codex_hooks = true", content)
+        self.assertIn("hooks = true", content)
 
     def test_configure_codex_config_preserves_existing_toml(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -2633,7 +2716,20 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertIn("model = \"gpt-5\"", content)
         self.assertIn("other = true", content)
-        self.assertIn("codex_hooks = true", content)
+        self.assertIn("hooks = true", content)
+
+    def test_configure_codex_config_removes_deprecated_codex_hooks_feature(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
+
+            config_path = configure_codex_config(root)
+            content = config_path.read_text(encoding="utf-8")
+
+        self.assertIn("hooks = true", content)
+        self.assertNotIn("codex_hooks", content)
 
     def test_configure_codex_disable_preserves_other_agents(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -2731,7 +2827,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(policy["agents"], ["codex"])
         self.assertIn("UserPromptSubmit", hooks["hooks"])
-        self.assertIn("codex_hooks = true", codex_config)
+        self.assertIn("hooks = true", codex_config)
 
     def test_npm_package_exposes_ai_policy_commands(self) -> None:
         package = json.loads(Path("package.json").read_text(encoding="utf-8"))
@@ -2854,7 +2950,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(policy["enabled"])
         self.assertEqual(policy["agents"], ["codex"])
         self.assertIn("UserPromptSubmit", hooks["hooks"])
-        self.assertIn("codex_hooks = true", codex_config)
+        self.assertIn("hooks = true", codex_config)
         self.assertFalse(claude_settings_exists)
 
     def test_ai_policy_embedding_configure_writes_project_config(self) -> None:

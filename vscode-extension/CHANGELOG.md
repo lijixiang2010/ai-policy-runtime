@@ -8,3 +8,6 @@ Maintained by Miles Li.
 - Add pack selection for Codex prompts.
 - Write project-local `.policy/config.json` for the Codex hook.
 - Add status and Effective Rules viewing commands.
+- Bundle the AI Policy Runtime assets inside the VS Code extension.
+- Auto-generate Codex project hook files for each workspace.
+- Add runtime validation details and latest hook-state reporting.

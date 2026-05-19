@@ -208,7 +208,13 @@ def configure_codex_config(root: Path, *, enabled: bool = True) -> Path:
 
     path = root / CODEX_CONFIG_FILE
     original = path.read_text(encoding="utf-8") if path.exists() else ""
-    updated = _set_toml_bool(original, "features", "codex_hooks", enabled)
+    updated = _set_toml_bool(
+        original,
+        "features",
+        "hooks",
+        enabled,
+        remove_keys=("codex_hooks",),
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(updated, encoding="utf-8")
     return path
@@ -242,7 +248,7 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
 def _codex_hooks_enabled(path: Path) -> bool:
     if not path.exists():
         return False
-    return _toml_bool(path.read_text(encoding="utf-8"), "features", "codex_hooks")
+    return _toml_bool(path.read_text(encoding="utf-8"), "features", "hooks")
 
 
 def _project_hooks_configured(config: dict[str, Any]) -> bool:
@@ -279,7 +285,14 @@ def _quote_shell(value: str) -> str:
     return escaped
 
 
-def _set_toml_bool(text: str, section: str, key: str, value: bool) -> str:
+def _set_toml_bool(
+    text: str,
+    section: str,
+    key: str,
+    value: bool,
+    *,
+    remove_keys: tuple[str, ...] = (),
+) -> str:
     lines = text.splitlines()
     target = f"{key} = {'true' if value else 'false'}"
     section_header = f"[{section}]"
@@ -297,6 +310,11 @@ def _set_toml_bool(text: str, section: str, key: str, value: bool) -> str:
             in_section = stripped == section_header
             section_found = section_found or in_section
             output.append(line)
+            continue
+        if in_section and any(
+            stripped.startswith(f"{remove_key} ") and "=" in stripped
+            for remove_key in remove_keys
+        ):
             continue
         if in_section and stripped.startswith(f"{key} ") and "=" in stripped:
             output.append(target)

@@ -24,6 +24,10 @@ low-latency constraints, and library API design.
 Install the Codex or Claude Code extension you want to use in VS Code. Then
 enable AI Policy Runtime for the workspace and select the matching agent.
 
+AI Policy Runtime ships its policy runtime inside the VS Code extension package.
+Each workspace only stores its own `.policy` and agent hook configuration; users
+do not need to copy the runtime into their projects.
+
 ## Quick Start
 
 1. Open a workspace.
@@ -31,8 +35,21 @@ enable AI Policy Runtime for the workspace and select the matching agent.
 3. Enable the runtime.
 4. Select Codex, Claude Code, or both.
 5. Choose the policy packs for your project.
+6. Run `AI Policy Runtime: Validate Runtime` if you want a readiness report.
 
 Your selected AI coding agents will use the workspace policy automatically.
+For Codex, approve the generated project hooks when Codex asks you to trust them.
+
+## What It Creates
+
+AI Policy Runtime automatically creates and maintains workspace-local files:
+
+- `.policy/config.json`
+- `.codex/hooks.json`
+- `.codex/config.toml`
+
+The latest hook run is reported in `.policy/current/agent-hook-state.json`, and
+the rendered rules are written to `.policy/current/effective-prompt.md`.
 
 ## Available Commands
 

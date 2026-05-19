@@ -134,7 +134,7 @@
         "aiPolicy.policyRoot": {
           "type": "string",
           "default": "",
-          "description": "Optional policy asset root. Leave empty to let the Claude/Codex hook resolve its own plugin root."
+          "description": "Optional policy asset root for development or advanced overrides. Leave empty to use the runtime bundled with this extension."
         },
         "aiPolicy.autoInstall": {
           "type": "boolean",
@@ -218,10 +218,11 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "prepare-runtime": "node scripts/prepare-runtime.js",
     "package": "vsce package",
     "publish": "vsce publish",
     "watch": "tsc -watch -p ./",
-    "vscode:prepublish": "npm run compile"
+    "vscode:prepublish": "npm run prepare-runtime && npm run compile"
   },
   "devDependencies": {
     "@types/node": "20.11.30",

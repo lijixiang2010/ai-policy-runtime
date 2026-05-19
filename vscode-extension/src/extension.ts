@@ -24,10 +24,12 @@ type AgentTarget = 'codex' | 'claude';
 
 type PolicyPaths = {
   root: string;
+  policyRoot: string;
   config: string;
   codexHooks: string;
   codexConfig: string;
   effectivePrompt: string;
+  hookState: string;
 };
 
 type EmbeddingEnvironmentConfig = Pick<
@@ -57,9 +59,21 @@ const POLICY_CONFIG_FILE = path.join('.policy', 'config.json');
 const CODEX_HOOKS_FILE = path.join('.codex', 'hooks.json');
 const CODEX_CONFIG_FILE = path.join('.codex', 'config.toml');
 const EFFECTIVE_PROMPT_FILE = path.join('.policy', 'current', 'effective-prompt.md');
+const HOOK_STATE_FILE = path.join('.policy', 'current', 'agent-hook-state.json');
 const DEFAULT_AGENTS: AgentTarget[] = ['codex'];
 const DEFAULT_PACKS = ['cpp.safe_generation'];
 const DEFAULT_POST_REFINE_PACKS = ['cpp.production_refinement'];
+const REQUIRED_RUNTIME_PATHS = [
+  path.join('bin', 'ai-policy-hook.js'),
+  path.join('bin', 'ai-policy.js'),
+  path.join('hooks', 'user_prompt_submit.py'),
+  path.join('hooks', 'stop_refinement.py'),
+  path.join('ai_policy_runtime', '__init__.py'),
+  path.join('packs', 'cpp_safe_generation.pack.yaml'),
+  path.join('skills', 'domain', 'git', 'workflow', 'commit_hygiene.skill.yaml'),
+  path.join('schemas', 'effective-rules.schema.json'),
+  'pyproject.toml'
+];
 
 const COMMANDS = {
   enable: 'aiPolicy.enable',
@@ -135,7 +149,7 @@ const KNOWN_PACKS: PackItem[] = [
 ];
 
 export function activate(context: vscode.ExtensionContext): void {
-  const workspace = new PolicyWorkspace();
+  const workspace = new PolicyWorkspace(context.extensionUri.fsPath);
   const status = new PolicyStatusBar(workspace);
   const panel = new PolicyConfigViewProvider(context.extensionUri, workspace, status);
 
@@ -151,12 +165,24 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(COMMANDS.validateRuntime, () => validateRuntime(workspace)),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(CONFIG_SECTION)) {
-        void workspace.syncProjectConfig().then(() => status.refresh());
+        void workspace.syncProjectConfig().then(() => {
+          status.refresh();
+          panel.refresh();
+        });
       }
+    }),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      void workspace.syncProjectConfig().then(() => {
+        status.refresh();
+        panel.refresh();
+      });
     })
   );
 
-  void workspace.syncProjectConfig().then(() => status.refresh());
+  void workspace.syncProjectConfig().then(() => {
+    status.refresh();
+    panel.refresh();
+  });
 }
 
 export function deactivate(): void {
@@ -164,6 +190,8 @@ export function deactivate(): void {
 }
 
 class PolicyWorkspace {
+  constructor(private readonly extensionRoot: string) {}
+
   /** Read VS Code settings and write the project-local hook config. */
   async syncProjectConfig(): Promise<void> {
     const paths = this.pathsOrWarn();
@@ -231,15 +259,31 @@ class PolicyWorkspace {
     }
     return {
       root,
+      policyRoot: this.resolveRuntimeRoot(root),
       config: path.join(root, POLICY_CONFIG_FILE),
       codexHooks: path.join(root, CODEX_HOOKS_FILE),
       codexConfig: path.join(root, CODEX_CONFIG_FILE),
-      effectivePrompt: path.join(root, EFFECTIVE_PROMPT_FILE)
+      effectivePrompt: path.join(root, EFFECTIVE_PROMPT_FILE),
+      hookState: path.join(root, HOOK_STATE_FILE)
     };
   }
 
   rootPath(): string | undefined {
     return this.workspaceRoot();
+  }
+
+  runtimeRoot(): string {
+    return this.resolveRuntimeRoot(this.workspaceRoot());
+  }
+
+  private resolveRuntimeRoot(workspaceRoot: string | undefined): string {
+    const config = this.readConfig();
+    if (config.policyRoot) {
+      return path.isAbsolute(config.policyRoot)
+        ? config.policyRoot
+        : path.resolve(workspaceRoot ?? process.cwd(), config.policyRoot);
+    }
+    return this.extensionRoot;
   }
 
   private workspaceRoot(): string | undefined {
@@ -272,9 +316,12 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
 
   private async handleMessage(message: { type: string; config?: PolicyConfig }): Promise<void> {
     if (message.type === 'save' && message.config) {
-      await this.workspace.saveConfig(normalizeConfig(message.config));
+      const before = this.workspace.readConfig();
+      const next = normalizeConfig(message.config);
+      await this.workspace.saveConfig(next);
       this.status.refresh();
       await this.view?.webview.postMessage({ type: 'saved' });
+      maybeShowCodexTrustHint(this.workspace, before, next);
       return;
     }
     if (message.type === 'showEffectiveRules') {
@@ -302,7 +349,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     const state = JSON.stringify({
       config,
       environmentConfig: readEmbeddingEnvironmentConfig(),
-      embeddingAvailability: readEmbeddingAvailability(config, this.workspace.rootPath()),
+      embeddingAvailability: readEmbeddingAvailability(config, this.workspace.rootPath(), this.workspace.runtimeRoot()),
       packs: KNOWN_PACKS.map(({ label, description, category, tags }) => ({
         label,
         description,
@@ -522,7 +569,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
 
   <div class="section">
     <label for="policyRoot">Policy root</label>
-    <input id="policyRoot" type="text" placeholder="Leave empty: resolved from Claude/Codex hook location">
+    <input id="policyRoot" type="text" placeholder="Leave empty: use this extension's bundled runtime">
   </div>
 
   <div class="section">
@@ -842,12 +889,14 @@ async function setEnabled(
   status: PolicyStatusBar,
   enabled: boolean
 ): Promise<void> {
+  const before = workspace.readConfig();
   await workspace.updateSetting('enabled', enabled);
   await workspace.syncProjectConfig();
   status.refresh();
   vscode.window.showInformationMessage(
     `AI Policy Runtime is ${enabled ? 'enabled' : 'disabled'} for this workspace.`
   );
+  maybeShowCodexTrustHint(workspace, before, workspace.readConfig());
 }
 
 async function enablePostRefine(
@@ -855,6 +904,7 @@ async function enablePostRefine(
   status: PolicyStatusBar,
   panel: PolicyConfigViewProvider
 ): Promise<void> {
+  const before = workspace.readConfig();
   await Promise.all([
     workspace.updateSetting('enabled', true),
     workspace.updateSetting('postRefine', 'standard'),
@@ -864,6 +914,30 @@ async function enablePostRefine(
   status.refresh();
   panel.refresh();
   vscode.window.showInformationMessage('AI Policy Runtime post-task refinement is enabled for this workspace.');
+  maybeShowCodexTrustHint(workspace, before, workspace.readConfig());
+}
+
+function maybeShowCodexTrustHint(
+  workspace: PolicyWorkspace,
+  before: PolicyConfig,
+  after: PolicyConfig
+): void {
+  const codexWasActive = before.enabled && before.agents.includes('codex');
+  const codexIsActive = after.enabled && after.agents.includes('codex');
+  if (!codexIsActive || codexWasActive) {
+    return;
+  }
+  const validate = 'Validate Runtime';
+  vscode.window
+    .showInformationMessage(
+      'AI Policy Runtime configured Codex hooks for this workspace. In Codex Settings, open Hooks and approve the project hooks when prompted.',
+      validate
+    )
+    .then((choice) => {
+      if (choice === validate) {
+        void validateRuntime(workspace);
+      }
+    });
 }
 
 async function configurePacks(workspace: PolicyWorkspace): Promise<void> {
@@ -905,7 +979,7 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
       `Enabled: ${config.enabled}`,
       `Agents: ${config.agents.length ? config.agents.join(', ') : '(none)'}`,
       `Packs: ${config.packs.length ? config.packs.join(', ') : '(none)'}`,
-      `Policy root: ${config.policyRoot || '(resolved from Claude/Codex hook location)'}`,
+      `Policy root: ${paths.policyRoot}`,
       `Embedding provider: ${effectiveEmbeddingValue('embeddingProvider', '(auto)')}`,
       `Embedding base URL: ${effectiveEmbeddingValue('embeddingBaseUrl', '(default)')}`,
       `Embedding model: ${effectiveEmbeddingValue('embeddingModel', '(default)')}`,
@@ -940,10 +1014,69 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
   }
 
   await workspace.syncProjectConfig();
-  const message = (await exists(paths.config))
-    ? `AI Policy Runtime config is ready: ${paths.config}`
-    : 'AI Policy Runtime config was not created.';
-  vscode.window.showInformationMessage(message);
+  const missingRuntime = await missingRuntimePaths(paths.policyRoot);
+  const configExists = await exists(paths.config);
+  const codexHooksExists = await exists(paths.codexHooks);
+  const codexConfigExists = await exists(paths.codexConfig);
+  const codexConfigText = codexConfigExists ? await fs.readFile(paths.codexConfig, 'utf8') : '';
+  const codexHooks = codexHooksExists ? await readJsonObject(paths.codexHooks) : {};
+  const hooks = objectValue(codexHooks, 'hooks');
+  const codexFeatureEnabled = tomlBool(codexConfigText, 'features', 'hooks');
+  const userPromptConfigured = eventHasAiPolicyHook(hooks, 'UserPromptSubmit');
+  const stopConfigured = eventHasAiPolicyHook(hooks, 'Stop');
+  const hookState = (await exists(paths.hookState)) ? await readJsonObject(paths.hookState) : {};
+  const latestPrompt = optionalJsonString(hookState.prompt);
+  const latestGenerated = hookState.effective_rules_generated === true;
+  const latestError = optionalJsonString(hookState.hook_error);
+
+  const problems = [
+    ...missingRuntime.map((item) => `Missing runtime file: ${item}`),
+    ...(!configExists ? [`Missing workspace config: ${paths.config}`] : []),
+    ...(!codexHooksExists ? [`Missing Codex hooks config: ${paths.codexHooks}`] : []),
+    ...(!codexConfigExists ? [`Missing Codex config: ${paths.codexConfig}`] : []),
+    ...(codexConfigExists && !codexFeatureEnabled ? ['Codex project hooks feature is not enabled.'] : []),
+    ...(codexHooksExists && !userPromptConfigured ? ['Codex UserPromptSubmit hook is not configured.'] : []),
+    ...(codexHooksExists && !stopConfigured ? ['Codex Stop hook is not configured.'] : []),
+    ...(latestError ? [`Latest hook error: ${latestError}`] : [])
+  ];
+  const ready = problems.length === 0;
+
+  const content = [
+    ready ? 'AI Policy Runtime validation passed.' : 'AI Policy Runtime validation found issues.',
+    '',
+    'Workspace',
+    `- Root: ${paths.root}`,
+    `- Policy config: ${configExists ? paths.config : 'missing'}`,
+    '',
+    'Runtime',
+    `- Policy root: ${paths.policyRoot}`,
+    `- Bundled files: ${missingRuntime.length ? 'missing files' : 'OK'}`,
+    '',
+    'Codex Hooks',
+    `- Config: ${codexConfigExists ? paths.codexConfig : 'missing'}`,
+    `- Hooks file: ${codexHooksExists ? paths.codexHooks : 'missing'}`,
+    `- [features].hooks: ${codexFeatureEnabled ? 'true' : 'false'}`,
+    `- UserPromptSubmit: ${userPromptConfigured ? 'configured' : 'missing'}`,
+    `- Stop: ${stopConfigured ? 'configured' : 'missing'}`,
+    '',
+    'Latest Hook State',
+    `- State file: ${(await exists(paths.hookState)) ? paths.hookState : 'not generated yet'}`,
+    `- Prompt: ${latestPrompt ? trimForReport(latestPrompt) : '(none yet)'}`,
+    `- Effective Rules generated: ${latestGenerated ? 'yes' : 'no'}`,
+    `- Hook error: ${latestError || '(none)'}`,
+    '',
+    ready
+      ? 'Next step: use Codex in this workspace. If Codex asks about project hooks, approve the AI Policy Runtime hooks.'
+      : `Issues:\n${problems.map((item) => `- ${item}`).join('\n')}`
+  ].join('\n');
+
+  const document = await vscode.workspace.openTextDocument({ language: 'plaintext', content });
+  await vscode.window.showTextDocument(document);
+  if (ready) {
+    vscode.window.showInformationMessage('AI Policy Runtime validation passed.');
+  } else {
+    vscode.window.showErrorMessage('AI Policy Runtime validation found issues. Opened details.');
+  }
 }
 
 async function syncCodexAgentHooks(paths: PolicyPaths, config: PolicyConfig): Promise<void> {
@@ -963,7 +1096,7 @@ async function configureCodexHooks(paths: PolicyPaths, config: PolicyConfig, ena
   const hooks = objectValue(hooksConfig, 'hooks');
   hooksConfig.hooks = hooks;
 
-  const policyRoot = resolvePolicyRoot(config, paths.root);
+  const policyRoot = paths.policyRoot;
   const userPromptHook = codexHookEntry(policyRoot, 'codex-user-prompt-submit', 'Generating Effective Rules');
   const stopHook = codexHookEntry(policyRoot, 'codex-stop-refinement', 'Checking post-task refinement');
 
@@ -1037,9 +1170,55 @@ function isAiPolicyHookEntry(entry: unknown): boolean {
 
 async function configureCodexConfig(filePath: string, enabled: boolean): Promise<void> {
   const original = (await exists(filePath)) ? await fs.readFile(filePath, 'utf8') : '';
-  const updated = setTomlBool(original, 'features', 'codex_hooks', enabled);
+  const updated = setTomlBool(original, 'features', 'hooks', enabled, ['codex_hooks']);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, updated, 'utf8');
+}
+
+async function missingRuntimePaths(policyRoot: string): Promise<string[]> {
+  const missing = [];
+  for (const relativePath of REQUIRED_RUNTIME_PATHS) {
+    const absolutePath = path.join(policyRoot, relativePath);
+    if (!(await exists(absolutePath))) {
+      missing.push(absolutePath);
+    }
+  }
+  return missing;
+}
+
+function eventHasAiPolicyHook(hooks: Record<string, unknown>, event: 'UserPromptSubmit' | 'Stop'): boolean {
+  return hookEventEntries(hooks, event).some((entry) => isAiPolicyHookEntry(entry));
+}
+
+function optionalJsonString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function trimForReport(value: string): string {
+  const collapsed = value.replace(/\s+/g, ' ').trim();
+  return collapsed.length <= 160 ? collapsed : `${collapsed.slice(0, 157)}...`;
+}
+
+function tomlBool(text: string, section: string, key: string): boolean {
+  let inSection = false;
+  for (const line of text.split(/\r?\n/)) {
+    const stripped = line.trim();
+    if (!stripped || stripped.startsWith('#')) {
+      continue;
+    }
+    if (stripped.startsWith('[') && stripped.endsWith(']')) {
+      inSection = stripped === `[${section}]`;
+      continue;
+    }
+    if (inSection && stripped.startsWith(`${key} `) && stripped.includes('=')) {
+      return stripped.split('=', 2)[1].split('#', 1)[0].trim().toLowerCase() === 'true';
+    }
+  }
+  return false;
 }
 
 async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
@@ -1068,7 +1247,13 @@ function quoteShell(value: string): string {
   return /\s|\\|:/.test(escaped) ? `"${escaped}"` : escaped;
 }
 
-function setTomlBool(text: string, section: string, key: string, value: boolean): string {
+function setTomlBool(
+  text: string,
+  section: string,
+  key: string,
+  value: boolean,
+  removeKeys: string[] = []
+): string {
   const lines = text.split(/\r?\n/);
   const target = `${key} = ${value ? 'true' : 'false'}`;
   const sectionHeader = `[${section}]`;
@@ -1090,6 +1275,9 @@ function setTomlBool(text: string, section: string, key: string, value: boolean)
       inSection = stripped === sectionHeader;
       sectionFound = sectionFound || inSection;
       output.push(line);
+      continue;
+    }
+    if (inSection && removeKeys.some((removeKey) => stripped.startsWith(`${removeKey} `) && stripped.includes('='))) {
       continue;
     }
     if (inSection && stripped.startsWith(`${key} `) && stripped.includes('=')) {
@@ -1131,7 +1319,8 @@ function readEmbeddingEnvironmentConfig(): EmbeddingEnvironmentConfig {
 
 function readEmbeddingAvailability(
   config: PolicyConfig,
-  workspaceRoot: string | undefined
+  workspaceRoot: string | undefined,
+  defaultPolicyRoot: string
 ): EmbeddingAvailabilityState {
   const remoteConfigured = Boolean(
     config.embeddingBaseUrl ||
@@ -1147,13 +1336,17 @@ function readEmbeddingAvailability(
           cleanOptionalString(process.env.AI_POLICY_EMBEDDING_BASE_URL ?? '') ||
           'credentials available')
       : 'not configured',
-    local: readLocalModelState(config, workspaceRoot)
+    local: readLocalModelState(config, workspaceRoot, defaultPolicyRoot)
   };
 }
 
-function readLocalModelState(config: PolicyConfig, workspaceRoot: string | undefined): LocalModelState {
+function readLocalModelState(
+  config: PolicyConfig,
+  workspaceRoot: string | undefined,
+  defaultPolicyRoot: string
+): LocalModelState {
   const defaultPath = path.join(
-    resolvePolicyRoot(config, workspaceRoot),
+    resolvePolicyRoot(config, workspaceRoot, defaultPolicyRoot),
     'models',
     'paraphrase-multilingual-MiniLM-L12-v2'
   );
@@ -1163,13 +1356,17 @@ function readLocalModelState(config: PolicyConfig, workspaceRoot: string | undef
   };
 }
 
-function resolvePolicyRoot(config: PolicyConfig, workspaceRoot: string | undefined): string {
+function resolvePolicyRoot(
+  config: PolicyConfig,
+  workspaceRoot: string | undefined,
+  defaultPolicyRoot: string
+): string {
   if (config.policyRoot) {
     return path.isAbsolute(config.policyRoot)
       ? config.policyRoot
       : path.resolve(workspaceRoot ?? process.cwd(), config.policyRoot);
   }
-  return workspaceRoot ?? process.cwd();
+  return defaultPolicyRoot;
 }
 
 function normalizeEmbeddingProvider(value: string): string | undefined {

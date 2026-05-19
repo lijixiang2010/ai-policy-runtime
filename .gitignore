@@ -23,5 +23,21 @@ build/
 dist/
 *.egg-info/
 node_modules/
+*.log
 vscode-extension/out/
 *.vsix
+
+# VS Code extension runtime assets are copied by vscode-extension/scripts/prepare-runtime.js
+vscode-extension/.claude-plugin/
+vscode-extension/.codex-plugin/
+vscode-extension/MANIFEST.in
+vscode-extension/ai_policy_runtime/
+vscode-extension/bin/
+vscode-extension/docs/
+vscode-extension/hooks/
+vscode-extension/packs/
+vscode-extension/pyproject.toml
+vscode-extension/requirements.txt
+vscode-extension/schemas/
+vscode-extension/skills/
+vscode-extension/tools/

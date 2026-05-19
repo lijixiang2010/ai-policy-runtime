@@ -32,6 +32,7 @@ def main() -> int:
         return 0
 
     config.apply_environment()
+    _write_turn_state(project_root, payload, prompt, config)
 
     try:
         additional_context = _resolve_effective_prompt(
@@ -40,12 +41,31 @@ def main() -> int:
             config.policy_root(project_root),
             config.packs,
         )
-        if additional_context:
-            _write_turn_state(project_root, payload, prompt, config)
+        _write_turn_state(
+            project_root,
+            payload,
+            prompt,
+            config,
+            effective_rules_generated=bool(additional_context),
+            effective_prompt_path=(
+                project_root / ".policy" / "current" / "effective-prompt.md"
+                if additional_context
+                else None
+            ),
+            additional_context_chars=len(additional_context),
+        )
     except Exception as exc:
+        hook_error = f"{type(exc).__name__}: {exc}"
+        _write_turn_state(
+            project_root,
+            payload,
+            prompt,
+            config,
+            hook_error=hook_error,
+        )
         additional_context = (
             "AI Policy Runtime hook could not generate Effective Rules for this turn. "
-            f"Error: {type(exc).__name__}: {exc}"
+            f"Error: {hook_error}"
         )
 
     print(
@@ -243,6 +263,11 @@ def _write_turn_state(
     payload: dict[str, object],
     prompt: str,
     config: ProjectHookConfig,
+    *,
+    effective_rules_generated: bool = False,
+    effective_prompt_path: Path | None = None,
+    additional_context_chars: int = 0,
+    hook_error: str | None = None,
 ) -> None:
     state_path = project_root / HOOK_STATE_PATH
     state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -254,6 +279,12 @@ def _write_turn_state(
         "post_refine_mode": config.post_refine_mode,
         "post_refine_pack_ids": list(config.post_refine_pack_ids),
         "verify_target": config.verify_target,
+        "effective_rules_generated": effective_rules_generated,
+        "effective_prompt_path": (
+            str(effective_prompt_path.resolve()) if effective_prompt_path else None
+        ),
+        "additional_context_chars": additional_context_chars,
+        "hook_error": hook_error,
     }
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
