@@ -107,6 +107,7 @@ task_analysis:
         - pull request
         - merge request
         - prepare pr
+        - pr review
         - pr title
         - pr description
       set:

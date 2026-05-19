@@ -106,6 +106,14 @@ class TaskLexicon:
         }
         return tuple(sorted(values))
 
+    def domain_for_skill(self, skill_id: str) -> str | None:
+        """Return the declared domain for a skill id, if one exists."""
+
+        for profile in self.skill_profiles:
+            if profile.skill_id == skill_id:
+                return profile.domain
+        return None
+
     def semantic_scope(self, gate: "TaskGate") -> frozenset[str]:
         """Return skill ids eligible for second-stage semantic recall."""
 

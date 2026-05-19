@@ -50,6 +50,7 @@ task_analysis:
     - id: detect_template_constraints_required
       when_text_matches:
         - template constraint
+        - template constraints
         - concept
         - concepts
         - requires clause

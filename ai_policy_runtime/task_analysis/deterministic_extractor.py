@@ -7,7 +7,7 @@ from .resolution import (
     default_task_type_evidence,
     signal_domain_evidence,
 )
-from .schema import TaskAnalysis, TaskSignals
+from .schema import ExtractionEvidence, TaskAnalysis, TaskSignals
 from .semantic_index import SemanticTaskIndex
 
 
@@ -53,10 +53,27 @@ class DeterministicTaskExtractor:
         text: str,
         state: ExtractionState,
     ) -> None:
-        state.add(
-            self._matcher.best(self._lexicon.trigger_rules, text)
-            or default_task_type_evidence()
+        match = max(
+            self._matcher.all(self._lexicon.trigger_rules, text),
+            key=lambda item: item[1].confidence,
+            default=None,
         )
+        if match is None:
+            state.add(default_task_type_evidence())
+            return
+
+        rule, evidence = match
+        state.add(evidence)
+        if domain := self._lexicon.domain_for_skill(rule.skill_id):
+            if _can_infer_domain_from_trigger(domain, evidence.source):
+                state.add(
+                    ExtractionEvidence(
+                        field="domain",
+                        value=domain,
+                        source=f"{rule.source}:inferred_domain",
+                        confidence=evidence.confidence,
+                    )
+                )
 
     def _apply_exact_context(
         self,
@@ -124,6 +141,49 @@ def _int_or_none(value: object) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def _can_infer_domain_from_trigger(domain: str, source: str) -> bool:
+    """Return whether an exact trigger phrase is specific enough to imply a domain."""
+
+    phrase = source.rsplit(":", 1)[-1].lower()
+    hints = {
+        "cmake": (
+            "cmake",
+            "cmakelists",
+            "ctest",
+            "fetchcontent",
+            "externalproject",
+            "file glob",
+            "file(glob)",
+            "find_package",
+            "generator expressions",
+            "target_",
+            "vcpkg",
+            "conan",
+        ),
+        "git": (
+            "git",
+            "amend commit",
+            "conflict marker",
+            "clean generated files",
+            "clean ignored files",
+            "clean untracked generated files",
+            "force push",
+            "force-with-lease",
+            "interactive rebase",
+            "merge conflict",
+            "merge request",
+            "pull request",
+            "rebase",
+            "rebase conflict",
+            "remove untracked files",
+            "squash commits",
+            "squash these commits",
+            "stash",
+        ),
+    }
+    return any(hint in phrase for hint in hints.get(domain, ()))
 
 
 def _is_explicit_non_code_change_request(text: str) -> bool:

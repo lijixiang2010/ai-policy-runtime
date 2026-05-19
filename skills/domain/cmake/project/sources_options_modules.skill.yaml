@@ -55,6 +55,7 @@ task_analysis:
       - cmake module
     modernize_cmake:
       - file glob
+      - file(glob)
       - cmake function
       - cmake macro
       - cache variable
@@ -85,6 +86,7 @@ task_analysis:
       when_text_matches:
         - target_sources
         - file glob
+        - file(glob)
         - file_set
         - source list
       set:

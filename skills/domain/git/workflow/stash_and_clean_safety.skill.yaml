@@ -58,6 +58,7 @@ task_analysis:
     clean_working_tree:
       - git clean
       - clean generated files
+      - clean untracked generated files
       - remove untracked files
       - clean ignored files
     resolve_git_issue:
@@ -103,6 +104,7 @@ task_analysis:
       when_text_matches:
         - git clean
         - clean generated files
+        - clean untracked generated files
         - remove untracked files
         - clean ignored files
       set:
@@ -190,4 +192,3 @@ verification:
       prompt: >-
         Check that any clean or discard operation has an inspected scope, a dry-run
         when files may be removed, and explicit user approval for destructive deletion.
-

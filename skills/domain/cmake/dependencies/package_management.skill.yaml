@@ -52,6 +52,7 @@ task_analysis:
       - fetchcontent
       - externalproject
       - add dependency
+      - third party dependency
       - third party library
       - vcpkg
       - conan
@@ -89,6 +90,7 @@ task_analysis:
         - imported target
         - vcpkg
         - conan
+        - third party dependency
         - third party library
       set:
         cmake_dependency_requested: true

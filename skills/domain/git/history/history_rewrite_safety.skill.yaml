@@ -54,6 +54,7 @@ task_analysis:
       - rebase
       - amend commit
       - squash commits
+      - squash these commits
       - force push
       - force-with-lease
       - rewrite history
@@ -95,6 +96,7 @@ task_analysis:
         - rewrite history
         - interactive rebase
         - squash commits
+        - squash these commits
         - amend commit
         - force push
         - force-with-lease
