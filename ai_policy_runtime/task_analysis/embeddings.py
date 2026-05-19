@@ -41,11 +41,7 @@ class OpenAICompatibleEmbeddingConfig:
             or os.environ.get("OPENAI_API_KEY")
             or ""
         ).strip()
-        remote_provider_requested = provider in {
-            "openai",
-            "openai-compatible",
-            "opaicompat",
-        }
+        remote_provider_requested = provider == "openai-compatible"
         if not remote_provider_requested and not (base_url or api_key):
             return None
         if remote_provider_requested and not (base_url or api_key):
@@ -55,6 +51,28 @@ class OpenAICompatibleEmbeddingConfig:
             model=os.environ.get("AI_POLICY_EMBEDDING_MODEL", cls.model).strip() or cls.model,
             api_key=api_key,
             timeout_seconds=_float_env("AI_POLICY_EMBEDDING_TIMEOUT", cls.timeout_seconds),
+        )
+
+    @classmethod
+    def from_values(
+        cls,
+        *,
+        base_url: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+        timeout_seconds: float | None = None,
+    ) -> "OpenAICompatibleEmbeddingConfig | None":
+        """Return config for explicit Python Runtime embedding settings."""
+
+        clean_base_url = (base_url or "").strip()
+        clean_api_key = (api_key or "").strip()
+        if not (clean_base_url or clean_api_key):
+            return None
+        return cls(
+            base_url=clean_base_url or cls.base_url,
+            model=(model or cls.model).strip() or cls.model,
+            api_key=clean_api_key,
+            timeout_seconds=timeout_seconds or cls.timeout_seconds,
         )
 
 
@@ -140,13 +158,6 @@ class SentenceTransformerEmbeddingProvider:
             show_progress_bar=False,
         )
         return [vector.astype(float).tolist() for vector in vectors]
-
-
-class NullEmbeddingProvider:
-    """Provider used when semantic matching is intentionally disabled."""
-
-    def encode(self, texts: Sequence[str]) -> list[list[float]]:
-        return []
 
 
 def provider_cache_key(provider: EmbeddingProvider) -> str:

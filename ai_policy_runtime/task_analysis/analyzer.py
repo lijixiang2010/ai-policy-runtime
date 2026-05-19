@@ -3,10 +3,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from ai_policy_runtime.domain.config import EmbeddingConfig
+
 from .deterministic_extractor import DeterministicTaskExtractor
 from .embeddings import (
     EmbeddingProvider,
-    NullEmbeddingProvider,
     OpenAICompatibleEmbeddingProvider,
     SentenceTransformerEmbeddingProvider,
 )
@@ -63,14 +64,17 @@ def build_extractor(
     lexicon = TaskLexicon.from_skills_dir(skills_dir)
     if not semantic:
         return DeterministicTaskExtractor(lexicon)
-    provider = embeddings or _default_embedding_provider()
+    provider = embeddings or default_embedding_provider()
     return DeterministicTaskExtractor(
         lexicon,
         SemanticTaskIndex(lexicon, provider, cache_dir=cache_dir),
     )
 
 
-def _default_embedding_provider() -> EmbeddingProvider:
+def default_embedding_provider(
+    local_model_root: str | Path = ".",
+    embedding: EmbeddingConfig | None = None,
+) -> EmbeddingProvider:
     """Return the best configured embedding provider.
 
     Selection order defaults toward OpenAI-compatible embeddings when remote
@@ -79,14 +83,14 @@ def _default_embedding_provider() -> EmbeddingProvider:
     1. Explicit provider choices from AI_POLICY_EMBEDDING_PROVIDER.
     2. OpenAI-compatible /v1/embeddings when configured.
     3. Local bundled sentence-transformers model when available.
-    4. Deterministic exact matching when no embedding provider is available.
+
+    If no semantic provider is available, analysis fails instead of silently
+    downgrading to deterministic matching.
     """
 
-    provider = _configured_provider_name()
-    if provider in {"disabled", "none", "null"}:
-        return NullEmbeddingProvider()
-    if provider in {"openai", "openai-compatible", "opaicompat"}:
-        remote = OpenAICompatibleEmbeddingProvider.from_env()
+    provider = _configured_provider_name(embedding)
+    if provider == "openai-compatible":
+        remote = _openai_compatible_provider(embedding)
         if remote is None:
             raise RuntimeError(
                 "AI_POLICY_EMBEDDING_PROVIDER requests OpenAI-compatible embeddings, "
@@ -94,20 +98,32 @@ def _default_embedding_provider() -> EmbeddingProvider:
             )
         return remote
 
-    local_model = Path("models") / "paraphrase-multilingual-MiniLM-L12-v2"
-    if provider in {"local", "sentence-transformers"}:
-        model_name = str(local_model) if local_model.exists() else None
-        return SentenceTransformerEmbeddingProvider(model_name)
+    local_model = Path(local_model_root) / "models" / "paraphrase-multilingual-MiniLM-L12-v2"
+    if provider == "local":
+        if embedding and embedding.model:
+            return SentenceTransformerEmbeddingProvider(embedding.model)
+        if local_model.exists():
+            return SentenceTransformerEmbeddingProvider(str(local_model))
+        local_provider = optional_sentence_transformer_provider()
+        if local_provider is not None:
+            return local_provider
+        raise RuntimeError(
+            "AI_POLICY_EMBEDDING_PROVIDER requests local embeddings, but no "
+            "local sentence-transformers model could be loaded."
+        )
     if provider:
         raise RuntimeError(f"Unsupported AI_POLICY_EMBEDDING_PROVIDER: {provider}")
-    if remote := OpenAICompatibleEmbeddingProvider.from_env():
+    if remote := _openai_compatible_provider(embedding):
         return remote
     if local_model.exists():
         try:
             return SentenceTransformerEmbeddingProvider(str(local_model))
         except RuntimeError:
             pass
-    return NullEmbeddingProvider()
+    raise RuntimeError(
+        "Semantic analysis requires an embedding provider. Configure an "
+        "OpenAI-compatible endpoint or install the local sentence-transformers model."
+    )
 
 
 def optional_sentence_transformer_provider() -> EmbeddingProvider | None:
@@ -119,7 +135,39 @@ def optional_sentence_transformer_provider() -> EmbeddingProvider | None:
         return None
 
 
-def _configured_provider_name() -> str:
+def _openai_compatible_provider(
+    embedding: EmbeddingConfig | None = None,
+) -> OpenAICompatibleEmbeddingProvider | None:
+    if embedding is None:
+        return OpenAICompatibleEmbeddingProvider.from_env()
+    env_config = OpenAICompatibleEmbeddingProvider.from_env()
+    if not any(
+        value is not None
+        for value in (
+            embedding.provider,
+            embedding.base_url,
+            embedding.api_key,
+            embedding.model,
+            embedding.timeout_seconds,
+        )
+    ):
+        return env_config
+
+    from .embeddings import OpenAICompatibleEmbeddingConfig
+
+    explicit = OpenAICompatibleEmbeddingConfig.from_values(
+        base_url=embedding.base_url or (env_config.config.base_url if env_config else None),
+        model=embedding.model or (env_config.config.model if env_config else None),
+        api_key=embedding.api_key or (env_config.config.api_key if env_config else None),
+        timeout_seconds=embedding.timeout_seconds
+        or (env_config.config.timeout_seconds if env_config else None),
+    )
+    return OpenAICompatibleEmbeddingProvider(explicit) if explicit else None
+
+
+def _configured_provider_name(embedding: EmbeddingConfig | None = None) -> str:
+    if embedding and embedding.provider:
+        return embedding.provider.strip().lower().replace("_", "-")
     return (
         os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "")
         .strip()

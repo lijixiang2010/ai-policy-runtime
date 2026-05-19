@@ -37,6 +37,12 @@ Claude Code extension you already use.
 
 ## Use It Three Ways
 
+| Entry point | Best for | Configuration |
+| --- | --- | --- |
+| VS Code Extension | Codex or Claude Code inside VS Code | Use the side bar. It saves VS Code workspace settings and syncs `.policy/config.json`. |
+| Command-Line Agent Hooks | Codex CLI, Claude Code CLI, or Claude Desktop Code sessions | Use `ai-policy configure ...`; hooks read `.policy/config.json`, with environment variables for CI or temporary overrides. |
+| Python Runtime | Custom tools, CI, or embedded workflows | Construct `PolicyRuntime(RuntimeConfig(...))`; embedding uses environment variables or the default local model under `policy_root/models`. |
+
 ### 1. VS Code Extension
 
 Use this when you run Codex or Claude Code from VS Code.
@@ -63,6 +69,13 @@ ai-policy configure codex --root D:\work\target-project
 
 Then run Codex normally from that project. AI Policy Runtime hooks will apply
 the workspace policy automatically.
+
+Configure embeddings for command-line hooks:
+
+```powershell
+ai-policy embedding configure --root D:\work\target-project --provider local
+ai-policy embedding status --root D:\work\target-project
+```
 
 Configure a project for Claude Code or Claude Desktop Code sessions:
 
@@ -97,6 +110,19 @@ result = runtime.resolve(
     "Implement a C++20 matching-engine API.",
     ("cpp.low_latency",),
 )
+```
+
+Configure embeddings directly in Python when you do not want to rely on process
+environment variables:
+
+```python
+runtime = PolicyRuntime(RuntimeConfig.from_values(
+    root=".",
+    policy_root="D:/MilesLi/ai-policy-runtime",
+    embedding_provider="openai-compatible",
+    embedding_api_key="<key>",
+    embedding_model="text-embedding-3-small",
+))
 ```
 
 ## Policy Packs

@@ -64,6 +64,22 @@ def main() -> None:
         help="Known model key, repo id, or directory name. Defaults to the multilingual model.",
     )
 
+    embedding = subparsers.add_parser(
+        "embedding", help="Configure project embedding provider settings."
+    )
+    embedding.add_argument("action", choices=("status", "configure"))
+    embedding.add_argument("--root", default=".", help="Project root.")
+    embedding.add_argument(
+        "--provider",
+        choices=("auto", "openai-compatible", "local"),
+        default=None,
+        help="Embedding provider to save for command-line hooks.",
+    )
+    embedding.add_argument("--base-url", default=None, help="OpenAI-compatible base URL.")
+    embedding.add_argument("--api-key", default=None, help="OpenAI-compatible API key.")
+    embedding.add_argument("--model", default=None, help="Remote model or local model path/name.")
+    embedding.add_argument("--timeout", type=float, default=None, help="Remote request timeout seconds.")
+
     verify = subparsers.add_parser("verify", help="Verify files against current Effective Rules.")
     verify.add_argument("--root", default=".", help="Project root.")
     verify.add_argument("--target", default=".", help="File or directory to verify.")
@@ -126,6 +142,49 @@ def _runtime_from_args(args: argparse.Namespace) -> PolicyRuntime:
     )
 
 
+def _read_project_config(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Project config must be a JSON object: {path}")
+    return data
+
+
+def _configure_embedding(config: dict[str, Any], args: argparse.Namespace) -> None:
+    provider = "" if args.provider == "auto" else args.provider
+    config["embeddingProvider"] = provider
+    for key in (
+        "embeddingBaseUrl",
+        "embeddingApiKey",
+        "embeddingModel",
+        "embeddingTimeout",
+    ):
+        config.pop(key, None)
+    if provider == "openai-compatible":
+        if args.base_url:
+            config["embeddingBaseUrl"] = args.base_url
+        if args.api_key:
+            config["embeddingApiKey"] = args.api_key
+        if args.model:
+            config["embeddingModel"] = args.model
+        if args.timeout is not None:
+            config["embeddingTimeout"] = str(args.timeout)
+    elif provider == "local" and args.model:
+        config["embeddingModel"] = args.model
+
+
+def _embedding_config_status(config: dict[str, Any]) -> dict[str, Any]:
+    provider = str(config.get("embeddingProvider") or "auto")
+    return {
+        "provider": provider,
+        "base_url": config.get("embeddingBaseUrl"),
+        "api_key_configured": bool(config.get("embeddingApiKey")),
+        "model": config.get("embeddingModel"),
+        "timeout": config.get("embeddingTimeout"),
+    }
+
+
 def _dispatch(args: argparse.Namespace) -> tuple[dict[str, Any] | str, int]:
     return CommandDispatcher().dispatch(args)
 
@@ -143,6 +202,7 @@ class CommandDispatcher:
             "inspect": self._inspect,
             "cache": self._cache,
             "model": self._model,
+            "embedding": self._embedding,
             "verify": self._verify,
             "repair-plan": self._repair_plan,
             "inject": self._inject,
@@ -210,6 +270,18 @@ class CommandDispatcher:
         if args.action == "list":
             return {"models": list(manager.list())}, 0
         return {"model": manager.install(args.model)}, 0
+
+    def _embedding(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+        path = Path(args.root) / ".policy" / "config.json"
+        config = _read_project_config(path)
+        if args.action == "status":
+            return {"config": str(path), "embedding": _embedding_config_status(config)}, 0
+        if args.provider is None:
+            raise ValueError("--provider is required for embedding configure")
+        _configure_embedding(config, args)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {"config": str(path), "embedding": _embedding_config_status(config)}, 0
 
     def _verify(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         violations = _runtime_from_args(args).verify(Path(args.target))

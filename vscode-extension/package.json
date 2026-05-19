@@ -105,7 +105,7 @@
         "aiPolicy.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable AI Policy Runtime for this workspace."
+          "description": "Enable AI Policy Runtime agent hooks for this workspace."
         },
         "aiPolicy.agents": {
           "type": "array",
@@ -147,16 +147,12 @@
           "enum": [
             "",
             "openai-compatible",
-            "openai",
-            "local",
-            "disabled"
+            "local"
           ],
           "enumDescriptions": [
             "Automatically choose the best configured semantic provider.",
             "Use an OpenAI-compatible /v1/embeddings endpoint.",
-            "Alias for OpenAI-compatible /v1/embeddings.",
-            "Use a local sentence-transformers model.",
-            "Disable semantic embedding matching."
+            "Use a local sentence-transformers model."
           ],
           "description": "Semantic embedding provider for task analysis."
         },
@@ -174,6 +170,11 @@
           "type": "string",
           "default": "",
           "description": "Optional embedding model. Defaults to text-embedding-3-small for OpenAI-compatible endpoints."
+        },
+        "aiPolicy.embeddingLocalModel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional local sentence-transformers model path or model name."
         },
         "aiPolicy.embeddingTimeout": {
           "type": "string",
@@ -210,7 +211,7 @@
         "aiPolicy.verifyTarget": {
           "type": "string",
           "default": "",
-          "description": "Optional file or directory agents should verify during strict post-task refinement."
+          "description": "Optional file, directory, or target the post-refinement pass should verify before ending."
         }
       }
     }

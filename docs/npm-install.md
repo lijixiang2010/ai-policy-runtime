@@ -9,15 +9,11 @@ repository or pass a checkout path as `--plugin-root`.
 npm install -g ai-policy-runtime
 ```
 
-The package installs two command names:
+The package installs one command:
 
 ```text
 ai-policy
-ai-policy-runtime
 ```
-
-Use `ai-policy` in documentation and daily workflows. `ai-policy-runtime` is a
-compatibility alias.
 
 ## Requirements
 

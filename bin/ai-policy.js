@@ -314,6 +314,7 @@ function printHelp() {
 Usage:
   ai-policy configure claude [--root <project>]
   ai-policy configure codex [--root <project>]
+  ai-policy embedding <status|configure> [--root <project>] [--provider <auto|openai-compatible|local>]
   ai-policy status [--agent <claude|codex>] [--root <project>]
   ai-policy disable [--root <project>]
   ai-policy plugin <enable|disable> [--root <project>]
@@ -325,6 +326,7 @@ Usage:
 Examples:
   ai-policy configure claude --root D:\\work\\project
   ai-policy configure codex --root D:\\work\\project
+  ai-policy embedding configure --root D:\\work\\project --provider local
   ai-policy post-refine standard --root D:\\work\\project
   ai-policy status --agent codex --root D:\\work\\project
 `);

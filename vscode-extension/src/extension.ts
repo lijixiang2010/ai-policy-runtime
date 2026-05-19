@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
@@ -12,6 +13,7 @@ type PolicyConfig = {
   embeddingBaseUrl?: string;
   embeddingApiKey?: string;
   embeddingModel?: string;
+  embeddingLocalModel?: string;
   embeddingTimeout?: string;
   postRefine: 'off' | 'light' | 'standard' | 'strict';
   postRefinePacks: string[];
@@ -24,6 +26,22 @@ type PolicyPaths = {
   root: string;
   config: string;
   effectivePrompt: string;
+};
+
+type EmbeddingEnvironmentConfig = Pick<
+  PolicyConfig,
+  'embeddingProvider' | 'embeddingBaseUrl' | 'embeddingApiKey' | 'embeddingModel' | 'embeddingTimeout'
+>;
+
+type LocalModelState = {
+  defaultPath: string;
+  installed: boolean;
+};
+
+type EmbeddingAvailabilityState = {
+  remoteConfigured: boolean;
+  remoteSummary: string;
+  local: LocalModelState;
 };
 
 type PackItem = vscode.QuickPickItem & {
@@ -144,7 +162,7 @@ class PolicyWorkspace {
     }
 
     await fs.mkdir(path.dirname(paths.config), { recursive: true });
-    await fs.writeFile(paths.config, `${JSON.stringify(this.readConfig(), null, 2)}\n`, 'utf8');
+    await fs.writeFile(paths.config, `${JSON.stringify(projectConfig(this.readConfig()), null, 2)}\n`, 'utf8');
   }
 
   async saveConfig(config: PolicyConfig): Promise<void> {
@@ -158,6 +176,7 @@ class PolicyWorkspace {
       this.updateSetting('embeddingBaseUrl', config.embeddingBaseUrl ?? ''),
       this.updateSetting('embeddingApiKey', config.embeddingApiKey ?? ''),
       this.updateSetting('embeddingModel', config.embeddingModel ?? ''),
+      this.updateSetting('embeddingLocalModel', config.embeddingLocalModel ?? ''),
       this.updateSetting('embeddingTimeout', config.embeddingTimeout ?? ''),
       this.updateSetting('postRefine', config.postRefine),
       this.updateSetting('postRefinePacks', config.postRefinePacks),
@@ -174,10 +193,11 @@ class PolicyWorkspace {
       packs: config.get<string[]>('packs', DEFAULT_PACKS),
       policyRoot: cleanOptionalString(config.get<string>('policyRoot', '')),
       autoInstall: config.get<boolean>('autoInstall', true),
-      embeddingProvider: cleanOptionalString(config.get<string>('embeddingProvider', '')),
+      embeddingProvider: normalizeEmbeddingProvider(config.get<string>('embeddingProvider', '')),
       embeddingBaseUrl: cleanOptionalString(config.get<string>('embeddingBaseUrl', '')),
       embeddingApiKey: cleanOptionalString(config.get<string>('embeddingApiKey', '')),
       embeddingModel: cleanOptionalString(config.get<string>('embeddingModel', '')),
+      embeddingLocalModel: cleanOptionalString(config.get<string>('embeddingLocalModel', '')),
       embeddingTimeout: cleanOptionalString(config.get<string>('embeddingTimeout', '')),
       postRefine: normalizePostRefineMode(config.get<string>('postRefine', 'off')),
       postRefinePacks: config.get<string[]>('postRefinePacks', DEFAULT_POST_REFINE_PACKS),
@@ -202,6 +222,10 @@ class PolicyWorkspace {
       config: path.join(root, POLICY_CONFIG_FILE),
       effectivePrompt: path.join(root, EFFECTIVE_PROMPT_FILE)
     };
+  }
+
+  rootPath(): string | undefined {
+    return this.workspaceRoot();
   }
 
   private workspaceRoot(): string | undefined {
@@ -264,6 +288,8 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     const nonce = nonceValue();
     const state = JSON.stringify({
       config,
+      environmentConfig: readEmbeddingEnvironmentConfig(),
+      embeddingAvailability: readEmbeddingAvailability(config, this.workspace.rootPath()),
       packs: KNOWN_PACKS.map(({ label, description, category, tags }) => ({
         label,
         description,
@@ -370,6 +396,26 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       font-size: 12px;
       line-height: 1.45;
     }
+    .provider-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 2px 0;
+    }
+    .model-status {
+      border: 1px solid var(--line);
+      background: var(--vscode-editorWidget-background);
+      padding: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .model-status.warning {
+      color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground));
+      border-color: var(--vscode-inputValidation-warningBorder, var(--line));
+      background: var(--vscode-inputValidation-warningBackground, var(--vscode-editorWidget-background));
+    }
     .pack {
       display: grid;
       grid-template-columns: 18px 1fr;
@@ -419,6 +465,9 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       color: var(--muted);
       font-size: 12px;
     }
+    [hidden] {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
@@ -429,9 +478,10 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
 
   <div class="section">
     <div class="row">
-      <label for="enabled">Enabled</label>
+      <label for="enabled">Enable agent hooks</label>
       <input id="enabled" type="checkbox">
     </div>
+    <p class="switch-note">When enabled, the selected agents receive task-scoped Effective Rules for this workspace.</p>
     <div class="row">
       <label for="autoInstall">Install dependencies automatically</label>
       <input id="autoInstall" type="checkbox">
@@ -456,17 +506,18 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       <input id="postRefineEnabled" type="checkbox">
     </div>
     <p class="switch-note">Continue once before a supported agent ends a turn to compress structure, remove accidental complexity, and run practical checks.</p>
-    <div class="field">
+    <div id="postRefineControls" class="field">
       <label for="postRefine">Mode</label>
       <select id="postRefine">
         <option value="standard">Standard</option>
         <option value="light">Light</option>
         <option value="strict">Strict</option>
       </select>
-    </div>
-    <div class="field">
-      <label for="verifyTarget">Verify target</label>
-      <input id="verifyTarget" type="text" placeholder="src">
+      <div class="field">
+        <label for="verifyTarget">Verification scope</label>
+        <input id="verifyTarget" type="text" placeholder="src">
+        <p class="switch-note">Optional path or target the refinement pass should verify before ending.</p>
+      </div>
     </div>
   </div>
 
@@ -491,22 +542,31 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
         <option value="">Auto</option>
         <option value="openai-compatible">OpenAI-compatible /v1/embeddings</option>
         <option value="local">Local sentence-transformers</option>
-        <option value="disabled">Disabled</option>
       </select>
     </div>
-    <div class="field">
-      <label for="embeddingBaseUrl">OpenAI-compatible base URL</label>
-      <input id="embeddingBaseUrl" type="text" placeholder="https://api.openai.com/v1">
+    <div id="autoEmbeddingNote" class="provider-note">
+      Runtime chooses an OpenAI-compatible endpoint when remote credentials are configured, otherwise a local sentence-transformers model when available.
     </div>
-    <div class="field">
-      <label for="embeddingApiKey">Embedding API key</label>
-      <input id="embeddingApiKey" type="password" placeholder="Uses OPENAI_API_KEY when empty">
+    <div id="autoEmbeddingStatus" class="model-status"></div>
+    <div id="openAiEmbeddingFields" class="field">
+      <div class="field">
+        <label for="embeddingBaseUrl">OpenAI-compatible base URL</label>
+        <input id="embeddingBaseUrl" type="text" placeholder="https://api.openai.com/v1">
+      </div>
+      <div class="field">
+        <label for="embeddingApiKey">Embedding API key</label>
+        <input id="embeddingApiKey" type="password" placeholder="Uses OPENAI_API_KEY when empty">
+      </div>
     </div>
-    <div class="field">
-      <label for="embeddingModel">Embedding model</label>
+    <div id="localEmbeddingNote" class="provider-note">
+      Uses sentence-transformers from the local Python environment/cache. No API key is used.
+    </div>
+    <div id="localModelStatus" class="model-status"></div>
+    <div id="embeddingModelField" class="field">
+      <label id="embeddingModelLabel" for="embeddingModel">Embedding model</label>
       <input id="embeddingModel" type="text" placeholder="text-embedding-3-small">
     </div>
-    <div class="field">
+    <div id="embeddingTimeoutField" class="field">
       <label for="embeddingTimeout">Embedding timeout seconds</label>
       <input id="embeddingTimeout" type="text" placeholder="30">
     </div>
@@ -522,6 +582,9 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const state = ${state};
+    const envConfig = state.environmentConfig || {};
+    const availability = state.embeddingAvailability || {};
+    const localModel = availability.local || {};
     const byId = (id) => document.getElementById(id);
     const selected = new Set(state.config.packs || []);
     const agents = new Set(state.config.agents || ['codex']);
@@ -535,13 +598,42 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       : 'standard';
     byId('verifyTarget').value = state.config.verifyTarget || '';
     byId('policyRoot').value = state.config.policyRoot || '';
-    byId('embeddingProvider').value = state.config.embeddingProvider || '';
-    byId('embeddingBaseUrl').value = state.config.embeddingBaseUrl || '';
-    byId('embeddingApiKey').value = state.config.embeddingApiKey || '';
-    byId('embeddingModel').value = state.config.embeddingModel || '';
-    byId('embeddingTimeout').value = state.config.embeddingTimeout || '';
+    setEmbeddingValue('embeddingProvider', 'embeddingProvider');
+    setEmbeddingValue('embeddingBaseUrl', 'embeddingBaseUrl');
+    setEmbeddingValue('embeddingApiKey', 'embeddingApiKey');
+    setEmbeddingValue('embeddingTimeout', 'embeddingTimeout');
+    setProviderModelValue();
+    byId('embeddingProvider').dataset.previousProvider = byId('embeddingProvider').value;
+    syncEmbeddingProviderFields();
 
     const packs = byId('packs');
+
+    function setEmbeddingValue(id, key) {
+      const field = byId(id);
+      const configured = state.config[key] || '';
+      const environment = envConfig[key] || '';
+      field.value = configured || environment;
+      field.dataset.envValue = environment;
+      field.dataset.configured = configured ? 'true' : 'false';
+      field.dataset.userEdited = 'false';
+      field.addEventListener('input', () => { field.dataset.userEdited = 'true'; });
+      field.addEventListener('change', () => { field.dataset.userEdited = 'true'; });
+    }
+
+    function setProviderModelValue() {
+      const field = byId('embeddingModel');
+      const provider = byId('embeddingProvider').value;
+      const configured = provider === 'local'
+        ? state.config.embeddingLocalModel || ''
+        : state.config.embeddingModel || '';
+      const environment = provider === 'local' ? '' : envConfig.embeddingModel || '';
+      field.value = configured || environment;
+      field.dataset.envValue = environment;
+      field.dataset.configured = configured ? 'true' : 'false';
+      field.dataset.userEdited = 'false';
+      field.addEventListener('input', () => { field.dataset.userEdited = 'true'; });
+      field.addEventListener('change', () => { field.dataset.userEdited = 'true'; });
+    }
 
     function packMarkup(pack) {
       const row = document.createElement('label');
@@ -589,13 +681,76 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
 
     renderPacks();
     renderSelected();
+    syncPostRefineControls();
 
     byId('packSearch').addEventListener('input', renderPacks);
+    byId('embeddingProvider').addEventListener('change', () => {
+      const provider = byId('embeddingProvider');
+      if (provider.value !== provider.dataset.previousProvider) {
+        resetProviderScopedEmbeddingFields();
+        provider.dataset.previousProvider = provider.value;
+      }
+      syncEmbeddingProviderFields();
+    });
     byId('postRefineEnabled').addEventListener('change', () => {
       if (byId('postRefineEnabled').checked && byId('postRefine').value === 'off') {
         byId('postRefine').value = 'standard';
       }
+      syncPostRefineControls();
     });
+
+    function syncPostRefineControls() {
+      byId('postRefineControls').hidden = !byId('postRefineEnabled').checked;
+    }
+
+    function syncEmbeddingProviderFields() {
+      const provider = byId('embeddingProvider').value;
+      const isOpenAi = provider === 'openai-compatible';
+      const isLocal = provider === 'local';
+      byId('autoEmbeddingNote').hidden = Boolean(provider);
+      byId('autoEmbeddingStatus').hidden = Boolean(provider);
+      byId('openAiEmbeddingFields').hidden = !isOpenAi;
+      byId('localEmbeddingNote').hidden = !isLocal;
+      byId('localModelStatus').hidden = !isLocal;
+      byId('embeddingModelField').hidden = !(isOpenAi || isLocal);
+      byId('embeddingTimeoutField').hidden = !isOpenAi;
+      byId('embeddingModelLabel').textContent = isLocal ? 'Override local model' : 'Embedding model';
+      byId('embeddingModel').placeholder = isLocal
+        ? 'Leave empty to use the default local model'
+        : 'text-embedding-3-small';
+      byId('localModelStatus').textContent = localModel.installed
+        ? 'Using default local model: ' + localModel.defaultPath
+        : 'Default local model not found: ' + localModel.defaultPath;
+      renderAutoEmbeddingStatus();
+    }
+
+    function renderAutoEmbeddingStatus() {
+      const status = byId('autoEmbeddingStatus');
+      const lines = [
+        'OpenAI-compatible: ' + (availability.remoteConfigured ? 'configured (' + availability.remoteSummary + ')' : 'not configured'),
+        'Local model: ' + (localModel.installed ? 'available (' + localModel.defaultPath + ')' : 'not found (' + localModel.defaultPath + ')')
+      ];
+      if (availability.remoteConfigured) {
+        lines.push('Auto will use OpenAI-compatible embeddings.');
+        status.classList.remove('warning');
+      } else if (localModel.installed) {
+        lines.push('Auto will use the default local sentence-transformers model.');
+        status.classList.remove('warning');
+      } else {
+        lines.push('Configure an OpenAI-compatible endpoint or install the default local model before using semantic analysis.');
+        status.classList.add('warning');
+      }
+      status.textContent = lines.join('\\n');
+    }
+
+    function resetProviderScopedEmbeddingFields() {
+      for (const id of ['embeddingBaseUrl', 'embeddingApiKey', 'embeddingModel', 'embeddingTimeout']) {
+        const field = byId(id);
+        field.value = '';
+        field.dataset.configured = 'false';
+        field.dataset.userEdited = 'true';
+      }
+    }
 
     function readConfig() {
       const postRefine = byId('postRefineEnabled').checked
@@ -607,15 +762,36 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
         packs: Array.from(selected),
         policyRoot: byId('policyRoot').value.trim() || undefined,
         autoInstall: byId('autoInstall').checked,
-        embeddingProvider: byId('embeddingProvider').value.trim() || undefined,
-        embeddingBaseUrl: byId('embeddingBaseUrl').value.trim() || undefined,
-        embeddingApiKey: byId('embeddingApiKey').value.trim() || undefined,
-        embeddingModel: byId('embeddingModel').value.trim() || undefined,
-        embeddingTimeout: byId('embeddingTimeout').value.trim() || undefined,
+        embeddingProvider: readEmbeddingField('embeddingProvider'),
+        embeddingBaseUrl: readEmbeddingField('embeddingBaseUrl'),
+        embeddingApiKey: readEmbeddingField('embeddingApiKey'),
+        embeddingModel: byId('embeddingProvider').value === 'local'
+          ? state.config.embeddingModel || undefined
+          : readEmbeddingField('embeddingModel'),
+        embeddingLocalModel: byId('embeddingProvider').value === 'local'
+          ? readEmbeddingField('embeddingModel')
+          : state.config.embeddingLocalModel || undefined,
+        embeddingTimeout: readEmbeddingField('embeddingTimeout'),
         postRefine,
         postRefinePacks: ${JSON.stringify(DEFAULT_POST_REFINE_PACKS)},
         verifyTarget: byId('verifyTarget').value.trim() || undefined
       };
+    }
+
+    function readEmbeddingField(id) {
+      const field = byId(id);
+      const value = field.value.trim();
+      if (!value) {
+        return undefined;
+      }
+      if (
+        field.dataset.configured !== 'true' &&
+        field.dataset.userEdited !== 'true' &&
+        value === (field.dataset.envValue || '')
+      ) {
+        return undefined;
+      }
+      return value;
     }
 
     byId('save').addEventListener('click', () => {
@@ -709,6 +885,10 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
   }
 
   const config = workspace.readConfig();
+  const hookConfig = projectConfig(config);
+  const environmentConfig = readEmbeddingEnvironmentConfig();
+  const effectiveEmbeddingValue = (key: keyof EmbeddingEnvironmentConfig, fallback: string) =>
+    hookConfig[key] || environmentConfig[key] || fallback;
   const promptExists = await exists(paths.effectivePrompt);
   const document = await vscode.workspace.openTextDocument({
     language: 'plaintext',
@@ -717,9 +897,9 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
       `Agents: ${config.agents.length ? config.agents.join(', ') : '(none)'}`,
       `Packs: ${config.packs.length ? config.packs.join(', ') : '(none)'}`,
       `Policy root: ${config.policyRoot || '(resolved from Claude/Codex hook location)'}`,
-      `Embedding provider: ${config.embeddingProvider || '(auto)'}`,
-      `Embedding base URL: ${config.embeddingBaseUrl || '(default)'}`,
-      `Embedding model: ${config.embeddingModel || '(default)'}`,
+      `Embedding provider: ${effectiveEmbeddingValue('embeddingProvider', '(auto)')}`,
+      `Embedding base URL: ${effectiveEmbeddingValue('embeddingBaseUrl', '(default)')}`,
+      `Embedding model: ${effectiveEmbeddingValue('embeddingModel', '(default)')}`,
       `Post-refinement: ${config.postRefine}`,
       `Post-refinement packs: ${config.postRefinePacks.join(', ') || '(none)'}`,
       `Verify target: ${config.verifyTarget || '(not configured)'}`,
@@ -762,6 +942,69 @@ function cleanOptionalString(value: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function readEmbeddingEnvironmentConfig(): EmbeddingEnvironmentConfig {
+  return {
+    embeddingProvider: normalizeEmbeddingProvider(process.env.AI_POLICY_EMBEDDING_PROVIDER ?? ''),
+    embeddingBaseUrl: cleanOptionalString(process.env.AI_POLICY_EMBEDDING_BASE_URL ?? ''),
+    embeddingApiKey: cleanOptionalString(
+      process.env.AI_POLICY_EMBEDDING_API_KEY ?? process.env.OPENAI_API_KEY ?? ''
+    ),
+    embeddingModel: cleanOptionalString(process.env.AI_POLICY_EMBEDDING_MODEL ?? ''),
+    embeddingTimeout: cleanOptionalString(process.env.AI_POLICY_EMBEDDING_TIMEOUT ?? '')
+  };
+}
+
+function readEmbeddingAvailability(
+  config: PolicyConfig,
+  workspaceRoot: string | undefined
+): EmbeddingAvailabilityState {
+  const remoteConfigured = Boolean(
+    config.embeddingBaseUrl ||
+      config.embeddingApiKey ||
+      process.env.AI_POLICY_EMBEDDING_BASE_URL?.trim() ||
+      process.env.AI_POLICY_EMBEDDING_API_KEY?.trim() ||
+      process.env.OPENAI_API_KEY?.trim()
+  );
+  return {
+    remoteConfigured,
+    remoteSummary: remoteConfigured
+      ? (config.embeddingBaseUrl ||
+          cleanOptionalString(process.env.AI_POLICY_EMBEDDING_BASE_URL ?? '') ||
+          'credentials available')
+      : 'not configured',
+    local: readLocalModelState(config, workspaceRoot)
+  };
+}
+
+function readLocalModelState(config: PolicyConfig, workspaceRoot: string | undefined): LocalModelState {
+  const defaultPath = path.join(
+    resolvePolicyRoot(config, workspaceRoot),
+    'models',
+    'paraphrase-multilingual-MiniLM-L12-v2'
+  );
+  return {
+    defaultPath,
+    installed: existsSync(defaultPath)
+  };
+}
+
+function resolvePolicyRoot(config: PolicyConfig, workspaceRoot: string | undefined): string {
+  if (config.policyRoot) {
+    return path.isAbsolute(config.policyRoot)
+      ? config.policyRoot
+      : path.resolve(workspaceRoot ?? process.cwd(), config.policyRoot);
+  }
+  return workspaceRoot ?? process.cwd();
+}
+
+function normalizeEmbeddingProvider(value: string): string | undefined {
+  const provider = cleanOptionalString(value)?.toLowerCase().replace('_', '-');
+  if (!provider) {
+    return undefined;
+  }
+  return provider;
+}
+
 async function exists(filePath: string): Promise<boolean> {
   try {
     await fs.stat(filePath);
@@ -778,10 +1021,11 @@ function normalizeConfig(config: PolicyConfig): PolicyConfig {
     packs: Array.isArray(config.packs) ? config.packs.filter(Boolean) : DEFAULT_PACKS,
     policyRoot: cleanOptionalString(config.policyRoot ?? ''),
     autoInstall: Boolean(config.autoInstall),
-    embeddingProvider: cleanOptionalString(config.embeddingProvider ?? ''),
+    embeddingProvider: normalizeEmbeddingProvider(config.embeddingProvider ?? ''),
     embeddingBaseUrl: cleanOptionalString(config.embeddingBaseUrl ?? ''),
     embeddingApiKey: cleanOptionalString(config.embeddingApiKey ?? ''),
     embeddingModel: cleanOptionalString(config.embeddingModel ?? ''),
+    embeddingLocalModel: cleanOptionalString(config.embeddingLocalModel ?? ''),
     embeddingTimeout: cleanOptionalString(config.embeddingTimeout ?? ''),
     postRefine: normalizePostRefineMode(config.postRefine ?? 'off'),
     postRefinePacks: Array.isArray(config.postRefinePacks)
@@ -789,6 +1033,17 @@ function normalizeConfig(config: PolicyConfig): PolicyConfig {
       : DEFAULT_POST_REFINE_PACKS,
     verifyTarget: cleanOptionalString(config.verifyTarget ?? '')
   };
+}
+
+function projectConfig(config: PolicyConfig): Omit<PolicyConfig, 'embeddingLocalModel'> {
+  const { embeddingLocalModel, ...project } = config;
+  if (project.embeddingProvider === 'local') {
+    project.embeddingModel = embeddingLocalModel;
+    project.embeddingBaseUrl = undefined;
+    project.embeddingApiKey = undefined;
+    project.embeddingTimeout = undefined;
+  }
+  return project;
 }
 
 function normalizeAgents(value: unknown): AgentTarget[] {

@@ -1,7 +1,7 @@
 # Release Guide
 
 This project publishes the end-user command through NPM as `ai-policy-runtime`.
-The installed package exposes both `ai-policy` and `ai-policy-runtime`.
+The installed package exposes the `ai-policy` command.
 
 ## Local Release Check
 

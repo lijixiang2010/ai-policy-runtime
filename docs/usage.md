@@ -12,7 +12,7 @@ For normal use, install the packaged command:
 npm install -g ai-policy-runtime
 ```
 
-This exposes `ai-policy` and the compatibility alias `ai-policy-runtime`.
+This exposes the `ai-policy` command.
 The command uses the installed package as its policy and plugin root, so users
 do not need to clone this repository.
 
@@ -56,9 +56,7 @@ advanced overrides:
 
 ```powershell
 $env:AI_POLICY_EMBEDDING_PROVIDER="openai-compatible" # force remote embeddings
-$env:AI_POLICY_EMBEDDING_PROVIDER="opaicompat"         # alias for openai-compatible
 $env:AI_POLICY_EMBEDDING_PROVIDER="local"             # force sentence-transformers
-$env:AI_POLICY_EMBEDDING_PROVIDER="disabled"          # disable semantic matching
 ```
 
 For OpenAI-compatible gateways, set the endpoint explicitly:
@@ -71,9 +69,9 @@ If `AI_POLICY_EMBEDDING_MODEL` is omitted for a remote endpoint, the runtime
 uses `text-embedding-3-small`.
 
 If no remote provider is configured, the runtime tries the bundled local model
-path shown below. If neither provider is available, semantic embedding recall is
-disabled and the runtime uses deterministic exact matching plus project-context
-scanning only.
+path shown below. If neither provider is available, the runtime reports a
+configuration error because semantic embedding recall is required for task
+analysis.
 
 To verify which semantic path works in your environment, run:
 
@@ -92,9 +90,6 @@ $env:AI_POLICY_EMBEDDING_PROVIDER="openai-compatible"
 ai-policy explain "帮我写一个 C++20 低延迟队列"
 
 $env:AI_POLICY_EMBEDDING_PROVIDER="local"
-ai-policy explain "帮我写一个 C++20 低延迟队列"
-
-$env:AI_POLICY_EMBEDDING_PROVIDER="disabled"
 ai-policy explain "帮我写一个 C++20 低延迟队列"
 ```
 
@@ -137,8 +132,8 @@ $env:AI_POLICY_EMBEDDING_MODEL="D:\path\to\model"
 
 When `policy_root/models/paraphrase-multilingual-MiniLM-L12-v2` exists, the
 high-level runtime uses it automatically. If no local transformer model is
-configured, semantic embedding recall is disabled rather than downloading
-anything.
+configured, the runtime reports a configuration error rather than downloading
+anything implicitly.
 
 Semantic index vectors are cached under:
 
@@ -344,6 +339,34 @@ That installs the runtime dependencies declared in `pyproject.toml`, including
 `PyYAML` and `jsonschema`. Set `AI_POLICY_AUTO_INSTALL=0` to disable this
 automatic bootstrap and manage dependencies yourself.
 
+Configuration sources:
+
+| Entry point | Primary configuration | Notes |
+| --- | --- | --- |
+| VS Code Extension | VS Code workspace settings, synced to `.policy/config.json` | Friendly UI for workspace hooks, agents, packs, embeddings, and post-refinement. |
+| Command-line hooks | `.policy/config.json` | Use `ai-policy embedding configure ...`; environment variables are useful for CI, secrets, and temporary overrides. |
+| Python Runtime | `RuntimeConfig` constructor arguments | Pass embedding settings to `RuntimeConfig.from_values(...)`, or rely on environment variables/default local model. |
+
+Configure embeddings for command-line hooks:
+
+```powershell
+ai-policy embedding configure --root D:\work\target-project --provider local
+ai-policy embedding configure --root D:\work\target-project --provider openai-compatible --base-url https://api.openai.com/v1 --api-key <key> --model text-embedding-3-small
+ai-policy embedding status --root D:\work\target-project
+```
+
+Configure embeddings for embedded Python Runtime code:
+
+```python
+runtime = PolicyRuntime(RuntimeConfig.from_values(
+    root="D:/work/target-project",
+    policy_root="D:/MilesLi/ai-policy-runtime",
+    embedding_provider="openai-compatible",
+    embedding_api_key="<key>",
+    embedding_model="text-embedding-3-small",
+))
+```
+
 Useful environment variables:
 
 ```text
@@ -386,8 +409,10 @@ This is the preferred control surface for editor integrations:
 ```
 
 Use `"agents": ["codex", "claude"]` when the same workspace should be active for
-both Codex and Claude Code. Environment variables still override
-`.policy/config.json` when both are set.
+both Codex and Claude Code. Project embedding settings take precedence when
+present so editor-saved provider choices are stable. Environment variables can
+still override workspace-independent controls such as `AI_POLICY_ROOT`,
+`AI_POLICY_PACKS`, and `AI_POLICY_VERIFY_TARGET`.
 
 `postRefine` accepts `off`, `light`, `standard`, or `strict`. When enabled, the
 `Stop` hook uses the agent continuation mechanism once per turn: it returns

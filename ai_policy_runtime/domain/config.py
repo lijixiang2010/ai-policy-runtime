@@ -15,6 +15,17 @@ class RuntimePaths:
 
 
 @dataclass(frozen=True)
+class EmbeddingConfig:
+    """Embedding provider configuration for embedded Python runtime usage."""
+
+    provider: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    model: str | None = None
+    timeout_seconds: float | None = None
+
+
+@dataclass(frozen=True)
 class RuntimeConfig:
     """User-facing runtime configuration with conservative defaults."""
 
@@ -22,6 +33,7 @@ class RuntimeConfig:
     policy_root: Path | None = None
     skills_dir: str = "skills"
     packs_dir: str = "packs"
+    embedding: EmbeddingConfig | None = None
 
     @property
     def paths(self) -> RuntimePaths:
@@ -42,12 +54,36 @@ class RuntimeConfig:
         policy_root: str | Path | None = None,
         skills_dir: str = "skills",
         packs_dir: str = "packs",
+        embedding_provider: str | None = None,
+        embedding_base_url: str | None = None,
+        embedding_api_key: str | None = None,
+        embedding_model: str | None = None,
+        embedding_timeout_seconds: float | None = None,
     ) -> "RuntimeConfig":
+        embedding = None
+        if any(
+            value is not None
+            for value in (
+                embedding_provider,
+                embedding_base_url,
+                embedding_api_key,
+                embedding_model,
+                embedding_timeout_seconds,
+            )
+        ):
+            embedding = EmbeddingConfig(
+                provider=embedding_provider,
+                base_url=embedding_base_url,
+                api_key=embedding_api_key,
+                model=embedding_model,
+                timeout_seconds=embedding_timeout_seconds,
+            )
         return cls(
             root=Path(root),
             policy_root=Path(policy_root) if policy_root is not None else None,
             skills_dir=skills_dir,
             packs_dir=packs_dir,
+            embedding=embedding,
         )
 
 

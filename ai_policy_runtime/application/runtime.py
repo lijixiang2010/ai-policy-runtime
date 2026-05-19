@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
 from typing import Any
 
@@ -30,11 +29,10 @@ from ai_policy_runtime.services.verification import (
 )
 from ai_policy_runtime.task_analysis import (
     EmbeddingProvider,
-    SentenceTransformerEmbeddingProvider,
     TaskAnalyzer,
     TaskSignals,
 )
-from ai_policy_runtime.task_analysis.analyzer import optional_sentence_transformer_provider
+from ai_policy_runtime.task_analysis.analyzer import default_embedding_provider
 
 
 class NonApplicableTaskError(RuntimeError):
@@ -308,30 +306,10 @@ class PolicyRuntime:
         return {domain for skill in registry.all() for domain in skill.domains}
 
     def _embedding_provider(self) -> EmbeddingProvider | None:
-        provider = _configured_embedding_provider_name()
-        if provider in {
-            "disabled",
-            "none",
-            "null",
-            "openai",
-            "openai-compatible",
-            "opaicompat",
-        }:
-            return None
-        if not provider and _remote_embedding_configured():
-            return None
-        if provider and provider not in {"local", "sentence-transformers"}:
-            raise RuntimeError(f"Unsupported AI_POLICY_EMBEDDING_PROVIDER: {provider}")
-
-        model_root = self.config.policy_root or self.config.paths.root
-        local_model = (
-            model_root
-            / "models"
-            / "paraphrase-multilingual-MiniLM-L12-v2"
+        return default_embedding_provider(
+            self.config.policy_root or self.config.paths.root,
+            self.config.embedding,
         )
-        if local_model.exists():
-            return SentenceTransformerEmbeddingProvider(str(local_model))
-        return optional_sentence_transformer_provider()
 
 
 def _contributing_skill_ids(effective_rules: EffectiveRules) -> list[str]:
@@ -356,26 +334,6 @@ def _has_policy_content(effective_rules: EffectiveRules) -> bool:
             effective_rules.soft,
             effective_rules.preferences,
             effective_rules.exceptions,
-        )
-    )
-
-
-def _configured_embedding_provider_name() -> str:
-    return (
-        os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "")
-        .strip()
-        .lower()
-        .replace("_", "-")
-    )
-
-
-def _remote_embedding_configured() -> bool:
-    return any(
-        os.environ.get(name, "").strip()
-        for name in (
-            "AI_POLICY_EMBEDDING_API_KEY",
-            "OPENAI_API_KEY",
-            "AI_POLICY_EMBEDDING_BASE_URL",
         )
     )
 

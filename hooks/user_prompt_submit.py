@@ -135,7 +135,7 @@ class ProjectHookConfig:
 
     @staticmethod
     def _apply_env(name: str, value: str | None) -> None:
-        if value and name not in os.environ:
+        if value:
             os.environ[name] = value
 
 
