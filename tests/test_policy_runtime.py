@@ -760,6 +760,13 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("git_workflow", task.capabilities)
         self.assertIn("commit", task.tags)
 
+    def test_task_analyzer_understands_chinese_commit_request(self) -> None:
+        task = analyze("提交一次代码").task
+
+        self.assertEqual(task.domain, "git")
+        self.assertEqual(task.task_type, "prepare_commit")
+        self.assertIn("git_workflow", task.capabilities)
+
     def test_task_analyzer_understands_python_best_practices(self) -> None:
         task = analyze(
             "Apply Python best practices: clean up imports, add type hints, and write pytest tests."

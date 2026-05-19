@@ -61,6 +61,10 @@ task_analysis:
       - prepare commit
       - stage changes
       - commit these changes
+      - 提交代码
+      - 提交一次代码
+      - 创建提交
+      - 准备提交
     resolve_git_issue:
       - fix git issue
       - git problem

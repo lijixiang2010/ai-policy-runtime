@@ -165,6 +165,8 @@ def _can_infer_domain_from_trigger(domain: str, source: str) -> bool:
         "git": (
             "git",
             "amend commit",
+            "commit these changes",
+            "create commit",
             "conflict marker",
             "clean generated files",
             "clean ignored files",
@@ -174,13 +176,19 @@ def _can_infer_domain_from_trigger(domain: str, source: str) -> bool:
             "interactive rebase",
             "merge conflict",
             "merge request",
+            "prepare commit",
             "pull request",
             "rebase",
             "rebase conflict",
             "remove untracked files",
+            "stage commit",
             "squash commits",
             "squash these commits",
             "stash",
+            "创建提交",
+            "准备提交",
+            "提交一次代码",
+            "提交代码",
         ),
     }
     return any(hint in phrase for hint in hints.get(domain, ()))
