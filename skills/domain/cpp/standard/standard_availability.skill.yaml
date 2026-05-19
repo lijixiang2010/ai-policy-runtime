@@ -58,6 +58,9 @@ task_analysis:
         selected_standard_is_known: true
       tags:
         - standard-library
+      semantic_match:
+        - honor the requested C++ standard version when choosing language features
+        - avoid recommending library facilities newer than the selected C++ standard
       confidence: 0.7
 
 sources:

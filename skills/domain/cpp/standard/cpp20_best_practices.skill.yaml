@@ -59,6 +59,9 @@ task_analysis:
         selected_standard_is_known: true
       tags:
         - cpp20
+      semantic_match:
+        - compile or design this C++ code for the C++20 standard
+        - use C++20 library and language facilities when available
       confidence: 0.95
 
     - id: detect_cpp20_contiguous_range_parameter
@@ -77,6 +80,7 @@ task_analysis:
       semantic_match:
         - accepts a non-owning contiguous range
         - API takes a buffer view without ownership transfer
+        - choose span for array buffer or contiguous data parameters
       confidence: 0.84
 
 sources:

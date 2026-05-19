@@ -63,10 +63,13 @@ task_analysis:
       - implement a C++ component
       - generate source code for a data structure or data channel
       - write latency-sensitive C++ implementation code
+      - add or change C++ source or header code
     review_code:
       - review C++ code
+      - check C++ code for bugs undefined behavior and maintainability risks
     refactor_code:
       - refactor C++ code
+      - clean up C++ implementation while preserving observable behavior
 
   trigger_capabilities:
     write_code:
@@ -86,6 +89,9 @@ task_analysis:
         language: cpp
       tags:
         - cpp
+      semantic_match:
+        - use modern C++ language rules and standard library practices
+        - write or review C++ source headers templates or build-facing code
       confidence: 0.62
 
 rules:

@@ -67,10 +67,13 @@ task_analysis:
     manage_dependencies:
       - add a third party dependency to a CMake project safely
       - integrate dependencies with find_package imported targets or FetchContent
+      - wire a library dependency into CMake without raw include or library paths
     design_build:
       - expose dependencies through CMake targets without leaking global state
+      - design dependency usage requirements so downstream targets link cleanly
     review_build:
       - review CMake dependency usage for reproducibility and consumer safety
+      - check whether external libraries are versioned and target based
 
   trigger_capabilities:
     manage_dependencies:
@@ -100,6 +103,7 @@ task_analysis:
       semantic_match:
         - add third party dependencies using imported targets and controlled versions
         - choose between find_package FetchContent package manager and superbuild dependency flows
+        - link an external library through a CMake target instead of manual flags
       confidence: 0.9
 
 rules:

@@ -88,17 +88,23 @@ task_analysis:
       - write Python code
       - implement a Python module or script
       - generate Python source code
+      - add or change Python application logic
     review_code:
       - review Python code for correctness, readability, and maintainability
+      - check a Python module for bugs and maintainability risks
     refactor_code:
       - refactor Python code while preserving behavior
+      - clean up Python code without changing what it does
     design_api:
       - design a Python API with clear caller ergonomics
+      - shape a Python function class or module interface for callers
     improve_code_quality:
       - apply Python best practices and make code more Pythonic
       - improve Python readability, naming, imports, and structure
+      - make existing Python code cleaner safer and easier to maintain
     write_tests:
       - write Python unit tests or pytest tests
+      - add test coverage for Python behavior
 
   trigger_capabilities:
     write_code:
@@ -132,6 +138,7 @@ task_analysis:
       semantic_match:
         - apply idiomatic Python best practices
         - improve Python code according to PEP 8 and Pythonic conventions
+        - clean up Python code style structure imports typing and tests
       confidence: 0.86
 
     - id: detect_python_project_tooling
@@ -154,6 +161,7 @@ task_analysis:
       semantic_match:
         - inspect Python project tooling before changing code
         - preserve existing Python formatter, linter, type checker, and package manager conventions
+        - work with pyproject requirements lint type check and pytest configuration
       confidence: 0.84
 
 sources:

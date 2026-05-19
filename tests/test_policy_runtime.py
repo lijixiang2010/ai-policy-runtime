@@ -4,6 +4,7 @@ import os
 import json
 import argparse
 import io
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,9 @@ from ai_policy_runtime.services.engine import PolicyConflictError
 from ai_policy_runtime.services.injector import BEGIN, END, inject_current_prompt
 from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_mapping
+
+
+NON_ENGLISH_DSL_PATTERN = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
 from ai_policy_runtime.services.verification import FileVerifier, Violation, verify_rules
 from hooks import stop_refinement, user_prompt_submit
 from tools.configure_claude_desktop import (
@@ -257,11 +261,20 @@ class KeywordConceptEmbeddingProvider:
                 "atomic commit",
                 "logical commit",
                 "staged diff",
-                "提交",
                 "提交信息",
                 "提交说明",
                 "拆分提交",
                 "changelog",
+            ),
+        ),
+        (
+            "git_commit_code",
+            (
+                "提交一次代码",
+                "提交代码",
+                "commit this code",
+                "commit code changes",
+                "save completed code changes",
             ),
         ),
         (
@@ -293,6 +306,8 @@ class KeywordConceptEmbeddingProvider:
                 "conflict marker",
                 "merge request",
                 "review branch",
+                "check the diff",
+                "checking the diff",
                 "分支",
                 "合并",
                 "冲突",
@@ -429,10 +444,80 @@ class KeywordConceptEmbeddingProvider:
         (
             "python",
             (
-                "python",
                 "pythonic",
                 "python best practices",
                 "python 最佳实践",
+            ),
+        ),
+        (
+            "python_api",
+            (
+                "public api",
+                "library api",
+                "caller ergonomics",
+                "parameters",
+                "return values",
+                "interface",
+            ),
+        ),
+        (
+            "python_classes",
+            (
+                "class hierarchy",
+                "dataclass",
+                "dataclasses",
+                "protocol",
+                "protocols",
+                "inheritance",
+                "composition",
+            ),
+        ),
+        (
+            "python_cli",
+            (
+                "cli",
+                "command line",
+                "argparse",
+                "argv",
+                "entry point",
+                "console",
+                "script",
+            ),
+        ),
+        (
+            "python_functions",
+            (
+                "function",
+                "arguments",
+                "defaults",
+                "return values",
+                "mutable default",
+                "decorator",
+            ),
+        ),
+        (
+            "python_control_flow",
+            (
+                "loop",
+                "loops",
+                "comprehension",
+                "generator",
+                "iterator",
+                "truthiness",
+                "slicing",
+                "dictionary",
+            ),
+        ),
+        (
+            "python_resource",
+            (
+                "resource",
+                "cleanup",
+                "context manager",
+                "file handle",
+                "exception",
+                "broad except",
+                "transaction",
             ),
         ),
         (
@@ -521,11 +606,18 @@ class KeywordConceptEmbeddingProvider:
             lowered = text.lower()
             vectors.append(
                 [
-                    1.0 if any(token in lowered for token in tokens) else 0.0
+                    1.0 if any(_concept_token_matches(lowered, token) for token in tokens) else 0.0
                     for _, tokens in self._CONCEPTS
                 ]
             )
         return vectors
+
+
+def _concept_token_matches(text: str, token: str) -> bool:
+    normalized = token.lower()
+    if re.fullmatch(r"[a-z0-9_]+(?: [a-z0-9_]+)*", normalized):
+        return re.search(rf"(?<![a-z0-9_]){re.escape(normalized)}(?![a-z0-9_])", text) is not None
+    return normalized in text
 
 
 class CountingEmbeddingProvider(KeywordConceptEmbeddingProvider):
@@ -761,7 +853,11 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("commit", task.tags)
 
     def test_task_analyzer_understands_chinese_commit_request(self) -> None:
-        task = TaskAnalyzer().analyze(
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=KeywordConceptEmbeddingProvider(),
+        )
+        task = analyzer.analyze(
             "提交一次代码",
             TaskSignals(project_language="python"),
         ).task
@@ -1465,6 +1561,20 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(effective.hard[0].action, RuleAction.FORBID)
         self.assertEqual(effective.soft[0].action, RuleAction.RECOMMEND)
         self.assertEqual(effective.preferences[0].value, "safety > performance")
+
+    def test_skill_dsl_authoring_text_is_english_only(self) -> None:
+        violations: list[str] = []
+        for path in sorted(Path("skills").rglob("*.skill.yaml")):
+            text = path.read_text(encoding="utf-8")
+            for line_number, line in enumerate(text.splitlines(), start=1):
+                if NON_ENGLISH_DSL_PATTERN.search(line):
+                    violations.append(f"{path}:{line_number}: {line.strip()}")
+
+        self.assertEqual(
+            violations,
+            [],
+            "Skill DSL files must stay English-only; multilingual recall belongs to embeddings.",
+        )
 
     def test_activation_condition_filters_skill(self) -> None:
         skill = Skill.from_mapping(

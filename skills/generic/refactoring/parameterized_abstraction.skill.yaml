@@ -70,6 +70,7 @@ task_analysis:
         - refactoring
       semantic_match:
         - implementations share structure and differ in a small number of decisions
+        - same control flow with small variations should share structure carefully
         - variation should be represented explicitly
       confidence: 0.84
 

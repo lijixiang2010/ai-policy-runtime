@@ -217,6 +217,25 @@ Clause Form is useful in:
 
 Clause Form is not recommended as the canonical storage format because it is harder to validate, patch, diff, and compile reliably.
 
+### 7.1.1 Authoring Language Boundary
+
+Persistent Skill DSL files under `skills/` must be authored in English only,
+including `domain_aliases`, `trigger_aliases`, `trigger_semantics`,
+`when_text_matches`, `semantic_match`, rule statements, rationale, and
+authoring notes.
+
+Do not add translated keyword lists or non-English trigger phrases to Skill DSL
+files to fix multilingual recall. Multilingual user input is handled by the
+embedding provider and semantic task analysis. If a non-English daily request
+does not recall the right skill, improve the English semantic anchor phrases so
+they describe realistic user intent more directly, then add multilingual test
+fixtures that prove the embedding path maps that request to the English DSL.
+
+This rule exists to keep the DSL canonical, reviewable, and deduplicated. A past
+recall bug for a daily request equivalent to "commit code changes" was fixed by
+adding English semantic anchors and semantic bootstrap logic, not by adding the
+user's language to the Git skill.
+
 ### 7.2 Object Form
 
 Object Form is designed for real skill files.

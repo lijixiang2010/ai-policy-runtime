@@ -61,6 +61,9 @@ task_analysis:
         selected_standard_is_known: true
       tags:
         - cpp23
+      semantic_match:
+        - compile or design this C++ code for the C++23 standard
+        - use C++23 library and language facilities when available
       confidence: 0.95
 
     - id: detect_cpp23_modules_task

@@ -80,6 +80,7 @@ task_analysis:
         - order matching engine
         - trading engine matching loop
         - exchange core matching path
+        - latency sensitive order book or exchange matching code
       confidence: 0.84
 
     - id: detect_low_latency_queue_scenario
@@ -100,6 +101,7 @@ task_analysis:
         - latency-sensitive producer consumer queue
         - queue for passing events in a trading hot path
         - data channel with strict tail latency requirements
+        - low latency data channel between producers and consumers
       confidence: 0.84
 
 sources:

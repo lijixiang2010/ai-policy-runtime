@@ -46,10 +46,13 @@ task_analysis:
   domain_semantics:
     - Git commit workflow task
     - version control history task
+    - save completed code changes into repository history
 
   trigger_aliases:
     prepare_commit:
       - create commit
+      - commit this code
+      - commit code changes
       - split commit
       - stage commit
       - git add
@@ -69,14 +72,20 @@ task_analysis:
       - create a focused Git commit from related changes
       - create a commit for code changes
       - commit code changes with a clean scope
+      - save the current completed work as a repository commit
+      - commit the staged implementation after reviewing the diff
+      - turn local code changes into a clean version control checkpoint
       - split unrelated changes into separate commits
       - prepare a reviewable commit
     write_commit_message:
       - write a clear Git commit subject and body
       - summarize the intent and impact of a code change for version control history
+      - choose a commit title that matches the staged changes
+      - draft a commit message after looking at the diff
     review_git_history:
       - review whether Git commits are small coherent and understandable
       - clean up local commit history before sharing it
+      - check recent commits before pushing or opening review
 
   trigger_capabilities:
     prepare_commit:
@@ -101,6 +110,7 @@ task_analysis:
       semantic_match:
         - write a concise commit message for the staged changes
         - generate a commit title and body that explain why the change exists
+        - name this change clearly in the Git history
       confidence: 0.88
 
     - id: detect_commit_splitting_task
@@ -117,6 +127,7 @@ task_analysis:
       semantic_match:
         - separate unrelated changes into small logical commits
         - make the commit history easier to review by splitting scope
+        - avoid putting mixed feature fix and formatting changes in one commit
       confidence: 0.88
 
     - id: detect_conventional_commit_task
@@ -133,6 +144,7 @@ task_analysis:
       semantic_match:
         - write a commit message using conventional type scope and subject
         - choose the correct conventional commit type for a change
+        - format the commit title as feat fix docs refactor test or chore when requested
       confidence: 0.88
 
 rules:

@@ -205,6 +205,8 @@ policy-claude --pack cpp.production_refinement "Refactor this module safely."
 - [Skill Policy Runtime](docs/skill_policy_runtime.md): runtime model and core
   concepts.
 - [Skill DSL Syntax](docs/skill_dsl_syntax_specification.md): Skill file format.
+- [Skill Authoring Log](docs/skill_authoring_log.md): maintenance notes,
+  including the English-only DSL boundary.
 - [Effective Rules Output](docs/effective_rules_output_specification.md):
   generated rule contract.
 - [C++ Skill Library Design](docs/cpp_skill_library_design.md): current C++

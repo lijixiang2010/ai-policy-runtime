@@ -72,11 +72,14 @@ task_analysis:
     configure_build:
       - create CMakePresets for repeatable local and CI builds
       - configure out of source CMake builds consistently across environments
+      - make common configure build test and package commands repeatable with presets
     setup_toolchain:
       - define a CMake toolchain file for cross compilation
       - keep compiler sysroot and target platform settings in a toolchain or preset
+      - configure the compiler target platform and sysroot for cross builds
     review_build:
       - review CMake configuration for reproducibility across developer and CI machines
+      - check whether CMake commands are documented as stable presets
 
   trigger_capabilities:
     configure_build:
@@ -108,6 +111,7 @@ task_analysis:
         - use configure build test and package presets for reproducible workflows
         - configure build test and sanitizer quality workflows through CMake presets
         - share project presets while keeping user local presets out of version control
+        - add named CMake presets so local developers and CI run the same build steps
       confidence: 0.9
 
     - id: detect_cmake_toolchain_task
@@ -124,6 +128,7 @@ task_analysis:
       semantic_match:
         - configure cross compilation through a toolchain file
         - keep compiler target platform and sysroot settings explicit
+        - avoid hiding cross compile settings inside ordinary project logic
       confidence: 0.9
 
 rules:

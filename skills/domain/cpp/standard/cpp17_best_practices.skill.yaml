@@ -81,6 +81,9 @@ task_analysis:
         selected_standard_is_known: true
       tags:
         - cpp17
+      semantic_match:
+        - compile or design this C++ code for the C++17 standard
+        - use C++17 library facilities and avoid newer standard requirements
       confidence: 0.95
 
     - id: detect_cpp17_read_only_string_parameter
@@ -96,6 +99,7 @@ task_analysis:
         - api-design
       semantic_match:
         - function accepts a read-only string-like parameter
+        - choose string_view or string parameter for a C++ API
       confidence: 0.84
 
 sources:

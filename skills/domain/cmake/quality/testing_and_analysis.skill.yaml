@@ -67,11 +67,14 @@ task_analysis:
     add_tests:
       - add tests to a CMake project using CTest
       - integrate test discovery and test presets in CMake
+      - make the CMake build run the project's tests from CI and local workflows
     configure_quality:
       - configure sanitizers coverage or static analysis in CMake without affecting normal builds
       - add code quality tools to CMake as opt in target or preset behavior
+      - add an optional debug quality build with sanitizers or analysis tools
     review_build:
       - review CMake test and quality tool integration
+      - check whether tests and analysis tools are wired into CMake cleanly
 
   trigger_capabilities:
     add_tests:
@@ -98,6 +101,7 @@ task_analysis:
       semantic_match:
         - add CTest based testing and test discovery
         - discover and run tests through test presets
+        - let developers run the CMake test suite with named commands
       confidence: 0.9
 
     - id: detect_cmake_quality_task
@@ -115,6 +119,7 @@ task_analysis:
       semantic_match:
         - integrate sanitizers coverage clang tidy or static analysis into build workflows
         - configure code quality tools without polluting normal release builds
+        - make sanitizer and analysis checks available as opt in CMake presets or targets
       confidence: 0.9
 
 rules:

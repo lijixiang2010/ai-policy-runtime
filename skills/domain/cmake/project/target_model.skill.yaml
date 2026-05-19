@@ -67,11 +67,14 @@ task_analysis:
     design_build:
       - create a target based CMake build for a C++ project
       - define libraries and executables with modern CMake targets
+      - add a CMakeLists file that builds the app or library cleanly
     modernize_cmake:
       - migrate CMake code from global variables to target properties
       - clean up legacy CMakeLists into maintainable target based structure
+      - replace directory wide CMake settings with target local usage requirements
     review_build:
       - review a CMake project for maintainability and best practices
+      - check whether the build scripts follow modern target based CMake
 
   trigger_capabilities:
     design_build:
@@ -98,6 +101,7 @@ task_analysis:
       semantic_match:
         - design around explicit library and executable targets
         - modernize build scripts to use target properties instead of global settings
+        - move include directories compile options and links onto the targets that need them
       confidence: 0.88
 
 rules:

@@ -69,11 +69,14 @@ task_analysis:
     save_unfinished_work:
       - stash unfinished work before switching branches or rebasing
       - temporarily save local modifications and untracked files without committing them
+      - put work in progress aside so the working tree can be clean
     clean_working_tree:
       - remove untracked or ignored generated files safely
       - dry-run Git clean before deleting files
+      - delete build artifacts from the repository working tree only after checking what will be removed
     resolve_git_issue:
       - make the working tree clean without losing useful local work
+      - clear temporary repository state without committing unfinished changes
 
   trigger_capabilities:
     save_unfinished_work:
@@ -98,6 +101,7 @@ task_analysis:
       semantic_match:
         - save unfinished local changes temporarily instead of committing them
         - stash work in progress before changing branch state
+        - set aside local edits so another Git operation can run
       confidence: 0.88
 
     - id: detect_clean_task
@@ -115,6 +119,7 @@ task_analysis:
       semantic_match:
         - remove untracked or ignored files from the Git working tree
         - clean generated build artifacts safely with a dry run first
+        - clean temporary files while protecting source changes
       confidence: 0.88
 
 rules:

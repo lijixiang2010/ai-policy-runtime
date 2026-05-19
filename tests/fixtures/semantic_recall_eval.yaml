@@ -175,6 +175,17 @@ cases:
       - git
       - commit
 
+  - id: en_git_daily_commit_code
+    prompt: Commit this code after checking the diff.
+    activation_ready: true
+    domain: git
+    task_type: prepare_commit
+    required_context:
+      language: git
+      git_working_tree_sensitive: true
+    required_tags:
+      - git
+
   - id: zh_git_history_rewrite
     prompt: 帮我把这几个 git 提交压缩一下，必要时变基，但不要影响已经共享的历史
     activation_ready: true

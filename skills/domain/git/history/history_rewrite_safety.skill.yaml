@@ -76,11 +76,14 @@ task_analysis:
       - rewrite local Git commits with rebase amend squash or fixup
       - clean up local history before publishing it
       - force push rewritten local commits safely
+      - combine or edit local commits before they are shared
     undo_change:
       - choose between revert reset restore and checkout to undo a Git change
       - undo a commit without losing unrelated work
+      - back out a bad commit while protecting other local edits
     sync_branch:
       - rebase a branch onto updated upstream history safely
+      - replay this branch on top of the latest upstream branch
 
   trigger_capabilities:
     rewrite_history:
@@ -109,6 +112,7 @@ task_analysis:
       semantic_match:
         - rewrite unpublished commits while preserving shared repository safety
         - squash amend or reorder local commits before publishing
+        - clean up local commits without damaging shared history
       confidence: 0.9
 
     - id: detect_undo_task
@@ -127,6 +131,7 @@ task_analysis:
       semantic_match:
         - undo a Git change using the safest command for the situation
         - recover from a bad commit without losing unrelated work
+        - revert or reset a change while preserving unrelated files
       confidence: 0.88
 
 rules:

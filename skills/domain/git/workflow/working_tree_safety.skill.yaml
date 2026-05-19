@@ -48,6 +48,7 @@ task_analysis:
     - Git version control task
     - repository history and working tree task
     - source control workflow task
+    - prepare local changes for safe repository operations
 
   trigger_aliases:
     inspect_git_state:
@@ -70,12 +71,15 @@ task_analysis:
     inspect_git_state:
       - inspect the current Git working tree and staged changes
       - understand what files are modified, staged, untracked, or ignored
+      - check what changed before staging committing switching branches or cleaning files
     prepare_commit:
       - prepare a clean Git commit from the intended set of changes
       - commit code changes to version control
       - stage only the files that belong in the next commit
+      - review local changes and stage the files for a focused commit
     resolve_git_issue:
       - diagnose a Git repository state problem without losing local work
+      - figure out why Git refuses to merge checkout pull or commit safely
 
   trigger_capabilities:
     inspect_git_state:
@@ -102,6 +106,8 @@ task_analysis:
       semantic_match:
         - inspect modified staged unstaged and untracked files before changing repository state
         - review the Git working tree before committing or switching context
+        - check local changes before making a Git operation that could affect files
+        - check the diff before committing code changes
       confidence: 0.86
 
 rules:

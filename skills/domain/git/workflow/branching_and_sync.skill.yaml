@@ -75,12 +75,15 @@ task_analysis:
     manage_branch:
       - create or switch a Git branch for a focused line of work
       - choose a branch structure for a feature or fix
+      - start a new branch or move to the right branch for this task
     sync_branch:
       - update a local branch with upstream changes safely
       - choose between merge and rebase for synchronizing history
+      - bring this branch up to date with main without losing work
     prepare_pull_request:
       - prepare a branch for code review and integration
       - make a Git branch easy to review before opening a pull request
+      - check branch commits and diff before sharing it with reviewers
 
   trigger_capabilities:
     manage_branch:
@@ -109,6 +112,7 @@ task_analysis:
       semantic_match:
         - prepare a branch for collaborative review and integration
         - synchronize a feature branch with the shared upstream branch
+        - update this branch before opening review
       confidence: 0.86
 
     - id: detect_protected_branch_task
@@ -122,6 +126,9 @@ task_analysis:
       tags:
         - branch
         - safety
+      semantic_match:
+        - protect main master or release branch from accidental direct changes
+        - treat a protected shared branch carefully before pushing or rebasing
       confidence: 0.86
 
     - id: detect_release_branch_task
@@ -134,6 +141,9 @@ task_analysis:
       tags:
         - branch
         - release
+      semantic_match:
+        - prepare or maintain a release branch with minimal focused changes
+        - keep release branch commits limited to version changelog or release fixes
       confidence: 0.86
 
 rules:
