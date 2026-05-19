@@ -17,7 +17,7 @@ from ai_policy_runtime.application.runtime import NonApplicableTaskError, Policy
 from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.domain.pack import PackRegistry, SkillPack
 from ai_policy_runtime.domain.rule import RuleAction
-from ai_policy_runtime.task_analysis import TaskAnalyzer
+from ai_policy_runtime.task_analysis import TaskAnalyzer, TaskSignals
 from ai_policy_runtime.task_analysis.embeddings import (
     OpenAICompatibleEmbeddingConfig,
     OpenAICompatibleEmbeddingProvider,
@@ -761,7 +761,10 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("commit", task.tags)
 
     def test_task_analyzer_understands_chinese_commit_request(self) -> None:
-        task = analyze("提交一次代码").task
+        task = TaskAnalyzer().analyze(
+            "提交一次代码",
+            TaskSignals(project_language="python"),
+        ).task
 
         self.assertEqual(task.domain, "git")
         self.assertEqual(task.task_type, "prepare_commit")

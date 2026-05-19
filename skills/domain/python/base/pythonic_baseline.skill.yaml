@@ -59,36 +59,29 @@ task_analysis:
       - write python
       - implement python
       - generate python
-      - 写 python
-      - 实现 python
     review_code:
       - review python
       - inspect python
       - python review
-      - 检查 python
     refactor_code:
       - refactor python
       - python refactor
-      - 重构 python
     design_api:
       - design python api
       - python api
       - python interface
-      - 设计 python api
     improve_code_quality:
       - python best practices
       - python code quality
       - pythonic
       - pep8
       - pep 8
-      - 最佳实践
       - best practices
     write_tests:
       - pytest
       - unittest
       - write python tests
       - python tests
-      - 写 python 测试
 
   trigger_semantics:
     write_code:
@@ -130,7 +123,6 @@ task_analysis:
         - pythonic
         - pep8
         - pep 8
-        - python 最佳实践
       set:
         python_best_practices_requested: true
         artifact_type: code

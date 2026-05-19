@@ -96,7 +96,6 @@ task_analysis:
       when_text_matches:
         - cmakepresets
         - cmake preset
-        - 预设
         - configure preset
         - build preset
         - workflow preset
@@ -107,6 +106,7 @@ task_analysis:
         - reproducibility
       semantic_match:
         - use configure build test and package presets for reproducible workflows
+        - configure build test and sanitizer quality workflows through CMake presets
         - share project presets while keeping user local presets out of version control
       confidence: 0.9
 

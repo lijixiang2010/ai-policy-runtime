@@ -48,7 +48,6 @@ task_analysis:
       when_text_matches:
         - low latency
         - low-latency
-        - 低延迟
         - hot path
         - performance critical
       set:
@@ -68,7 +67,6 @@ task_analysis:
         - matching engine
         - match engine
         - order matching
-        - 撮合引擎
       set:
         scenario: matching_engine
         performance_critical: true
@@ -89,7 +87,6 @@ task_analysis:
         - low latency queue
         - low-latency queue
         - latency-sensitive queue
-        - 低延迟队列
       set:
         scenario: low_latency_queue
         data_structure: queue

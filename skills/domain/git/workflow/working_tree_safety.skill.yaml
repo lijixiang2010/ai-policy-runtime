@@ -61,10 +61,6 @@ task_analysis:
       - prepare commit
       - stage changes
       - commit these changes
-      - 提交代码
-      - 提交一次代码
-      - 创建提交
-      - 准备提交
     resolve_git_issue:
       - fix git issue
       - git problem
@@ -76,6 +72,7 @@ task_analysis:
       - understand what files are modified, staged, untracked, or ignored
     prepare_commit:
       - prepare a clean Git commit from the intended set of changes
+      - commit code changes to version control
       - stage only the files that belong in the next commit
     resolve_git_issue:
       - diagnose a Git repository state problem without losing local work

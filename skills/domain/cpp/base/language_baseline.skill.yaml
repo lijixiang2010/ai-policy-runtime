@@ -51,7 +51,6 @@ task_analysis:
       - write
       - implement
       - generate
-      - 写
     review_code:
       - review
       - inspect

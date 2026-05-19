@@ -92,6 +92,9 @@ class DeterministicTaskExtractor:
         if self._semantic_index is None:
             return
         bootstrapped_scope: frozenset[str] | None = None
+        if gate is not None and gate.task_type is None:
+            self._apply_semantic_task_bootstrap(text, state)
+            gate = self._semantic_gate(state)
         if gate is None:
             bootstrapped_scope = self._lexicon.generic_semantic_scope()
             for match in self._semantic_index.search_scoped(text, scope=bootstrapped_scope):
@@ -117,6 +120,41 @@ class DeterministicTaskExtractor:
                 scope = scope | self._lexicon.generic_semantic_scope()
         for match in self._semantic_index.search_scoped(text, scope=scope):
             state.apply_rule(match.rule, match.evidence())
+
+    def _apply_semantic_task_bootstrap(
+        self,
+        text: str,
+        state: ExtractionState,
+    ) -> None:
+        if self._semantic_index is None:
+            return
+        current_domain = state.best_value("domain", "")
+        for match in self._semantic_index.search_scoped(text, scope=None):
+            if match.rule.field != "task_type":
+                continue
+            evidence = match.evidence()
+            domain = self._lexicon.domain_for_skill(match.rule.skill_id)
+            if domain and current_domain and domain != current_domain:
+                if (
+                    domain not in {"git", "cmake"}
+                    or evidence.confidence < 0.5
+                    or not _can_cross_project_domain_from_semantic_task(
+                        domain,
+                        str(match.rule.value),
+                    )
+                ):
+                    continue
+            state.apply_rule(match.rule, evidence)
+            if domain and domain != "generic_code":
+                state.add(
+                    ExtractionEvidence(
+                        field="domain",
+                        value=domain,
+                        source=f"{match.rule.source}:semantic_task_domain",
+                        confidence=max(evidence.confidence, 0.72),
+                    )
+                )
+            return
 
     def _semantic_gate(self, state: ExtractionState) -> TaskGate | None:
         """Build the first-stage gate from exact evidence and nonsemantic signals."""
@@ -185,13 +223,27 @@ def _can_infer_domain_from_trigger(domain: str, source: str) -> bool:
             "squash commits",
             "squash these commits",
             "stash",
-            "创建提交",
-            "准备提交",
-            "提交一次代码",
-            "提交代码",
         ),
     }
     return any(hint in phrase for hint in hints.get(domain, ()))
+
+
+def _can_cross_project_domain_from_semantic_task(domain: str, task_type: str) -> bool:
+    if domain == "git":
+        return task_type in {
+            "prepare_commit",
+            "write_commit_message",
+            "prepare_pull_request",
+            "review_git_history",
+            "rewrite_history",
+            "undo_change",
+            "resolve_conflict",
+            "save_unfinished_work",
+            "clean_working_tree",
+            "manage_branch",
+            "sync_branch",
+        }
+    return domain == "cmake"
 
 
 def _is_explicit_non_code_change_request(text: str) -> bool:

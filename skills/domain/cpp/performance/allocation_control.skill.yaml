@@ -50,8 +50,6 @@ task_analysis:
         - pmr
         - allocator
         - container
-        - 分配
-        - 堆分配
       set:
         allocation_sensitive: true
       tags:
