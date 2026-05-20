@@ -9,7 +9,7 @@ from ai_policy_runtime.application.runtime import PolicyRuntime
 from ai_policy_runtime.domain.config import RuntimeConfig
 
 
-POST_REFINE_PACK_ID = "cpp.production_refinement"
+POST_REFINE_PACK_ID = "generic.production_refinement"
 POST_REFINE_MODES = ("off", "light", "standard", "strict")
 
 

@@ -62,7 +62,7 @@ const EFFECTIVE_PROMPT_FILE = path.join('.policy', 'current', 'effective-prompt.
 const HOOK_STATE_FILE = path.join('.policy', 'current', 'agent-hook-state.json');
 const DEFAULT_AGENTS: AgentTarget[] = ['codex'];
 const DEFAULT_PACKS = ['cpp.safe_generation'];
-const DEFAULT_POST_REFINE_PACKS = ['cpp.production_refinement'];
+const DEFAULT_POST_REFINE_PACKS = ['generic.production_refinement'];
 const REQUIRED_RUNTIME_PATHS = [
   path.join('bin', 'ai-policy-hook.js'),
   path.join('bin', 'ai-policy.js'),
@@ -127,6 +127,18 @@ const KNOWN_PACKS: PackItem[] = [
     description: 'General code quality refinement',
     category: 'Refinement',
     tags: ['Generic', 'Production']
+  },
+  {
+    label: 'python.production_refinement',
+    description: 'Python production polish, typing, testing, security, and performance',
+    category: 'Refinement',
+    tags: ['Python', 'Production']
+  },
+  {
+    label: 'cmake.production_refinement',
+    description: 'CMake production polish for targets, dependencies, presets, and packaging',
+    category: 'Refinement',
+    tags: ['CMake', 'Production', 'Build']
   },
   {
     label: 'git.best_practices',

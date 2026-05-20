@@ -13,7 +13,7 @@ PLUGIN_NAME = "ai-policy-runtime"
 MARKETPLACE_NAME = "ai-policy-runtime"
 PLUGIN_ID = f"{PLUGIN_NAME}@{MARKETPLACE_NAME}"
 DEFAULT_PACK = "cpp.safe_generation"
-DEFAULT_POST_REFINE_PACK = "cpp.production_refinement"
+DEFAULT_POST_REFINE_PACK = "generic.production_refinement"
 POST_REFINE_MODES = ("off", "light", "standard", "strict")
 
 
