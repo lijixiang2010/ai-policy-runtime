@@ -106,9 +106,6 @@ def _task_prompt(prompt: str) -> str:
         if marker not in text:
             continue
         request = text.rsplit(marker, 1)[-1].strip()
-        next_heading = request.find("\n## ")
-        if next_heading >= 0:
-            request = request[:next_heading].strip()
         return request or text
     return text
 

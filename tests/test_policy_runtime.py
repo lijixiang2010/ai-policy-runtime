@@ -2067,6 +2067,27 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(state["effective_rules_generated"])
         self.assertEqual(resolve.call_args.args[0], "提交一次代码试试")
 
+    def test_user_prompt_hook_preserves_markdown_in_codex_request(self) -> None:
+        wrapped = (
+            "# Context from my IDE setup:\n\n"
+            "## Active file: .policy/current/effective-prompt.md\n\n"
+            "## My request for Codex:\n"
+            "# Effective Rules for Current Task\n\n"
+            "## Task Context\n\n"
+            "- Domain: git\n\n"
+            "这个输出效果是正确的吗\n"
+        )
+
+        self.assertEqual(
+            user_prompt_submit._task_prompt(wrapped),
+            (
+                "# Effective Rules for Current Task\n\n"
+                "## Task Context\n\n"
+                "- Domain: git\n\n"
+                "这个输出效果是正确的吗"
+            ),
+        )
+
     def test_codex_hook_config_reads_post_refinement_options(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             config = user_prompt_submit.ProjectHookConfig.from_mapping(
@@ -2322,6 +2343,21 @@ class PolicyRuntimeTests(unittest.TestCase):
                     "请检查当前项目，并说明 AI Policy Runtime 是否通过 Claude Code plugin 启用了。",
                     ("cpp.safe_generation",),
                 )
+
+            self.assertFalse(result.applicable)
+            self.assertFalse((Path(tmp) / ".policy" / "current").exists())
+
+    def test_resolve_if_applicable_skips_effective_rules_output_question(self) -> None:
+        with TemporaryDirectory() as tmp:
+            runtime = PolicyRuntime(RuntimeConfig.from_values(root=tmp, policy_root="."))
+
+            result = runtime.resolve_if_applicable(
+                "# Effective Rules for Current Task\n\n"
+                "## Task Context\n\n"
+                "- Domain: git\n\n"
+                "这个输出效果是正确的吗",
+                (),
+            )
 
             self.assertFalse(result.applicable)
             self.assertFalse((Path(tmp) / ".policy" / "current").exists())

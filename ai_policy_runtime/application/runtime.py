@@ -343,6 +343,7 @@ def _is_runtime_status_query(task_text: str) -> bool:
     runtime_terms = (
         "ai policy runtime",
         "policy runtime",
+        "effective rules",
         "claude code plugin",
         "codex plugin",
         "plugin",
@@ -359,6 +360,8 @@ def _is_runtime_status_query(task_text: str) -> bool:
         "状态",
         "配置",
         "是否",
+        "正确",
+        "输出效果",
         "检查当前项目",
         "通过",
     )
