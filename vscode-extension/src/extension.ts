@@ -15,12 +15,14 @@ type PolicyConfig = {
   embeddingModel?: string;
   embeddingLocalModel?: string;
   embeddingTimeout?: string;
+  gitCommitStyle: GitCommitStyle;
   postRefine: 'off' | 'light' | 'standard' | 'strict';
   postRefinePacks: string[];
   verifyTarget?: string;
 };
 
 type AgentTarget = 'codex' | 'claude';
+type GitCommitStyle = 'auto' | 'conventional' | 'imperative';
 
 type PolicyPaths = {
   root: string;
@@ -242,6 +244,7 @@ class PolicyWorkspace {
       this.updateSetting('embeddingModel', config.embeddingModel ?? ''),
       this.updateSetting('embeddingLocalModel', config.embeddingLocalModel ?? ''),
       this.updateSetting('embeddingTimeout', config.embeddingTimeout ?? ''),
+      this.updateSetting('gitCommitStyle', config.gitCommitStyle),
       this.updateSetting('postRefine', config.postRefine),
       this.updateSetting('postRefinePacks', config.postRefinePacks),
       this.updateSetting('verifyTarget', config.verifyTarget ?? '')
@@ -263,6 +266,7 @@ class PolicyWorkspace {
       embeddingModel: cleanOptionalString(config.get<string>('embeddingModel', '')),
       embeddingLocalModel: cleanOptionalString(config.get<string>('embeddingLocalModel', '')),
       embeddingTimeout: cleanOptionalString(config.get<string>('embeddingTimeout', '')),
+      gitCommitStyle: normalizeGitCommitStyle(config.get<string>('gitCommitStyle', 'auto')),
       postRefine: normalizePostRefineMode(config.get<string>('postRefine', 'off')),
       postRefinePacks: config.get<string[]>('postRefinePacks', DEFAULT_POST_REFINE_PACKS),
       verifyTarget: cleanOptionalString(config.get<string>('verifyTarget', ''))
@@ -564,6 +568,18 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
   </div>
 
   <div class="section">
+    <div class="field">
+      <label for="gitCommitStyle">Git commit style</label>
+      <select id="gitCommitStyle">
+        <option value="auto">Auto</option>
+        <option value="conventional">Conventional Commits</option>
+        <option value="imperative">Plain imperative subjects</option>
+      </select>
+    </div>
+    <p class="switch-note">Auto follows explicit project tooling or recent history; otherwise Git tasks use concise imperative subjects.</p>
+  </div>
+
+  <div class="section">
     <div class="row">
       <label for="postRefineEnabled">Post-refinement</label>
       <input id="postRefineEnabled" type="checkbox">
@@ -648,6 +664,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     byId('autoInstall').checked = Boolean(state.config.autoInstall);
     byId('agentCodex').checked = agents.has('codex');
     byId('agentClaude').checked = agents.has('claude');
+    byId('gitCommitStyle').value = state.config.gitCommitStyle || 'auto';
     byId('postRefineEnabled').checked = (state.config.postRefine || 'off') !== 'off';
     byId('postRefine').value = state.config.postRefine && state.config.postRefine !== 'off'
       ? state.config.postRefine
@@ -763,6 +780,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       'autoInstall',
       'agentCodex',
       'agentClaude',
+      'gitCommitStyle',
       'postRefine',
       'verifyTarget',
       'policyRoot',
@@ -843,6 +861,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
         packs: Array.from(selected),
         policyRoot: byId('policyRoot').value.trim() || undefined,
         autoInstall: byId('autoInstall').checked,
+        gitCommitStyle: byId('gitCommitStyle').value,
         embeddingProvider: readEmbeddingField('embeddingProvider'),
         embeddingBaseUrl: readEmbeddingField('embeddingBaseUrl'),
         embeddingApiKey: readEmbeddingField('embeddingApiKey'),
@@ -1021,6 +1040,7 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
       `Agents: ${config.agents.length ? config.agents.join(', ') : '(none)'}`,
       `Packs: ${config.packs.length ? config.packs.join(', ') : '(none)'}`,
       `Policy root: ${paths.policyRoot}`,
+      `Git commit style: ${config.gitCommitStyle}`,
       `Embedding provider: ${effectiveEmbeddingValue('embeddingProvider', '(auto)')}`,
       `Embedding base URL: ${effectiveEmbeddingValue('embeddingBaseUrl', '(default)')}`,
       `Embedding model: ${effectiveEmbeddingValue('embeddingModel', '(default)')}`,
@@ -1495,6 +1515,7 @@ function normalizeConfig(config: PolicyConfig): PolicyConfig {
     embeddingModel: cleanOptionalString(config.embeddingModel ?? ''),
     embeddingLocalModel: cleanOptionalString(config.embeddingLocalModel ?? ''),
     embeddingTimeout: cleanOptionalString(config.embeddingTimeout ?? ''),
+    gitCommitStyle: normalizeGitCommitStyle(config.gitCommitStyle ?? 'auto'),
     postRefine: normalizePostRefineMode(config.postRefine ?? 'off'),
     postRefinePacks: Array.isArray(config.postRefinePacks)
       ? config.postRefinePacks.filter(Boolean)
@@ -1503,7 +1524,7 @@ function normalizeConfig(config: PolicyConfig): PolicyConfig {
   };
 }
 
-function projectConfig(config: PolicyConfig): Omit<PolicyConfig, 'embeddingLocalModel'> {
+function projectConfig(config: PolicyConfig): Omit<PolicyConfig, 'embeddingLocalModel' | 'gitCommitStyle'> & { git: { commitStyle: GitCommitStyle } } {
   const { embeddingLocalModel, ...project } = config;
   if (project.embeddingProvider === 'local') {
     project.embeddingModel = embeddingLocalModel;
@@ -1511,7 +1532,13 @@ function projectConfig(config: PolicyConfig): Omit<PolicyConfig, 'embeddingLocal
     project.embeddingApiKey = undefined;
     project.embeddingTimeout = undefined;
   }
-  return project;
+  const { gitCommitStyle, ...projectConfig } = project;
+  return {
+    ...projectConfig,
+    git: {
+      commitStyle: gitCommitStyle
+    }
+  };
 }
 
 function normalizeAgents(value: unknown): AgentTarget[] {
@@ -1527,6 +1554,14 @@ function normalizePostRefineMode(value: string): PolicyConfig['postRefine'] {
     return value;
   }
   return 'off';
+}
+
+function normalizeGitCommitStyle(value: string): GitCommitStyle {
+  const normalized = cleanOptionalString(value)?.toLowerCase().replace('_', '-');
+  if (normalized === 'conventional' || normalized === 'imperative') {
+    return normalized;
+  }
+  return 'auto';
 }
 
 function nonceValue(): string {

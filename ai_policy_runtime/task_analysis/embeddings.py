@@ -139,7 +139,8 @@ class SentenceTransformerEmbeddingProvider:
         if not self.model_name:
             raise RuntimeError(
                 "Semantic task analysis requires an explicit local embedding model. "
-                "Set AI_POLICY_EMBEDDING_MODEL or pass model_name."
+                "Set AI_POLICY_EMBEDDING_MODEL, pass model_name, or run: "
+                "ai-policy embedding configure --provider local --install"
             )
         try:
             self._model = SentenceTransformer(self.model_name)
@@ -147,7 +148,8 @@ class SentenceTransformerEmbeddingProvider:
             raise RuntimeError(
                 "Semantic task analysis could not load the embedding model "
                 f"{self.model_name!r}. Provide a local model directory or a model "
-                "that is already available in the sentence-transformers cache."
+                "that is already available in the sentence-transformers cache. "
+                "Next step: ai-policy embedding configure --provider local --install"
             ) from exc
 
     def encode(self, texts: Sequence[str]) -> list[list[float]]:

@@ -139,7 +139,7 @@ class PolicyRuntime:
         task_text: str,
         pack_ids: tuple[str, ...] = (),
     ) -> ResolveApplicabilityResult:
-        if _is_runtime_status_query(task_text):
+        if _is_runtime_status_query(task_text) or _is_trivial_non_task_query(task_text):
             return ResolveApplicabilityResult(
                 applicable=False,
                 resolve_result=None,
@@ -368,6 +368,18 @@ def _is_runtime_status_query(task_text: str) -> bool:
     return any(term in text for term in runtime_terms) and any(
         term in text for term in status_terms
     )
+
+
+def _is_trivial_non_task_query(task_text: str) -> bool:
+    text = " ".join(task_text.lower().split())
+    return text in {
+        "hello",
+        "hi",
+        "hey",
+        "你好",
+        "您好",
+        "嗨",
+    }
 
 
 def _non_applicable_task_analysis() -> dict[str, Any]:

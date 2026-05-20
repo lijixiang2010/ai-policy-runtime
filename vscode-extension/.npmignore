@@ -1,6 +1,5 @@
 .vscode/**
 .gitignore
-.npmignore
 src/**
 node_modules/**
 *.vsix
@@ -11,3 +10,4 @@ package-lock.json
 **/*.ts
 **/.DS_Store
 **/__pycache__/**
+**/*.py[cod]

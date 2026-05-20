@@ -49,6 +49,26 @@ class LocalModelManager:
 
         return tuple(spec.to_dict(self.policy_root) for spec in KNOWN_MODELS)
 
+    def inspect(self, *, check_loadable: bool = False) -> tuple[dict[str, Any], ...]:
+        """Return known local model status, optionally checking runtime loadability."""
+
+        items = []
+        for spec in KNOWN_MODELS:
+            item = spec.to_dict(self.policy_root)
+            if check_loadable:
+                item["usable"] = False
+                item["error"] = None
+                item["next_step"] = None
+                if not item["installed"]:
+                    item["next_step"] = (
+                        "Run: ai-policy embedding configure --provider local --install"
+                    )
+                else:
+                    result = check_sentence_transformer_model(Path(str(item["path"])))
+                    item.update(result)
+            items.append(item)
+        return tuple(items)
+
     def install(self, model: str = "default") -> dict[str, Any]:
         """Download a known local model into policy_root/models."""
 
@@ -87,3 +107,38 @@ def _snapshot_download(repo_id: str, local_dir: Path) -> None:
         local_dir=str(local_dir),
         local_dir_use_symlinks=False,
     )
+
+
+def check_sentence_transformer_model(model: str | Path) -> dict[str, Any]:
+    """Check whether a local sentence-transformers model can be loaded."""
+
+    model_name = str(model)
+    try:
+        from sentence_transformers import SentenceTransformer
+    except ImportError:
+        return {
+            "usable": False,
+            "error": "sentence-transformers is not installed in this Python environment.",
+            "next_step": (
+                "Run: ai-policy embedding configure --provider local --install, "
+                'or install the semantic extra: pip install "ai-policy-runtime[semantic]"'
+            ),
+        }
+
+    try:
+        SentenceTransformer(model_name)
+    except Exception as exc:
+        return {
+            "usable": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "next_step": (
+                "Run: ai-policy embedding configure --provider local --install, "
+                "or pass --model <existing sentence-transformers model path>."
+            ),
+        }
+
+    return {
+        "usable": True,
+        "error": None,
+        "next_step": None,
+    }

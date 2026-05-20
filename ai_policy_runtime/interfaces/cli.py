@@ -8,6 +8,7 @@ from typing import Any
 from ai_policy_runtime.application.runtime import NonApplicableTaskError, PolicyRuntime
 from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.infrastructure.schema_loader import SchemaLoader
+from ai_policy_runtime.services.embedding_health import inspect_embedding_health
 from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_file
 
@@ -79,6 +80,19 @@ def main() -> None:
     embedding.add_argument("--api-key", default=None, help="OpenAI-compatible API key.")
     embedding.add_argument("--model", default=None, help="Remote model or local model path/name.")
     embedding.add_argument("--timeout", type=float, default=None, help="Remote request timeout seconds.")
+    embedding.add_argument(
+        "--policy-root",
+        default=None,
+        help=(
+            "Policy asset root used when installing the default local model. "
+            "Defaults to the configured policyRoot or the project root."
+        ),
+    )
+    embedding.add_argument(
+        "--install",
+        action="store_true",
+        help="With --provider local, download the default local model and configure this project to use it.",
+    )
 
     verify = subparsers.add_parser("verify", help="Verify files against current Effective Rules.")
     verify.add_argument("--root", default=".", help="Project root.")
@@ -151,9 +165,10 @@ def _read_project_config(path: Path) -> dict[str, Any]:
     return data
 
 
-def _configure_embedding(config: dict[str, Any], args: argparse.Namespace) -> None:
+def _configure_embedding(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any] | None:
     provider = "" if args.provider == "auto" else args.provider
     config["embeddingProvider"] = provider
+    installed_model = None
     for key in (
         "embeddingBaseUrl",
         "embeddingApiKey",
@@ -170,19 +185,23 @@ def _configure_embedding(config: dict[str, Any], args: argparse.Namespace) -> No
             config["embeddingModel"] = args.model
         if args.timeout is not None:
             config["embeddingTimeout"] = str(args.timeout)
-    elif provider == "local" and args.model:
-        config["embeddingModel"] = args.model
+    elif provider == "local":
+        if args.install:
+            installed_model = LocalModelManager(_embedding_policy_root(config, args)).install(
+                args.model or "default"
+            )
+            config["embeddingModel"] = installed_model["path"]
+        elif args.model:
+            config["embeddingModel"] = args.model
+    return installed_model
 
 
-def _embedding_config_status(config: dict[str, Any]) -> dict[str, Any]:
-    provider = str(config.get("embeddingProvider") or "auto")
-    return {
-        "provider": provider,
-        "base_url": config.get("embeddingBaseUrl"),
-        "api_key_configured": bool(config.get("embeddingApiKey")),
-        "model": config.get("embeddingModel"),
-        "timeout": config.get("embeddingTimeout"),
-    }
+def _embedding_policy_root(config: dict[str, Any], args: argparse.Namespace) -> Path:
+    configured = getattr(args, "policy_root", None) or config.get("policyRoot")
+    if configured:
+        path = Path(str(configured))
+        return path if path.is_absolute() else Path(args.root) / path
+    return Path(args.root)
 
 
 def _dispatch(args: argparse.Namespace) -> tuple[dict[str, Any] | str, int]:
@@ -275,13 +294,34 @@ class CommandDispatcher:
         path = Path(args.root) / ".policy" / "config.json"
         config = _read_project_config(path)
         if args.action == "status":
-            return {"config": str(path), "embedding": _embedding_config_status(config)}, 0
+            status = inspect_embedding_health(
+                root=args.root,
+                policy_root=getattr(args, "policy_root", None),
+                config=config,
+                include_env=True,
+                check_loadable=True,
+            )
+            return {"config": str(path), "embedding": status}, 0
         if args.provider is None:
             raise ValueError("--provider is required for embedding configure")
-        _configure_embedding(config, args)
+        if args.install and args.provider != "local":
+            raise ValueError("--install can only be used with --provider local")
+        installed_model = _configure_embedding(config, args)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        return {"config": str(path), "embedding": _embedding_config_status(config)}, 0
+        output = {
+            "config": str(path),
+            "embedding": inspect_embedding_health(
+                root=args.root,
+                policy_root=getattr(args, "policy_root", None),
+                config=config,
+                include_env=True,
+                check_loadable=False,
+            ),
+        }
+        if installed_model is not None:
+            output["installed_model"] = installed_model
+        return output, 0
 
     def _verify(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         violations = _runtime_from_args(args).verify(Path(args.target))

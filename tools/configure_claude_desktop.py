@@ -188,6 +188,7 @@ def configure_policy(
             config["packs"] = [DEFAULT_PACK]
         if not config.get("policyRoot"):
             config["policyRoot"] = str(plugin_root)
+        _ensure_git_commit_style(config)
     if post_refine is not None:
         config["postRefine"] = post_refine
         if post_refine != "off":
@@ -247,6 +248,7 @@ def status(root: Path, plugin_root: Path, scope: str) -> dict[str, Any]:
         "claude_agent_enabled": "claude" in _string_list(policy.get("agents")),
         "packs": _string_list(policy.get("packs")),
         "policy_root": policy.get("policyRoot"),
+        "git_commit_style": _git_commit_style(policy),
         "post_refine": policy.get("postRefine", "off"),
         "post_refine_packs": _string_list(policy.get("postRefinePacks")),
         "plugin_id": PLUGIN_ID,
@@ -313,6 +315,19 @@ def _read_json_object(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _ensure_git_commit_style(config: dict[str, Any]) -> None:
+    git_config = config.setdefault("git", {})
+    if isinstance(git_config, dict):
+        git_config.setdefault("commitStyle", "auto")
+
+
+def _git_commit_style(config: dict[str, Any]) -> str:
+    git_config = config.get("git")
+    if isinstance(git_config, dict):
+        return str(git_config.get("commitStyle") or "auto")
+    return str(config.get("gitCommitStyle") or "auto")
 
 
 def _append_unique(value: Any, item: str) -> list[str]:

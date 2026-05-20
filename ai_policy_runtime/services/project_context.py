@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,22 @@ WEAK_TAG_CONFIDENCE = 0.58
 MAX_CMAKE_FILES = 20
 IGNORED_LAYOUT_DIRS = {".git", ".policy", ".venv", "node_modules", "__pycache__", "models"}
 CPP_SOURCE_SUFFIXES = (".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx")
+CONVENTIONAL_COMMIT_TYPES = (
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "feat",
+    "fix",
+    "perf",
+    "refactor",
+    "revert",
+    "style",
+    "test",
+)
+CONVENTIONAL_SUBJECT_RE = re.compile(
+    rf"^({'|'.join(CONVENTIONAL_COMMIT_TYPES)})(?:\([^)]+\))?!?: .+"
+)
 
 
 @dataclass(frozen=True)
@@ -120,6 +137,7 @@ class ProjectContextAnalyzer:
                 self._compile_commands_facts,
                 self._cmake_facts,
                 self._manifest_facts,
+                self._git_commit_style_facts,
                 self._language_version_facts,
                 self._tooling_facts,
                 self._file_layout_facts,
@@ -157,6 +175,123 @@ class ProjectContextAnalyzer:
             for value in data["tags"]:
                 facts.append(ProjectFact("tag", str(value), source, 0.95))
         return facts
+
+    def _git_commit_style_facts(self) -> list[ProjectFact]:
+        configured = self._configured_git_commit_style()
+        if configured == "conventional":
+            return _conventional_commit_facts(
+                ".policy/config.json: git.commitStyle",
+                0.99,
+                source_kind="configured",
+            )
+        if configured == "imperative":
+            return [
+                ProjectFact(
+                    "context.git_commit_style",
+                    "imperative",
+                    ".policy/config.json: git.commitStyle",
+                    0.99,
+                ),
+                ProjectFact(
+                    "context.git_commit_style_source",
+                    "configured",
+                    ".policy/config.json: git.commitStyle",
+                    0.99,
+                ),
+            ]
+
+        facts: list[ProjectFact] = []
+        facts.extend(self._commit_tool_facts())
+        facts.extend(self._commit_history_facts())
+        return facts
+
+    def _configured_git_commit_style(self) -> str:
+        path = self.root / ".policy" / "config.json"
+        if not path.exists():
+            return "auto"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return "auto"
+        if not isinstance(data, dict):
+            return "auto"
+        git_config = data.get("git")
+        value = None
+        if isinstance(git_config, dict):
+            value = git_config.get("commitStyle")
+        value = value or data.get("gitCommitStyle")
+        normalized = str(value or "auto").strip().lower().replace("_", "-")
+        if normalized in {"conventional", "imperative", "auto"}:
+            return normalized
+        return "auto"
+
+    def _commit_tool_facts(self) -> list[ProjectFact]:
+        for filename in (
+            "commitlint.config.js",
+            "commitlint.config.cjs",
+            "commitlint.config.mjs",
+            "commitlint.config.ts",
+            ".commitlintrc",
+            ".commitlintrc.json",
+            ".commitlintrc.yaml",
+            ".commitlintrc.yml",
+            ".czrc",
+        ):
+            path = _find_named_file(self.root, filename)
+            if path is not None:
+                return _conventional_commit_facts(_relative(path, self.root), 0.94)
+
+        package_json = self.root / "package.json"
+        if not package_json.exists():
+            return []
+        try:
+            data = json.loads(package_json.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(data, dict):
+            return []
+
+        dependency_names: set[str] = set()
+        for key in ("dependencies", "devDependencies", "peerDependencies"):
+            value = data.get(key)
+            if isinstance(value, dict):
+                dependency_names.update(str(name) for name in value)
+        conventional_tools = {
+            "@commitlint/cli",
+            "@commitlint/config-conventional",
+            "commitizen",
+            "cz-git",
+            "semantic-release",
+            "@semantic-release/commit-analyzer",
+            "@semantic-release/release-notes-generator",
+        }
+        if dependency_names.intersection(conventional_tools):
+            return _conventional_commit_facts(
+                "package.json: commit tooling dependencies",
+                0.92,
+            )
+        return []
+
+    def _commit_history_facts(self) -> list[ProjectFact]:
+        subjects = _git_subjects(self.root)
+        if len(subjects) < 3:
+            return []
+        conventional_count = sum(
+            1 for subject in subjects if CONVENTIONAL_SUBJECT_RE.match(subject)
+        )
+        ratio = conventional_count / len(subjects)
+        if conventional_count < 3 or ratio < 0.6:
+            return []
+        confidence = min(0.95, 0.84 + ratio * 0.1)
+        source = (
+            f"git log: {conventional_count}/{len(subjects)} recent subjects "
+            "use Conventional Commits"
+        )
+        return _conventional_commit_facts(
+            source,
+            confidence,
+            source_kind="project_detected",
+        )
 
     def _compile_commands_facts(self) -> list[ProjectFact]:
         path = self.root / "compile_commands.json"
@@ -432,7 +567,13 @@ class ProjectContextMerger:
         context_compatible = self._project_context_compatible(task.domain)
         for fact in self.project.selected:
             if fact.field.startswith("context."):
-                self._merge_context_fact(fact, context, evidence, context_compatible)
+                self._merge_context_fact(
+                    fact,
+                    context,
+                    evidence,
+                    context_compatible,
+                    task.domain,
+                )
             elif fact.field == "tag" and fact.confidence >= PROJECT_CONFIDENCE_THRESHOLD:
                 tags.add(str(fact.value))
                 evidence.append(_project_evidence(fact))
@@ -444,10 +585,13 @@ class ProjectContextMerger:
         context: dict[str, Any],
         evidence: list[ExtractionEvidence],
         context_compatible: bool,
+        task_domain: str,
     ) -> None:
-        if fact.confidence < PROJECT_CONFIDENCE_THRESHOLD or not context_compatible:
-            return
         key = fact.field.removeprefix("context.")
+        if fact.confidence < PROJECT_CONFIDENCE_THRESHOLD:
+            return
+        if not context_compatible and not _git_context_compatible(key, task_domain):
+            return
         if key == "language" and not self.project_domain_supported:
             return
         if key in context or _has_prompt_evidence(evidence, fact.field):
@@ -490,9 +634,51 @@ def _select_tags(values: list[ProjectFact]) -> list[ProjectFact]:
     return list(best_by_tag.values())
 
 
+def _conventional_commit_facts(
+    source: str,
+    confidence: float,
+    *,
+    source_kind: str = "project_detected",
+) -> list[ProjectFact]:
+    return [
+        ProjectFact("context.git_commit_style", "conventional", source, confidence),
+        ProjectFact("context.git_commit_style_source", source_kind, source, confidence),
+        ProjectFact("context.git_conventional_commit_requested", True, source, confidence),
+    ]
+
+
+def _git_context_compatible(key: str, task_domain: str) -> bool:
+    # Git workflow facts describe repository conventions and should apply to
+    # Git tasks even when the repository's implementation language is C++,
+    # Python, JavaScript, or another supported domain.
+    return task_domain == "git" and key.startswith("git_")
+
+
+def _git_subjects(root: Path, limit: int = 20) -> list[str]:
+    if not (root / ".git").exists():
+        return []
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "log", f"-{limit}", "--format=%s"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError:
+        return []
+    if completed.returncode != 0:
+        return []
+    return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+
+
 def _source_rank(source: str) -> int:
     normalized = source.replace("\\", "/")
     if normalized.startswith(".policy/project."):
+        return 5
+    if normalized.startswith(".policy/config."):
         return 5
     if normalized.startswith("compile_commands.json"):
         return 4

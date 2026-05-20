@@ -50,6 +50,8 @@ def build_stop_response(payload: dict[str, object]) -> dict[str, object]:
     config = ProjectHookConfig.load(project_root)
     if not config.enabled_for(_current_agent()) or config.post_refine_mode == "off":
         return {"continue": True}
+    config.apply_environment()
+    config.ensure_semantic_dependencies(project_root)
 
     prompt = _original_prompt(project_root, payload)
     if prompt is None:

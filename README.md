@@ -73,8 +73,14 @@ the workspace policy automatically.
 Configure embeddings for command-line hooks:
 
 ```powershell
-ai-policy embedding configure --root D:\work\target-project --provider local
+ai-policy embedding configure --root D:\work\target-project --provider local --install
 ai-policy embedding status --root D:\work\target-project
+```
+
+You can also use an existing local sentence-transformers model:
+
+```powershell
+ai-policy embedding configure --root D:\work\target-project --provider local --model D:\models\paraphrase-multilingual-MiniLM-L12-v2
 ```
 
 Configure a project for Claude Code or Claude Desktop Code sessions:

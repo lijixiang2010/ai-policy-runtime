@@ -33,6 +33,8 @@ def main() -> int:
         return 0
 
     config.apply_environment()
+    config.ensure_semantic_dependencies(project_root)
+    _clear_agent_injection(project_root, agent)
     _write_turn_state(project_root, payload, prompt, config)
 
     try:
@@ -171,6 +173,43 @@ class ProjectHookConfig:
         if self.auto_install is not None and "AI_POLICY_AUTO_INSTALL" not in os.environ:
             os.environ["AI_POLICY_AUTO_INSTALL"] = "1" if self.auto_install else "0"
 
+    def ensure_semantic_dependencies(self, project_root: Path) -> None:
+        provider = (
+            self.embedding_provider
+            or os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "")
+        ).strip().lower().replace("_", "-")
+        if provider != "local" and not self._auto_uses_installed_local_model(project_root):
+            return
+        try:
+            import sentence_transformers  # noqa: F401
+        except ModuleNotFoundError:
+            _bootstrap_package(semantic=True)
+
+    def _auto_uses_installed_local_model(self, project_root: Path) -> bool:
+        provider = (
+            self.embedding_provider
+            or os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "")
+        ).strip().lower().replace("_", "-")
+        if provider not in {"", "auto"}:
+            return False
+        if (
+            self.embedding_base_url
+            or self.embedding_api_key
+            or os.environ.get("AI_POLICY_EMBEDDING_BASE_URL")
+            or os.environ.get("AI_POLICY_EMBEDDING_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+        ):
+            return False
+        model = self.embedding_model or os.environ.get("AI_POLICY_EMBEDDING_MODEL")
+        if model:
+            path = Path(model)
+            return path.is_absolute() and path.exists() or (project_root / path).exists()
+        return (
+            self.policy_root(project_root)
+            / "models"
+            / "paraphrase-multilingual-MiniLM-L12-v2"
+        ).exists()
+
     @staticmethod
     def _apply_env(name: str, value: str | None) -> None:
         if value:
@@ -199,6 +238,14 @@ def _resolve_effective_prompt(
     return (result.resolve_result.current / "effective-prompt.md").read_text(encoding="utf-8")
 
 
+def _clear_agent_injection(project_root: Path, agent: str) -> None:
+    _prepare_imports()
+
+    from ai_policy_runtime.services.injector import clear_injected_prompt
+
+    clear_injected_prompt(project_root, agent)
+
+
 def _prepare_imports() -> None:
     if str(PLUGIN_ROOT) not in sys.path:
         sys.path.insert(0, str(PLUGIN_ROOT))
@@ -214,7 +261,7 @@ def _prepare_imports() -> None:
         import yaml  # noqa: F401
 
 
-def _bootstrap_package() -> None:
+def _bootstrap_package(*, semantic: bool = False) -> None:
     if os.environ.get("AI_POLICY_AUTO_INSTALL", "1") in {"0", "false", "False"}:
         raise RuntimeError(
             "Python dependencies are missing and AI_POLICY_AUTO_INSTALL is disabled."
@@ -222,6 +269,7 @@ def _bootstrap_package() -> None:
     if not (PLUGIN_ROOT / "pyproject.toml").exists():
         raise RuntimeError(f"pyproject.toml not found under plugin root: {PLUGIN_ROOT}")
 
+    package = f"{PLUGIN_ROOT}[semantic]" if semantic else str(PLUGIN_ROOT)
     command = [
         sys.executable,
         "-m",
@@ -229,7 +277,7 @@ def _bootstrap_package() -> None:
         "install",
         "--disable-pip-version-check",
         "-e",
-        str(PLUGIN_ROOT),
+        package,
     ]
     subprocess.run(
         command,

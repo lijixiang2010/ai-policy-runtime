@@ -11,7 +11,9 @@ readiness, and history rewrite safety.
   credentials, private keys, and local machine paths out of history.
 - Commit hygiene: keep commits focused, review the staged diff, and write
   accurate imperative commit messages. Conventional Commit style is used when
-  the project or user asks for it.
+  the user asks for it, when `.policy/config.json` sets
+  `git.commitStyle` to `conventional`, or when project tooling/history clearly
+  shows an existing Conventional Commits convention.
 - Branching and synchronization: use focused topic branches, fetch before
   integration, use fast-forward-only pulls for shared mainline updates when
   appropriate, and choose merge or rebase intentionally.
@@ -27,6 +29,26 @@ readiness, and history rewrite safety.
 - Pull request and release readiness: keep PRs reviewable, include validation
   context, match title style, and keep release branches limited to release work
   or narrowly approved fixes.
+
+## Commit Style Configuration
+
+AI Policy Runtime treats commit message style as a project policy:
+
+```json
+{
+  "git": {
+    "commitStyle": "auto"
+  }
+}
+```
+
+Supported values:
+
+- `auto`: follow explicit commit tooling or recent Conventional Commit history;
+  otherwise use concise imperative subjects.
+- `conventional`: use `type(scope): subject` for Git commit tasks.
+- `imperative`: use concise imperative subjects without forcing Conventional
+  Commit type prefixes.
 
 ## Sources
 

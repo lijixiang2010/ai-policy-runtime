@@ -138,6 +138,24 @@ task_analysis:
         - make the commit history easier to review by splitting scope
       confidence: 0.88
 
+    - id: detect_plain_commit_style_task
+      when_text_matches:
+        - do not use conventional commit
+        - do not use conventional commits
+        - no conventional commit
+        - no conventional commits
+        - plain imperative commit message
+        - without conventional commit prefix
+      set:
+        git_conventional_commit_requested: false
+        git_commit_style: imperative
+      tags:
+        - commit
+      semantic_match:
+        - write a normal imperative commit subject without Conventional Commit type prefix
+        - avoid Conventional Commits formatting for this commit message
+      confidence: 0.9
+
     - id: detect_conventional_commit_task
       when_text_matches:
         - conventional commit

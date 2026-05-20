@@ -109,7 +109,9 @@ def default_embedding_provider(
             return local_provider
         raise RuntimeError(
             "AI_POLICY_EMBEDDING_PROVIDER requests local embeddings, but no "
-            "local sentence-transformers model could be loaded."
+            "local sentence-transformers model could be loaded. Run: "
+            "ai-policy embedding configure --provider local --install, or pass "
+            "--model <existing sentence-transformers model path>."
         )
     if provider:
         raise RuntimeError(f"Unsupported AI_POLICY_EMBEDDING_PROVIDER: {provider}")
@@ -122,7 +124,8 @@ def default_embedding_provider(
             pass
     raise RuntimeError(
         "Semantic analysis requires an embedding provider. Configure an "
-        "OpenAI-compatible endpoint or install the local sentence-transformers model."
+        "OpenAI-compatible endpoint or install the local sentence-transformers model. "
+        "Run: ai-policy embedding configure --provider local --install"
     )
 
 

@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from ai_policy_runtime.application.runtime import PolicyRuntime
+from ai_policy_runtime.application.runtime import NonApplicableTaskError, PolicyRuntime
 from ai_policy_runtime.domain.config import RuntimeConfig
+from ai_policy_runtime.services.injector import clear_injected_prompt
 
 
 POST_REFINE_PACK_ID = "generic.production_refinement"
@@ -67,7 +68,11 @@ class PolicyAgentWrapper:
     def run(self) -> AgentWrapperResult:
         _validate_post_refine_mode(self.options.post_refine_mode)
         runtime = self._runtime()
-        resolved = runtime.resolve(self.options.task, self.options.pack_ids)
+        try:
+            resolved = runtime.resolve(self.options.task, self.options.pack_ids)
+        except NonApplicableTaskError:
+            clear_injected_prompt(self.options.root, self.options.agent)
+            raise
         injected = runtime.inject(self.options.agent)
         command = build_agent_command(
             self.options.command,

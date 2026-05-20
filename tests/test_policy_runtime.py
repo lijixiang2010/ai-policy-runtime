@@ -19,6 +19,7 @@ from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.domain.pack import PackRegistry, SkillPack
 from ai_policy_runtime.domain.rule import RuleAction
 from ai_policy_runtime.task_analysis import TaskAnalyzer, TaskSignals
+from ai_policy_runtime.task_analysis.schema import TaskAnalysis
 from ai_policy_runtime.task_analysis.embeddings import (
     OpenAICompatibleEmbeddingConfig,
     OpenAICompatibleEmbeddingProvider,
@@ -36,7 +37,12 @@ from ai_policy_runtime.services.project_context import (
 from ai_policy_runtime.services.analyzer import analyze
 from ai_policy_runtime.services.effective_rules import EffectiveRulesRenderer
 from ai_policy_runtime.services.engine import PolicyConflictError
-from ai_policy_runtime.services.injector import BEGIN, END, inject_current_prompt
+from ai_policy_runtime.services.injector import (
+    BEGIN,
+    END,
+    clear_injected_prompt,
+    inject_current_prompt,
+)
 from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_mapping
 
@@ -131,6 +137,22 @@ def _has_policy_content_for_test(effective) -> bool:
             effective.preferences,
             effective.exceptions,
         )
+    )
+
+
+def _git_prepare_commit_analysis() -> TaskAnalysis:
+    return TaskAnalysis(
+        task=TaskContext(
+            domain="git",
+            task_type="prepare_commit",
+            capabilities=("git_workflow",),
+            tags=("git", "commit"),
+            context={"language": "git"},
+        ),
+        confidence=0.9,
+        evidence=(),
+        needs_review=False,
+        activation_ready=True,
     )
 
 
@@ -880,6 +902,13 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(task.task_type, "prepare_commit")
         self.assertIn("git.workflow.commit_hygiene", task.context["semantic_skill_matches"])
 
+    def test_task_analyzer_allows_plain_commit_style_override(self) -> None:
+        task = analyze("Write a commit message with no conventional commits.").task
+
+        self.assertEqual(task.domain, "git")
+        self.assertEqual(task.context["git_commit_style"], "imperative")
+        self.assertFalse(task.context["git_conventional_commit_requested"])
+
     def test_task_analyzer_understands_python_best_practices(self) -> None:
         task = analyze(
             "Apply Python best practices: clean up imports, add type hints, and write pytest tests."
@@ -1402,6 +1431,107 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(merged.task.context["standard"], 17)
         self.assertEqual(merged.task.domain, "cpp")
 
+    def test_project_config_can_request_conventional_commits_for_git_tasks(self) -> None:
+        task_analysis = _git_prepare_commit_analysis()
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".policy").mkdir()
+            (root / ".policy" / "config.json").write_text(
+                json.dumps({"git": {"commitStyle": "conventional"}}),
+                encoding="utf-8",
+            )
+
+            project = ProjectContextAnalyzer(root).analyze()
+            merged = merge_project_analysis(task_analysis, project)
+
+        self.assertEqual(merged.task.domain, "git")
+        self.assertEqual(merged.task.context["git_commit_style"], "conventional")
+        self.assertTrue(merged.task.context["git_conventional_commit_requested"])
+
+    def test_project_config_imperative_style_does_not_request_conventional_commits(self) -> None:
+        task_analysis = _git_prepare_commit_analysis()
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".policy").mkdir()
+            (root / ".policy" / "config.json").write_text(
+                json.dumps({"git": {"commitStyle": "imperative"}}),
+                encoding="utf-8",
+            )
+
+            project = ProjectContextAnalyzer(root).analyze()
+            merged = merge_project_analysis(task_analysis, project)
+
+        self.assertEqual(merged.task.context["git_commit_style"], "imperative")
+        self.assertNotIn("git_conventional_commit_requested", merged.task.context)
+
+    def test_project_context_detects_conventional_commit_tooling(self) -> None:
+        task_analysis = _git_prepare_commit_analysis()
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(
+                json.dumps(
+                    {
+                        "devDependencies": {
+                            "@commitlint/cli": "^19.0.0",
+                            "@commitlint/config-conventional": "^19.0.0",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            project = ProjectContextAnalyzer(root).analyze()
+            merged = merge_project_analysis(task_analysis, project)
+
+        self.assertEqual(merged.task.context["git_commit_style"], "conventional")
+        self.assertTrue(merged.task.context["git_conventional_commit_requested"])
+
+    @unittest.skipUnless(shutil.which("git"), "git executable is required")
+    def test_project_context_detects_conventional_commit_history(self) -> None:
+        task_analysis = _git_prepare_commit_analysis()
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(
+                ["git", "init"],
+                cwd=root,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Policy Test"],
+                cwd=root,
+                check=True,
+            )
+            for index, message in enumerate(
+                (
+                    "feat: add initial file",
+                    "fix(runtime): preserve hook prompt",
+                    "docs: update usage notes",
+                ),
+                1,
+            ):
+                (root / "file.txt").write_text(f"{index}\n", encoding="utf-8")
+                subprocess.run(["git", "add", "file.txt"], cwd=root, check=True)
+                subprocess.run(
+                    ["git", "commit", "-m", message],
+                    cwd=root,
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                )
+
+            project = ProjectContextAnalyzer(root).analyze()
+            merged = merge_project_analysis(task_analysis, project)
+
+        self.assertEqual(merged.task.context["git_commit_style"], "conventional")
+        self.assertEqual(merged.task.context["git_commit_style_source"], "project_detected")
+        self.assertTrue(merged.task.context["git_conventional_commit_requested"])
+
     def test_runtime_uses_target_project_root_separate_from_policy_root(self) -> None:
         with TemporaryDirectory() as tmp:
             target = Path(tmp)
@@ -1911,6 +2041,26 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(text.count(BEGIN), 1)
         self.assertEqual(text.count(END), 1)
 
+    def test_clear_injected_prompt_removes_only_policy_block(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agents = root / "AGENTS.md"
+            agents.write_text(
+                "# Manual\n\nKeep me.\n\n"
+                f"{BEGIN}\nold rules\n{END}\n\n"
+                "After.\n",
+                encoding="utf-8",
+            )
+
+            clear_injected_prompt(root, "codex")
+            text = agents.read_text(encoding="utf-8")
+
+        self.assertIn("Keep me.", text)
+        self.assertIn("After.", text)
+        self.assertNotIn("old rules", text)
+        self.assertNotIn(BEGIN, text)
+        self.assertNotIn(END, text)
+
     def test_codex_hook_reads_project_config_packs(self) -> None:
         config = {"packs": ["cpp.safe_generation", "cpp.low_latency"]}
         with patch.dict(os.environ, {}, clear=True):
@@ -1942,6 +2092,49 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertFalse(user_prompt_submit._enabled_for(config, "codex"))
         self.assertTrue(user_prompt_submit._enabled_for(config, "claude"))
 
+    def test_hook_local_provider_bootstraps_semantic_dependencies(self) -> None:
+        config = user_prompt_submit.ProjectHookConfig.from_mapping(
+            {"embeddingProvider": "local"}
+        )
+
+        with patch.dict(os.environ, {}, clear=True), patch(
+            "builtins.__import__",
+            side_effect=ModuleNotFoundError("sentence_transformers"),
+        ), patch("hooks.user_prompt_submit._bootstrap_package") as bootstrap:
+            config.ensure_semantic_dependencies(Path.cwd())
+
+        bootstrap.assert_called_once_with(semantic=True)
+
+    def test_hook_auto_bootstraps_semantic_when_default_local_model_exists(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy_root = root / "policy"
+            model = policy_root / "models" / "paraphrase-multilingual-MiniLM-L12-v2"
+            model.mkdir(parents=True)
+            config = user_prompt_submit.ProjectHookConfig.from_mapping(
+                {"policyRoot": str(policy_root)}
+            )
+
+            with patch.dict(os.environ, {}, clear=True), patch(
+                "builtins.__import__",
+                side_effect=ModuleNotFoundError("sentence_transformers"),
+            ), patch("hooks.user_prompt_submit._bootstrap_package") as bootstrap:
+                config.ensure_semantic_dependencies(root)
+
+        bootstrap.assert_called_once_with(semantic=True)
+
+    def test_hook_auto_remote_does_not_bootstrap_semantic_dependencies(self) -> None:
+        config = user_prompt_submit.ProjectHookConfig.from_mapping({})
+
+        with patch.dict(
+            os.environ,
+            {"AI_POLICY_EMBEDDING_API_KEY": "key"},
+            clear=True,
+        ), patch("hooks.user_prompt_submit._bootstrap_package") as bootstrap:
+            config.ensure_semantic_dependencies(Path.cwd())
+
+        bootstrap.assert_not_called()
+
     def test_user_prompt_hook_records_turn_state_for_non_applicable_prompt(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1949,6 +2142,11 @@ class PolicyRuntimeTests(unittest.TestCase):
             policy.mkdir()
             (policy / "config.json").write_text(
                 json.dumps({"enabled": True, "agents": ["codex"]}),
+                encoding="utf-8",
+            )
+            (root / "AGENTS.md").write_text(
+                "# Manual\n\n"
+                f"{BEGIN}\nprevious rules\n{END}\n",
                 encoding="utf-8",
             )
 
@@ -1971,6 +2169,7 @@ class PolicyRuntimeTests(unittest.TestCase):
                 (root / user_prompt_submit.HOOK_STATE_PATH).read_text(encoding="utf-8")
             )
             response = json.loads(stdout.getvalue())
+            agents = (root / "AGENTS.md").read_text(encoding="utf-8")
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(state["turn_id"], "turn-probe")
@@ -1983,6 +2182,38 @@ class PolicyRuntimeTests(unittest.TestCase):
             response["hookSpecificOutput"],
             {"hookEventName": "UserPromptSubmit", "additionalContext": ""},
         )
+        self.assertNotIn("previous rules", agents)
+        self.assertNotIn(BEGIN, agents)
+
+    def test_policy_agent_wrapper_clears_static_block_for_non_applicable_task(self) -> None:
+        from ai_policy_runtime.adapters.agent import AgentWrapperOptions, PolicyAgentWrapper
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agents = root / "AGENTS.md"
+            agents.write_text(
+                "# Manual\n\n"
+                f"{BEGIN}\nstale rules\n{END}\n",
+                encoding="utf-8",
+            )
+            wrapper = PolicyAgentWrapper(
+                AgentWrapperOptions(
+                    task="hello",
+                    agent="codex",
+                    root=root,
+                    policy_root=Path.cwd(),
+                    pack_ids=("cpp.safe_generation",),
+                    command=("codex",),
+                    execute=False,
+                )
+            )
+
+            with self.assertRaises(NonApplicableTaskError):
+                wrapper.run()
+            text = agents.read_text(encoding="utf-8")
+
+        self.assertNotIn("stale rules", text)
+        self.assertNotIn(BEGIN, text)
 
     def test_user_prompt_hook_records_effective_rules_generation(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -2367,7 +2598,11 @@ class PolicyRuntimeTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             runtime = PolicyRuntime(RuntimeConfig.from_values(root=tmp, policy_root="."))
 
-            result = runtime.resolve_if_applicable("hello", ("cpp.safe_generation",))
+            with patch(
+                "ai_policy_runtime.task_analysis.embeddings.urlopen",
+                side_effect=AssertionError("trivial greeting should not request embeddings"),
+            ):
+                result = runtime.resolve_if_applicable("hello", ("cpp.safe_generation",))
 
             self.assertFalse(result.applicable)
             self.assertFalse((Path(tmp) / ".policy" / "current").exists())
@@ -2574,6 +2809,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(policy["enabled"])
         self.assertIn("claude", policy["agents"])
         self.assertEqual(policy["policyRoot"], str(plugin_root))
+        self.assertEqual(policy["git"], {"commitStyle": "auto"})
         self.assertTrue(settings["enabledPlugins"][PLUGIN_ID])
         self.assertEqual(
             settings["extraKnownMarketplaces"]["ai-policy-runtime"]["source"]["path"],
@@ -2647,6 +2883,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(current["marketplace_registered"])
         self.assertEqual(current["post_refine"], "standard")
         self.assertEqual(current["post_refine_packs"], [DEFAULT_POST_REFINE_PACK])
+        self.assertEqual(current["git_commit_style"], "auto")
 
     def test_configure_claude_desktop_plugin_only_update_preserves_policy(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -2773,6 +3010,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(policy["agents"], ["codex"])
         self.assertEqual(policy["packs"], ["cpp.safe_generation"])
         self.assertEqual(policy["policyRoot"], str(Path.cwd()))
+        self.assertEqual(policy["git"], {"commitStyle": "auto"})
         self.assertFalse(claude_settings_exists)
 
     def test_configure_codex_hooks_writes_project_hook_commands(self) -> None:
@@ -2936,6 +3174,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(current["project_hooks_configured"])
         self.assertTrue(current["plugin_assets_present"])
         self.assertEqual(current["expected_plugin_root"], str(Path.cwd()))
+        self.assertEqual(current["git_commit_style"], "auto")
 
     def test_configure_codex_status_does_not_treat_unrelated_hooks_as_configured(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -3150,6 +3389,164 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(policy["embeddingApiKey"], "project-key")
         self.assertEqual(policy["embeddingModel"], "embedding-model")
         self.assertEqual(policy["embeddingTimeout"], "12.5")
+
+    def test_cli_embedding_configure_local_can_install_default_model(self) -> None:
+        args = argparse.Namespace(
+            command="embedding",
+            action="configure",
+            root="",
+            provider="local",
+            base_url=None,
+            api_key=None,
+            model=None,
+            timeout=None,
+            policy_root=None,
+            install=True,
+        )
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            args.root = str(root)
+            with patch(
+                "ai_policy_runtime.services.local_models._snapshot_download"
+            ) as download:
+                output, exit_code = CommandDispatcher().dispatch(args)
+
+            policy = json.loads(
+                (root / ".policy" / "config.json").read_text(encoding="utf-8")
+            )
+
+        download.assert_called_once()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output["embedding"]["provider"], "local")
+        self.assertEqual(policy["embeddingProvider"], "local")
+        self.assertTrue(policy["embeddingModel"].endswith("paraphrase-multilingual-MiniLM-L12-v2"))
+        self.assertEqual(output["installed_model"]["key"], "multilingual-mini")
+
+    def test_cli_embedding_status_reports_local_model_installation_state(self) -> None:
+        args = argparse.Namespace(
+            command="embedding",
+            action="status",
+            root="",
+            provider=None,
+            base_url=None,
+            api_key=None,
+            model=None,
+            timeout=None,
+            policy_root=None,
+            install=False,
+        )
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            model = root / "models" / "paraphrase-multilingual-MiniLM-L12-v2"
+            model.mkdir(parents=True)
+            args.root = str(root)
+
+            output, exit_code = CommandDispatcher().dispatch(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(output["embedding"]["local_models"][0]["installed"])
+
+    def test_embedding_health_forced_local_ignores_remote_environment(self) -> None:
+        args = argparse.Namespace(
+            command="embedding",
+            action="status",
+            root="",
+            provider=None,
+            base_url=None,
+            api_key=None,
+            model=None,
+            timeout=None,
+            policy_root=None,
+            install=False,
+        )
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            config = root / ".policy" / "config.json"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                json.dumps({"embeddingProvider": "local"}),
+                encoding="utf-8",
+            )
+            args.root = str(root)
+            with patch.dict(
+                os.environ,
+                {
+                    "AI_POLICY_EMBEDDING_BASE_URL": "https://embedding.example.test/v1",
+                    "AI_POLICY_EMBEDDING_API_KEY": "key",
+                },
+                clear=True,
+            ):
+                output, exit_code = CommandDispatcher().dispatch(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output["embedding"]["provider"], "local")
+        self.assertFalse(output["embedding"]["ok"])
+        self.assertTrue(output["embedding"]["remote_configured"])
+
+    def test_embedding_health_auto_accepts_remote_environment(self) -> None:
+        args = argparse.Namespace(
+            command="embedding",
+            action="status",
+            root="",
+            provider=None,
+            base_url=None,
+            api_key=None,
+            model=None,
+            timeout=None,
+            policy_root=None,
+            install=False,
+        )
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            args.root = str(root)
+            with patch.dict(
+                os.environ,
+                {"AI_POLICY_EMBEDDING_API_KEY": "key"},
+                clear=True,
+            ):
+                output, exit_code = CommandDispatcher().dispatch(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output["embedding"]["provider"], "auto")
+        self.assertTrue(output["embedding"]["ok"])
+        self.assertTrue(output["embedding"]["remote_configured"])
+
+    def test_embedding_status_resolves_relative_local_model_from_project_root(self) -> None:
+        args = argparse.Namespace(
+            command="embedding",
+            action="status",
+            root="",
+            provider=None,
+            base_url=None,
+            api_key=None,
+            model=None,
+            timeout=None,
+            policy_root=None,
+            install=False,
+        )
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            config = root / ".policy" / "config.json"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                json.dumps(
+                    {
+                        "embeddingProvider": "local",
+                        "embeddingModel": "models/custom-model",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args.root = str(root)
+            with patch(
+                "ai_policy_runtime.services.embedding_health.check_sentence_transformer_model",
+                return_value={"usable": True, "error": None, "next_step": None},
+            ) as check:
+                output, exit_code = CommandDispatcher().dispatch(args)
+
+        self.assertEqual(exit_code, 0)
+        check.assert_called_once_with(root / "models" / "custom-model")
+        self.assertTrue(output["embedding"]["ok"])
 
     def test_ai_policy_status_codex_command_is_read_only(self) -> None:
         if shutil.which("node") is None:

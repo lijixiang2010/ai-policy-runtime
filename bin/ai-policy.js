@@ -50,10 +50,13 @@ function main(argv) {
     return runPython(rest);
   }
   if (command === "doctor") {
-    return doctor();
+    return doctor(rest);
   }
 
-  return runPython(["-m", PYTHON_MODULE, command, ...withDefaultPolicyRoot(command, rest)]);
+  return runPython(
+    ["-m", PYTHON_MODULE, command, ...withDefaultPolicyRoot(command, rest)],
+    { semantic: requiresSemanticDependencies(command, rest) },
+  );
 }
 
 function configure(argv) {
@@ -153,8 +156,11 @@ function withDefaultPolicyRoot(command, args) {
   return ["--policy-root", PACKAGE_ROOT, ...args];
 }
 
-function runPython(args) {
+function runPython(args, options = {}) {
   const python = ensurePython();
+  if (options.semantic) {
+    ensureSemanticDependencies(python);
+  }
   const env = {
     ...process.env,
     PYTHONPATH: prependPath(PACKAGE_ROOT, process.env.PYTHONPATH),
@@ -164,6 +170,15 @@ function runPython(args) {
     fail(result.error.message);
   }
   return result.status === null ? 1 : result.status;
+}
+
+function runPythonCapture(args) {
+  const python = ensurePython();
+  const env = {
+    ...process.env,
+    PYTHONPATH: prependPath(PACKAGE_ROOT, process.env.PYTHONPATH),
+  };
+  return spawnSync(python, args, { encoding: "utf8", env });
 }
 
 function ensurePython() {
@@ -248,6 +263,36 @@ function runChecked(command, args, env) {
   }
 }
 
+function requiresSemanticDependencies(command, args) {
+  if (command === "model" && args[0] === "install") {
+    return true;
+  }
+  return command === "embedding" && args[0] === "configure" && hasOption(args, "--install");
+}
+
+function ensureSemanticDependencies(python) {
+  const probe = "import sentence_transformers, huggingface_hub";
+  const existing = spawnSync(python, pythonArgs(python, ["-c", probe]), { stdio: "ignore" });
+  if (!existing.error && existing.status === 0) {
+    return;
+  }
+  runChecked(
+    python,
+    pythonArgs(python, [
+      "-m",
+      "pip",
+      "install",
+      "--disable-pip-version-check",
+      "-e",
+      `${PACKAGE_ROOT}[semantic]`,
+    ]),
+    {
+      ...process.env,
+      PYTHONPATH: prependPath(PACKAGE_ROOT, process.env.PYTHONPATH),
+    },
+  );
+}
+
 function venvPythonPath() {
   const root = process.env.AI_POLICY_HOME || defaultStateDir();
   if (process.platform === "win32") {
@@ -267,9 +312,11 @@ function prependPath(first, existing) {
   return existing ? `${first}${path.delimiter}${existing}` : first;
 }
 
-function doctor() {
+function doctor(argv = []) {
   const python = ensurePython();
   const version = pythonVersion(python);
+  const rootInfo = extractOptionValue(argv, "--root");
+  const root = rootInfo.agent || process.cwd();
   const checks = {
     packageJson: fs.existsSync(path.join(PACKAGE_ROOT, "package.json")),
     pythonPackage: fs.existsSync(path.join(PACKAGE_ROOT, "ai_policy_runtime", "__init__.py")),
@@ -280,17 +327,79 @@ function doctor() {
     skills: fs.existsSync(path.join(PACKAGE_ROOT, "skills")),
     packs: fs.existsSync(path.join(PACKAGE_ROOT, "packs")),
   };
+  const embeddingStatus = inspectEmbedding(root);
+  const hookPython = inspectHookPython();
+  const embeddingOk = embeddingStatus.ok;
   console.log(JSON.stringify({
     packageRoot: PACKAGE_ROOT,
+    projectRoot: path.resolve(root),
     python,
     pythonVersion: version ? version.join(".") : null,
+    hookPython,
     stateDir: path.dirname(path.dirname(venvPythonPath())),
     venvPython: venvPythonPath(),
     usingExplicitPython: Boolean(process.env.AI_POLICY_PYTHON),
+    embedding: embeddingStatus,
     checks,
-    ok: Object.values(checks).every(Boolean) && Boolean(version),
+    ok: Object.values(checks).every(Boolean) && Boolean(version) && embeddingOk,
   }, null, 2));
   return 0;
+}
+
+function inspectEmbedding(root) {
+  const result = runPythonCapture(["-m", PYTHON_MODULE, "embedding", "status", "--root", root]);
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      error: (result.stderr || result.stdout || "embedding status failed").trim(),
+      nextStep: "Run: ai-policy embedding status --root <project>",
+    };
+  }
+  try {
+    const parsed = JSON.parse(result.stdout);
+    const embedding = parsed.embedding || {};
+    return {
+      ok: Boolean(embedding.ok),
+      provider: embedding.provider,
+      remoteConfigured: Boolean(embedding.remote_configured),
+      model: embedding.model || null,
+      localAvailable: embedding.local_available ?? null,
+      localError: embedding.local_error || null,
+      nextStep: embedding.next_step || null,
+      localModels: embedding.local_models || [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: `Could not parse embedding status: ${error.message}`,
+      nextStep: "Run: ai-policy embedding status --root <project>",
+    };
+  }
+}
+
+function inspectHookPython() {
+  const result = spawnSync("python", [
+    "-c",
+    "import importlib.util,sys,json; print(json.dumps({'executable': sys.executable, 'version': '.'.join(map(str, sys.version_info[:3])), 'sentenceTransformers': importlib.util.find_spec('sentence_transformers') is not None}))",
+  ], { encoding: "utf8" });
+  if (result.error || result.status !== 0) {
+    return {
+      executable: null,
+      version: null,
+      ok: false,
+      error: result.error ? result.error.message : (result.stderr || "python command failed").trim(),
+    };
+  }
+  try {
+    return { ...JSON.parse(result.stdout), ok: true };
+  } catch (error) {
+    return {
+      executable: null,
+      version: null,
+      ok: false,
+      error: `Could not parse hook python: ${error.message}`,
+    };
+  }
 }
 
 function rebuildRuntime() {
@@ -314,19 +423,25 @@ function printHelp() {
 Usage:
   ai-policy configure claude [--root <project>]
   ai-policy configure codex [--root <project>]
-  ai-policy embedding <status|configure> [--root <project>] [--provider <auto|openai-compatible|local>]
+  ai-policy embedding status [--root <project>]
+  ai-policy embedding configure [--root <project>] --provider <auto|openai-compatible|local>
+                              [--install] [--model <model-or-path>]
+                              [--base-url <url>] [--api-key <key>] [--timeout <seconds>]
+  ai-policy model <list|install> [--policy-root <runtime-assets>] [--model <known-model>]
   ai-policy status [--agent <claude|codex>] [--root <project>]
   ai-policy disable [--root <project>]
   ai-policy plugin <enable|disable> [--root <project>]
   ai-policy post-refine <off|light|standard|strict> [--root <project>]
   ai-policy runtime <runtime-command> [...]
   ai-policy runtime rebuild
-  ai-policy doctor
+  ai-policy doctor [--root <project>]
 
 Examples:
   ai-policy configure claude --root D:\\work\\project
   ai-policy configure codex --root D:\\work\\project
-  ai-policy embedding configure --root D:\\work\\project --provider local
+  ai-policy embedding configure --root D:\\work\\project --provider local --install
+  ai-policy embedding configure --root D:\\work\\project --provider local --model D:\\models\\paraphrase-multilingual-MiniLM-L12-v2
+  ai-policy model list --policy-root D:\\tools\\ai-policy-runtime
   ai-policy post-refine standard --root D:\\work\\project
   ai-policy status --agent codex --root D:\\work\\project
 `);

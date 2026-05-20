@@ -80,6 +80,7 @@ def configure_policy(root: Path, plugin_root: Path, *, enabled: bool = True) -> 
             config["packs"] = [DEFAULT_PACK]
         if not config.get("policyRoot"):
             config["policyRoot"] = str(plugin_root)
+        _ensure_git_commit_style(config)
     else:
         agents = [agent for agent in _string_list(config.get("agents")) if agent != "codex"]
         config["agents"] = agents
@@ -108,6 +109,7 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
         "codex_agent_enabled": "codex" in _string_list(policy.get("agents")),
         "packs": _string_list(policy.get("packs")),
         "policy_root": policy.get("policyRoot"),
+        "git_commit_style": _git_commit_style(policy),
         "codex_hooks_enabled": _codex_hooks_enabled(codex_config),
         "project_hooks_present": project_hooks.exists(),
         "project_hooks_configured": _project_hooks_configured(project_hooks_config),
@@ -244,6 +246,19 @@ def _read_json_object(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _ensure_git_commit_style(config: dict[str, Any]) -> None:
+    git_config = config.setdefault("git", {})
+    if isinstance(git_config, dict):
+        git_config.setdefault("commitStyle", "auto")
+
+
+def _git_commit_style(config: dict[str, Any]) -> str:
+    git_config = config.get("git")
+    if isinstance(git_config, dict):
+        return str(git_config.get("commitStyle") or "auto")
+    return str(config.get("gitCommitStyle") or "auto")
 
 
 def _codex_hooks_enabled(path: Path) -> bool:

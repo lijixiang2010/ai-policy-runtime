@@ -181,6 +181,21 @@
           "default": "",
           "description": "Optional embedding request timeout in seconds."
         },
+        "aiPolicy.gitCommitStyle": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "conventional",
+            "imperative"
+          ],
+          "enumDescriptions": [
+            "Follow explicit project tooling or recent history; otherwise use concise imperative subjects.",
+            "Use Conventional Commits type(scope): subject for Git commit tasks.",
+            "Use concise imperative commit subjects without forcing Conventional Commit type prefixes."
+          ],
+          "description": "Git commit message style used by AI Policy Runtime when resolving Git workflow tasks."
+        },
         "aiPolicy.postRefine": {
           "type": "string",
           "default": "off",
