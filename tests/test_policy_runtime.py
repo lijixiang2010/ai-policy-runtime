@@ -949,6 +949,23 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("Do not discard, overwrite, reset, clean", prompt)
         self.assertNotIn("selected C++ standard", prompt)
 
+    def test_semantic_git_commit_match_activates_commit_hygiene(self) -> None:
+        registry = SkillRegistry.from_dirs("skills", "packs")
+        task = TaskContext(
+            domain="git",
+            task_type="prepare_commit",
+            capabilities=("git_workflow",),
+            tags=("git", "staging", "working-tree"),
+            context={
+                "language": "git",
+                "semantic_skill_matches": ("git.workflow.commit_hygiene",),
+            },
+        )
+        active = {skill.skill_id for skill in registry.active_skills(task)}
+
+        self.assertIn("git.workflow.commit_hygiene", active)
+        self.assertIn("git.workflow.working_tree_safety", active)
+
     def test_git_history_rewrite_rules_are_shared_history_safe(self) -> None:
         runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
         result = runtime.resolve(

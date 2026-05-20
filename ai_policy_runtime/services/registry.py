@@ -144,7 +144,7 @@ class SkillRegistry:
             and not context_gate_match
         ):
             return False
-        if not _tags_match(skill.tags, task.tags):
+        if not _tags_match(skill.tags, task.tags) and not _semantic_skill_matches(skill, task):
             return False
         if not self._context_matches(skill, task):
             return False
@@ -204,6 +204,15 @@ def _tags_match(skill_tags: tuple[str, ...], task_tags: tuple[str, ...]) -> bool
     if not meaningful_skill_tags:
         return True
     return bool(meaningful_skill_tags.intersection(task_tags))
+
+
+def _semantic_skill_matches(skill: Skill, task: TaskContext) -> bool:
+    matches = task.context.get("semantic_skill_matches", ())
+    if isinstance(matches, str):
+        return matches == skill.skill_id
+    if isinstance(matches, (list, tuple, set, frozenset)):
+        return skill.skill_id in matches
+    return False
 
 
 def _pack_activation_allowed(task: TaskContext) -> bool:
