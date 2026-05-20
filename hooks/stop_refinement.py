@@ -116,6 +116,8 @@ def _state_prompt_for_turn(
     state: dict[str, Any],
     payload: dict[str, object],
 ) -> str | None:
+    if state.get("effective_rules_generated") is not True:
+        return None
     if not _same_optional_id(state.get("turn_id"), payload.get("turn_id")):
         return None
     if not _same_optional_id(state.get("session_id"), payload.get("session_id")):

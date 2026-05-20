@@ -2124,6 +2124,7 @@ class PolicyRuntimeTests(unittest.TestCase):
                         "turn_id": "turn-1",
                         "session_id": "session-1",
                         "prompt": "Refactor this C++20 code.",
+                        "effective_rules_generated": True,
                     }
                 ),
                 encoding="utf-8",
@@ -2162,6 +2163,7 @@ class PolicyRuntimeTests(unittest.TestCase):
                         "turn_id": "old-turn",
                         "session_id": "old-session",
                         "prompt": "Refactor this C++20 code.",
+                        "effective_rules_generated": True,
                     }
                 ),
                 encoding="utf-8",
@@ -2185,7 +2187,12 @@ class PolicyRuntimeTests(unittest.TestCase):
             state_path = root / user_prompt_submit.HOOK_STATE_PATH
             state_path.parent.mkdir(parents=True, exist_ok=True)
             state_path.write_text(
-                json.dumps({"prompt": "Refactor this C++20 code."}),
+                json.dumps(
+                    {
+                        "prompt": "Refactor this C++20 code.",
+                        "effective_rules_generated": True,
+                    }
+                ),
                 encoding="utf-8",
             )
 
@@ -2212,6 +2219,40 @@ class PolicyRuntimeTests(unittest.TestCase):
 
             response = stop_refinement.build_stop_response(
                 {"cwd": str(root), "stop_hook_active": False, "turn_id": "turn-1"}
+            )
+
+        self.assertEqual(response, {"continue": True})
+
+    def test_stop_hook_skips_refinement_when_prompt_was_not_applicable(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"postRefine": "standard"}),
+                encoding="utf-8",
+            )
+            state_path = root / user_prompt_submit.HOOK_STATE_PATH
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "turn_id": "turn-question",
+                        "session_id": "session-question",
+                        "prompt": "post refine 有效果吗？",
+                        "effective_rules_generated": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            response = stop_refinement.build_stop_response(
+                {
+                    "cwd": str(root),
+                    "stop_hook_active": False,
+                    "turn_id": "turn-question",
+                    "session_id": "session-question",
+                }
             )
 
         self.assertEqual(response, {"continue": True})
