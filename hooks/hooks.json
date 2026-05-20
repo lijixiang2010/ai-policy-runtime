@@ -10,7 +10,7 @@
               "${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js",
               "claude-user-prompt-submit"
             ],
-            "timeout": 30
+            "timeout": 120
           }
         ]
       }
@@ -25,7 +25,7 @@
               "${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js",
               "claude-stop-refinement"
             ],
-            "timeout": 30
+            "timeout": 120
           }
         ]
       }

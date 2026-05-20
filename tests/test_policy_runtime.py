@@ -3031,11 +3031,13 @@ class PolicyRuntimeTests(unittest.TestCase):
             user_prompt["args"],
             ["${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js", "claude-user-prompt-submit"],
         )
+        self.assertEqual(user_prompt["timeout"], 120)
         self.assertEqual(stop["command"], "node")
         self.assertEqual(
             stop["args"],
             ["${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js", "claude-stop-refinement"],
         )
+        self.assertEqual(stop["timeout"], 120)
 
     def test_ai_policy_status_command_uses_installed_package_root(self) -> None:
         if shutil.which("node") is None:
