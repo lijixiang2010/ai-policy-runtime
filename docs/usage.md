@@ -324,7 +324,7 @@ Plugin files:
 
 ```text
 .codex-plugin/plugin.json
-hooks/hooks.json
+hooks/codex-hooks.json
 hooks/user_prompt_submit.py
 hooks/stop_refinement.py
 ```
@@ -545,9 +545,9 @@ policy-claude --pack cpp.low_latency --claude-arg "--dangerously-skip-permission
 ## Use as a Claude Code Plugin
 
 This repository is also shaped as a Claude Code plugin following Claude Code's
-official plugin and hook layout. The plugin manifest points Claude Code at a
-Claude-specific hook configuration, while the hook scripts reuse the same
-runtime logic as the Codex integration.
+official plugin and hook layout. Claude Code loads the standard
+`hooks/hooks.json` file, while the hook scripts reuse the same runtime logic as
+the Codex integration.
 
 Plugin files:
 

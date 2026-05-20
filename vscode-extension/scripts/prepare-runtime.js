@@ -28,8 +28,13 @@ const FILES = [
 const REQUIRED_PATHS = [
   "bin/ai-policy-hook.js",
   "bin/ai-policy.js",
+  "hooks/hooks.json",
+  "hooks/codex-hooks.json",
   "hooks/user_prompt_submit.py",
   "hooks/stop_refinement.py",
+  ".claude-plugin/plugin.json",
+  ".claude-plugin/marketplace.json",
+  ".codex-plugin/plugin.json",
   "ai_policy_runtime/__init__.py",
   "packs/cpp_safe_generation.pack.yaml",
   "skills/domain/git/workflow/commit_hygiene.skill.yaml",
