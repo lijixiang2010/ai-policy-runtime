@@ -553,7 +553,7 @@ Plugin files:
 
 ```text
 .claude-plugin/plugin.json
-hooks/claude-hooks.json
+hooks/hooks.json
 hooks/claude_user_prompt_submit.py
 hooks/claude_stop_refinement.py
 ```

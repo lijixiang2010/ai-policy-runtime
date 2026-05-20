@@ -274,9 +274,9 @@ function doctor() {
     packageJson: fs.existsSync(path.join(PACKAGE_ROOT, "package.json")),
     pythonPackage: fs.existsSync(path.join(PACKAGE_ROOT, "ai_policy_runtime", "__init__.py")),
     codexPlugin: fs.existsSync(path.join(PACKAGE_ROOT, ".codex-plugin", "plugin.json")),
-    codexHooks: fs.existsSync(path.join(PACKAGE_ROOT, "hooks", "hooks.json")),
+    codexHooks: fs.existsSync(path.join(PACKAGE_ROOT, "hooks", "codex-hooks.json")),
     claudePlugin: fs.existsSync(path.join(PACKAGE_ROOT, ".claude-plugin", "plugin.json")),
-    claudeHooks: fs.existsSync(path.join(PACKAGE_ROOT, "hooks", "claude-hooks.json")),
+    claudeHooks: fs.existsSync(path.join(PACKAGE_ROOT, "hooks", "hooks.json")),
     skills: fs.existsSync(path.join(PACKAGE_ROOT, "skills")),
     packs: fs.existsSync(path.join(PACKAGE_ROOT, "packs")),
   };

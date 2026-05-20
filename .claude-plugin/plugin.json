@@ -4,6 +4,5 @@
   "description": "Inject task-specific Effective Rules into Claude Code prompts.",
   "author": {
     "name": "Miles Li"
-  },
-  "hooks": "./hooks/claude-hooks.json"
+  }
 }

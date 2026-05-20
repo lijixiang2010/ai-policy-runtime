@@ -2,7 +2,7 @@
   "name": "ai-policy-runtime",
   "version": "0.1.0",
   "description": "Inject task-specific Effective Rules into Codex prompts.",
-  "hooks": "./hooks/hooks.json",
+  "hooks": "./hooks/codex-hooks.json",
   "interface": {
     "displayName": "AI Policy Runtime",
     "shortDescription": "Generates dynamic coding rules for each Codex prompt.",

@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/user_prompt_submit.py",
+            "timeout": 30,
+            "statusMessage": "Generating Effective Rules"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/stop_refinement.py",
+            "timeout": 30,
+            "statusMessage": "Checking post-task refinement"
+          }
+        ]
+      }
+    ]
+  }
+}

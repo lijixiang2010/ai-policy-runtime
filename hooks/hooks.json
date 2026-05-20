@@ -5,9 +5,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python hooks/user_prompt_submit.py",
-            "timeout": 30,
-            "statusMessage": "Generating Effective Rules"
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js",
+              "claude-user-prompt-submit"
+            ],
+            "timeout": 30
           }
         ]
       }
@@ -17,9 +20,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python hooks/stop_refinement.py",
-            "timeout": 30,
-            "statusMessage": "Checking post-task refinement"
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/ai-policy-hook.js",
+              "claude-stop-refinement"
+            ],
+            "timeout": 30
           }
         ]
       }

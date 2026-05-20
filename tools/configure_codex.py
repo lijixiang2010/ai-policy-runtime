@@ -11,6 +11,7 @@ from typing import Any
 
 DEFAULT_PACK = "cpp.safe_generation"
 HOOKS_CONFIG_FILE = Path(".codex") / "hooks.json"
+PLUGIN_HOOKS_CONFIG_FILE = Path("hooks") / "codex-hooks.json"
 CODEX_CONFIG_FILE = Path(".codex") / "config.toml"
 
 
@@ -97,7 +98,7 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
     codex_config = root / CODEX_CONFIG_FILE
     policy = _read_json_object(policy_path)
     plugin_manifest = plugin_root / ".codex-plugin" / "plugin.json"
-    hooks_config = plugin_root / "hooks" / "hooks.json"
+    hooks_config = plugin_root / PLUGIN_HOOKS_CONFIG_FILE
     project_hooks_config = _read_json_object(project_hooks)
     return {
         "policy_config": str(policy_path),
@@ -223,7 +224,7 @@ def configure_codex_config(root: Path, *, enabled: bool = True) -> Path:
 def _validate_plugin_root(plugin_root: Path) -> None:
     required = (
         plugin_root / ".codex-plugin" / "plugin.json",
-        plugin_root / "hooks" / "hooks.json",
+        plugin_root / PLUGIN_HOOKS_CONFIG_FILE,
         plugin_root / "bin" / "ai-policy-hook.js",
     )
     missing = [path for path in required if not path.exists()]

@@ -294,7 +294,7 @@ def _validate_plugin_root(plugin_root: Path) -> None:
     required = (
         plugin_root / ".claude-plugin" / "plugin.json",
         plugin_root / ".claude-plugin" / "marketplace.json",
-        plugin_root / "hooks" / "claude-hooks.json",
+        plugin_root / "hooks" / "hooks.json",
     )
     missing = [path for path in required if not path.exists()]
     if missing:

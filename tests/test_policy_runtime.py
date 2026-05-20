@@ -2563,7 +2563,7 @@ class PolicyRuntimeTests(unittest.TestCase):
             (plugin_root / ".claude-plugin" / "plugin.json").write_text("{}", encoding="utf-8")
             (plugin_root / ".claude-plugin" / "marketplace.json").write_text("{}", encoding="utf-8")
             (plugin_root / "hooks").mkdir()
-            (plugin_root / "hooks" / "claude-hooks.json").write_text("{}", encoding="utf-8")
+            (plugin_root / "hooks" / "hooks.json").write_text("{}", encoding="utf-8")
 
             policy_path = configure_policy(root, plugin_root)
             settings_path = configure_claude_settings(root, plugin_root, "local")
@@ -3021,7 +3021,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertNotRegex(output, r"\.pyc\b")
 
     def test_claude_hooks_use_packaged_node_wrapper(self) -> None:
-        hooks = json.loads((Path("hooks") / "claude-hooks.json").read_text(encoding="utf-8"))
+        hooks = json.loads((Path("hooks") / "hooks.json").read_text(encoding="utf-8"))
 
         user_prompt = hooks["hooks"]["UserPromptSubmit"][0]["hooks"][0]
         stop = hooks["hooks"]["Stop"][0]["hooks"][0]
