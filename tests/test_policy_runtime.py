@@ -866,6 +866,20 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(task.task_type, "prepare_commit")
         self.assertIn("git_workflow", task.capabilities)
 
+    def test_task_analyzer_understands_chinese_commit_request_with_suffix(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=KeywordConceptEmbeddingProvider(),
+        )
+        task = analyzer.analyze(
+            "提交一次代码试试",
+            TaskSignals(project_language="python"),
+        ).task
+
+        self.assertEqual(task.domain, "git")
+        self.assertEqual(task.task_type, "prepare_commit")
+        self.assertIn("git.workflow.commit_hygiene", task.context["semantic_skill_matches"])
+
     def test_task_analyzer_understands_python_best_practices(self) -> None:
         task = analyze(
             "Apply Python best practices: clean up imports, add type hints, and write pytest tests."
@@ -2010,6 +2024,48 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(state["additional_context_chars"], len(effective_prompt))
         self.assertIsNone(state["hook_error"])
         self.assertEqual(response["hookSpecificOutput"]["additionalContext"], effective_prompt)
+
+    def test_user_prompt_hook_extracts_codex_ide_request(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"enabled": True, "agents": ["codex"]}),
+                encoding="utf-8",
+            )
+
+            payload = {
+                "cwd": str(root),
+                "turn_id": "turn-ide",
+                "session_id": "session-ide",
+                "prompt": (
+                    "# Context from my IDE setup:\n\n"
+                    "## Active file: .policy/current/agent-hook-state.json\n\n"
+                    "## Open tabs:\n"
+                    "- agent-hook-state.json: .policy/current/agent-hook-state.json\n\n"
+                    "## My request for Codex:\n"
+                    "提交一次代码试试\n"
+                ),
+            }
+            effective_prompt = "# Effective Rules for Current Task\n"
+            with patch.object(user_prompt_submit, "_read_payload", return_value=payload):
+                with patch.object(
+                    user_prompt_submit,
+                    "_resolve_effective_prompt",
+                    return_value=effective_prompt,
+                ) as resolve:
+                    with patch("sys.stdout", new=io.StringIO()):
+                        exit_code = user_prompt_submit.main()
+
+            state = json.loads(
+                (root / user_prompt_submit.HOOK_STATE_PATH).read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(state["prompt"], "提交一次代码试试")
+        self.assertTrue(state["effective_rules_generated"])
+        self.assertEqual(resolve.call_args.args[0], "提交一次代码试试")
 
     def test_codex_hook_config_reads_post_refinement_options(self) -> None:
         with patch.dict(os.environ, {}, clear=True):

@@ -21,7 +21,8 @@ SUPPORTED_AGENTS = {"codex", "claude"}
 
 def main() -> int:
     payload = _read_payload()
-    prompt = str(payload.get("prompt", ""))
+    raw_prompt = str(payload.get("prompt", ""))
+    prompt = _task_prompt(raw_prompt)
     if not prompt.strip():
         return 0
 
@@ -90,6 +91,26 @@ def _read_payload() -> dict[str, object]:
     if not isinstance(data, dict):
         return {}
     return data
+
+
+def _task_prompt(prompt: str) -> str:
+    """Return the user's actual request from agent UI prompt wrappers."""
+
+    text = prompt.strip()
+    markers = (
+        "## My request for Codex:",
+        "## My request for Claude:",
+        "## My request:",
+    )
+    for marker in markers:
+        if marker not in text:
+            continue
+        request = text.rsplit(marker, 1)[-1].strip()
+        next_heading = request.find("\n## ")
+        if next_heading >= 0:
+            request = request[:next_heading].strip()
+        return request or text
+    return text
 
 
 @dataclass(frozen=True)

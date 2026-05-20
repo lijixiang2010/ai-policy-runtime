@@ -209,6 +209,17 @@ def _expand_query_text(text: str) -> str:
                 "clean up commit history messages",
             )
         )
+    if _has_any(lowered, ("提交", "commit")) and _has_any(
+        lowered,
+        ("代码", "code", "changes", "改动", "修改"),
+    ):
+        hints.extend(
+            (
+                "commit code changes",
+                "commit this code",
+                "save completed code changes into repository history",
+            )
+        )
     if not hints:
         return text
     return f"{text}\n" + "\n".join(dict.fromkeys(hints))
