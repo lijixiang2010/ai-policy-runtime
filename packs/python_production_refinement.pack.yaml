@@ -1,0 +1,33 @@
+kind: pack
+api_version: policy.skill/v1
+
+pack:
+  id: python.production_refinement
+  name: Python Production Refinement
+  version: 1.0.0
+  description: >-
+    Python refinement pack combining generic production-quality rules with
+    Python packaging, typing, testing, security, concurrency, and performance guidance.
+
+extends:
+  - generic.production_refinement
+  - python.best_practices
+
+includes:
+  - python.core.pythonic_baseline
+  - python.style.readability_and_naming
+  - python.functions.function_contracts
+  - python.classes.classes_protocols
+  - python.typing.static_typing
+  - python.quality.data_model_and_control_flow
+  - python.safety.resources_and_errors
+  - python.api_design.interfaces_and_typing
+  - python.packaging.project_packaging
+  - python.security.security_boundaries
+  - python.cli.cli_applications
+  - python.concurrency.async_and_concurrency
+  - python.performance.performance_engineering
+  - python.testing.testing_practices
+
+excludes: []
+overrides: []

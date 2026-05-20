@@ -3741,6 +3741,41 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(_has_statement_containing(effective, "observable behavior"))
         self.assertTrue(_has_statement_containing(effective, "undefined behavior"))
 
+    def test_python_production_refinement_pack_combines_generic_and_python_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Refactor this Python package so it is production-ready. Reduce complexity, "
+            "preserve behavior, keep typing clear, and verify pytest coverage.",
+            ("python.production_refinement",),
+        )
+        effective = result.structured["effective_rules"]
+        sources = _sources(effective)
+
+        self.assertIn("generic.code_quality.complexity_reduction", sources)
+        self.assertIn("python.core.pythonic_baseline", sources)
+        self.assertIn("python.typing.static_typing", sources)
+        self.assertIn("python.testing.testing_practices", sources)
+        self.assertTrue(_has_statement_containing(effective, "observable behavior"))
+        self.assertTrue(_has_statement_containing(effective, "type hints"))
+
+    def test_cmake_production_refinement_pack_combines_generic_and_cmake_rules(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Refactor this CMakeLists.txt project to be production-ready. Reduce complexity, "
+            "use target-based CMake, find_package imported targets, CMakePresets, "
+            "and preserve behavior.",
+            ("cmake.production_refinement",),
+        )
+        effective = result.structured["effective_rules"]
+        sources = _sources(effective)
+
+        self.assertIn("generic.code_quality.complexity_reduction", sources)
+        self.assertIn("cmake.project.target_model", sources)
+        self.assertIn("cmake.dependencies.package_management", sources)
+        self.assertIn("cmake.reproducibility.presets_toolchains", sources)
+        self.assertTrue(_has_statement_containing(effective, "observable behavior"))
+        self.assertTrue(_has_statement_containing(effective, "target"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,27 @@
+kind: pack
+api_version: policy.skill/v1
+
+pack:
+  id: cmake.production_refinement
+  name: CMake Production Refinement
+  version: 1.0.0
+  description: >-
+    CMake refinement pack combining generic production-quality rules with
+    target-based design, reproducibility, dependency hygiene, testing, and packaging guidance.
+
+extends:
+  - generic.production_refinement
+  - cmake.best_practices
+
+includes:
+  - cmake.project.target_model
+  - cmake.project.usage_requirements
+  - cmake.project.compiler_options
+  - cmake.project.sources_options_modules
+  - cmake.dependencies.package_management
+  - cmake.distribution.install_export_package
+  - cmake.reproducibility.presets_toolchains
+  - cmake.quality.testing_and_analysis
+
+excludes: []
+overrides: []
