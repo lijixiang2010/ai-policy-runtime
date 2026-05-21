@@ -325,11 +325,18 @@ function ensureSemanticDependencies(python) {
 }
 
 function venvPythonPath() {
-  const root = process.env.AI_POLICY_HOME || defaultStateDir();
   if (process.platform === "win32") {
-    return path.join(root, "venv", "Scripts", "python.exe");
+    return path.join(stateDir(), "venv", "Scripts", "python.exe");
   }
-  return path.join(root, "venv", "bin", "python");
+  return path.join(stateDir(), "venv", "bin", "python");
+}
+
+function venvDir() {
+  return path.dirname(path.dirname(venvPythonPath()));
+}
+
+function stateDir() {
+  return process.env.AI_POLICY_HOME || defaultStateDir();
 }
 
 function defaultStateDir() {
@@ -367,7 +374,7 @@ function doctor(argv = []) {
     python,
     pythonVersion: version ? version.join(".") : null,
     hookPython,
-    stateDir: path.dirname(path.dirname(venvPythonPath())),
+    stateDir: stateDir(),
     venvPython: venvPythonPath(),
     usingExplicitPython: Boolean(process.env.AI_POLICY_PYTHON),
     embedding: embeddingStatus,
@@ -437,13 +444,13 @@ function rebuildRuntime() {
   if (process.env.AI_POLICY_PYTHON) {
     fail("runtime rebuild manages the cached venv; unset AI_POLICY_PYTHON first.");
   }
-  const venvDir = path.dirname(path.dirname(venvPythonPath()));
-  fs.rmSync(venvDir, { recursive: true, force: true });
+  const runtimeVenvDir = venvDir();
+  fs.rmSync(runtimeVenvDir, { recursive: true, force: true });
   const python = ensurePython();
   console.log(JSON.stringify({
     rebuilt: true,
     python,
-    stateDir: path.dirname(venvDir),
+    stateDir: stateDir(),
   }, null, 2));
   return 0;
 }

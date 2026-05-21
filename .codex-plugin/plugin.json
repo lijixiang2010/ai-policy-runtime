@@ -1,11 +1,11 @@
 {
   "name": "ai-policy-runtime",
-  "version": "0.1.0",
-  "description": "Inject task-specific Effective Rules into Codex prompts.",
+  "version": "0.1.2",
+  "description": "Generate better AI code with task-aware policies for Codex.",
   "hooks": "./hooks/codex-hooks.json",
   "interface": {
     "displayName": "AI Policy Runtime",
-    "shortDescription": "Generates dynamic coding rules for each Codex prompt.",
+    "shortDescription": "Generate better AI code with task-aware policies.",
     "developerName": "Miles Li",
     "category": "Developer Tools",
     "capabilities": ["Read", "Write"]

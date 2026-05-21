@@ -78,6 +78,10 @@ def _npm_test_env(**overrides: str) -> dict[str, str]:
     return env
 
 
+def _node_package_root() -> Path:
+    return (Path("bin") / "ai-policy.js").resolve().parents[1]
+
+
 def _load_fixture(name: str) -> dict[str, object]:
     import yaml  # type: ignore
 
@@ -3295,17 +3299,23 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("skills/**/*.yaml", package["files"])
         self.assertIn("packs/*.yaml", package["files"])
 
-    def test_claude_plugin_metadata_matches_package_version(self) -> None:
+    def test_plugin_metadata_matches_package_version(self) -> None:
         package = json.loads(Path("package.json").read_text(encoding="utf-8"))
-        plugin = json.loads((Path(".claude-plugin") / "plugin.json").read_text(encoding="utf-8"))
+        claude_plugin = json.loads(
+            (Path(".claude-plugin") / "plugin.json").read_text(encoding="utf-8")
+        )
+        codex_plugin = json.loads(
+            (Path(".codex-plugin") / "plugin.json").read_text(encoding="utf-8")
+        )
         marketplace = json.loads(
             (Path(".claude-plugin") / "marketplace.json").read_text(encoding="utf-8")
         )
         marketplace_plugin = marketplace["plugins"][0]
 
-        self.assertEqual(plugin["version"], package["version"])
+        self.assertEqual(claude_plugin["version"], package["version"])
+        self.assertEqual(codex_plugin["version"], package["version"])
         self.assertEqual(marketplace_plugin["version"], package["version"])
-        self.assertEqual(plugin["description"], marketplace_plugin["description"])
+        self.assertEqual(claude_plugin["description"], marketplace_plugin["description"])
 
     def test_vscode_embedding_provider_does_not_offer_disabled_mode(self) -> None:
         package = json.loads(
@@ -3379,7 +3389,7 @@ class PolicyRuntimeTests(unittest.TestCase):
             )
             current = json.loads(completed.stdout)
 
-        self.assertEqual(current["expected_plugin_root"], str(Path.cwd()))
+        self.assertEqual(current["expected_plugin_root"], str(_node_package_root()))
         self.assertFalse(current["runtime_enabled"])
         self.assertFalse((root / ".policy" / "config.json").exists())
 
@@ -3811,8 +3821,12 @@ class PolicyRuntimeTests(unittest.TestCase):
         current = json.loads(completed.stdout)
 
         self.assertTrue(current["ok"])
-        self.assertEqual(current["packageRoot"], str(Path.cwd()))
+        self.assertEqual(current["packageRoot"], str(_node_package_root()))
         self.assertTrue(current["usingExplicitPython"])
+        self.assertEqual(
+            Path(current["venvPython"]).parents[1],
+            Path(current["stateDir"]) / "venv",
+        )
         self.assertTrue(current["checks"]["claudePlugin"])
         self.assertTrue(current["checks"]["skills"])
 
