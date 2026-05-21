@@ -3,13 +3,13 @@
   "owner": {
     "name": "Miles Li"
   },
-  "description": "AI Policy Runtime plugin marketplace.",
+  "description": "Task-aware coding policies for Claude Code.",
   "plugins": [
     {
       "name": "ai-policy-runtime",
       "source": "./",
-      "description": "Inject task-specific Effective Rules into Claude Code prompts.",
-      "version": "0.1.0",
+      "description": "Generate better AI code with task-aware policies for Claude Code.",
+      "version": "0.1.2",
       "author": {
         "name": "Miles Li"
       }

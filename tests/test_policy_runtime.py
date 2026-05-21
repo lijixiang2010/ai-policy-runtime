@@ -3295,6 +3295,18 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("skills/**/*.yaml", package["files"])
         self.assertIn("packs/*.yaml", package["files"])
 
+    def test_claude_plugin_metadata_matches_package_version(self) -> None:
+        package = json.loads(Path("package.json").read_text(encoding="utf-8"))
+        plugin = json.loads((Path(".claude-plugin") / "plugin.json").read_text(encoding="utf-8"))
+        marketplace = json.loads(
+            (Path(".claude-plugin") / "marketplace.json").read_text(encoding="utf-8")
+        )
+        marketplace_plugin = marketplace["plugins"][0]
+
+        self.assertEqual(plugin["version"], package["version"])
+        self.assertEqual(marketplace_plugin["version"], package["version"])
+        self.assertEqual(plugin["description"], marketplace_plugin["description"])
+
     def test_vscode_embedding_provider_does_not_offer_disabled_mode(self) -> None:
         package = json.loads(
             (Path("vscode-extension") / "package.json").read_text(encoding="utf-8")
