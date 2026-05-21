@@ -19,6 +19,10 @@ DEFAULT_AGENT = "codex"
 SUPPORTED_AGENTS = {"codex", "claude"}
 
 
+def _normalize_embedding_provider(value: str | None) -> str:
+    return (value or "").strip().lower().replace("_", "-")
+
+
 def main() -> int:
     payload = _read_payload()
     raw_prompt = str(payload.get("prompt", ""))
@@ -166,18 +170,23 @@ class ProjectHookConfig:
 
     def apply_environment(self) -> None:
         self._apply_env("AI_POLICY_EMBEDDING_PROVIDER", self.embedding_provider)
-        self._apply_env("AI_POLICY_EMBEDDING_BASE_URL", self.embedding_base_url)
-        self._apply_env("AI_POLICY_EMBEDDING_API_KEY", self.embedding_api_key)
-        self._apply_env("AI_POLICY_EMBEDDING_MODEL", self.embedding_model)
-        self._apply_env("AI_POLICY_EMBEDDING_TIMEOUT", self.embedding_timeout)
+        if _normalize_embedding_provider(self.embedding_provider) == "local":
+            self._clear_env("AI_POLICY_EMBEDDING_BASE_URL")
+            self._clear_env("AI_POLICY_EMBEDDING_API_KEY")
+            self._clear_env("AI_POLICY_EMBEDDING_TIMEOUT")
+            self._apply_or_clear_env("AI_POLICY_EMBEDDING_MODEL", self.embedding_model)
+        else:
+            self._apply_env("AI_POLICY_EMBEDDING_BASE_URL", self.embedding_base_url)
+            self._apply_env("AI_POLICY_EMBEDDING_API_KEY", self.embedding_api_key)
+            self._apply_env("AI_POLICY_EMBEDDING_MODEL", self.embedding_model)
+            self._apply_env("AI_POLICY_EMBEDDING_TIMEOUT", self.embedding_timeout)
         if self.auto_install is not None and "AI_POLICY_AUTO_INSTALL" not in os.environ:
             os.environ["AI_POLICY_AUTO_INSTALL"] = "1" if self.auto_install else "0"
 
     def ensure_semantic_dependencies(self, project_root: Path) -> None:
-        provider = (
-            self.embedding_provider
-            or os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "")
-        ).strip().lower().replace("_", "-")
+        provider = _normalize_embedding_provider(
+            self.embedding_provider or os.environ.get("AI_POLICY_EMBEDDING_PROVIDER")
+        )
         if provider != "local" and not self._auto_uses_installed_local_model(project_root):
             return
         try:
@@ -186,10 +195,9 @@ class ProjectHookConfig:
             _bootstrap_package(semantic=True)
 
     def _auto_uses_installed_local_model(self, project_root: Path) -> bool:
-        provider = (
-            self.embedding_provider
-            or os.environ.get("AI_POLICY_EMBEDDING_PROVIDER", "")
-        ).strip().lower().replace("_", "-")
+        provider = _normalize_embedding_provider(
+            self.embedding_provider or os.environ.get("AI_POLICY_EMBEDDING_PROVIDER")
+        )
         if provider not in {"", "auto"}:
             return False
         if (
@@ -214,6 +222,17 @@ class ProjectHookConfig:
     def _apply_env(name: str, value: str | None) -> None:
         if value:
             os.environ[name] = value
+
+    @staticmethod
+    def _apply_or_clear_env(name: str, value: str | None) -> None:
+        if value:
+            os.environ[name] = value
+        else:
+            os.environ.pop(name, None)
+
+    @staticmethod
+    def _clear_env(name: str) -> None:
+        os.environ.pop(name, None)
 
 
 def _resolve_effective_prompt(

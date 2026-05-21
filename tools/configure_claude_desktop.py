@@ -183,12 +183,17 @@ def configure_policy(
     config = _read_json_object(path)
     if configure_runtime:
         config["enabled"] = enabled
-        config["agents"] = _append_unique(config.get("agents"), "claude")
-        if not config.get("packs"):
-            config["packs"] = [DEFAULT_PACK]
-        if not config.get("policyRoot"):
-            config["policyRoot"] = str(plugin_root)
-        _ensure_git_commit_style(config)
+        if enabled:
+            config["agents"] = _append_unique(config.get("agents"), "claude")
+            if not config.get("packs"):
+                config["packs"] = [DEFAULT_PACK]
+            if not config.get("policyRoot"):
+                config["policyRoot"] = str(plugin_root)
+            _ensure_git_commit_style(config)
+        else:
+            config["agents"] = [
+                agent for agent in _string_list(config.get("agents")) if agent != "claude"
+            ]
     if post_refine is not None:
         config["postRefine"] = post_refine
         if post_refine != "off":

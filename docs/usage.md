@@ -452,7 +452,7 @@ During development, build and install the extension with:
 cd D:\MilesLi\ai-policy-runtime\vscode-extension
 npm ci
 npm run package
-& "$env:LOCALAPPDATA\Programs\Microsoft VS Code\bin\code.cmd" --install-extension ".\ai-policy-runtime-0.1.0.vsix" --force
+& "$env:LOCALAPPDATA\Programs\Microsoft VS Code\bin\code.cmd" --install-extension ".\ai-policy-runtime-0.1.1.vsix" --force
 ```
 
 Reload VS Code after reinstalling:

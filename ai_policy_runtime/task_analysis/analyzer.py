@@ -100,8 +100,13 @@ def default_embedding_provider(
 
     local_model = Path(local_model_root) / "models" / "paraphrase-multilingual-MiniLM-L12-v2"
     if provider == "local":
-        if embedding and embedding.model:
-            return SentenceTransformerEmbeddingProvider(embedding.model)
+        configured_model = (
+            embedding.model
+            if embedding and embedding.model
+            else os.environ.get("AI_POLICY_EMBEDDING_MODEL")
+        )
+        if configured_model:
+            return SentenceTransformerEmbeddingProvider(configured_model)
         if local_model.exists():
             return SentenceTransformerEmbeddingProvider(str(local_model))
         local_provider = optional_sentence_transformer_provider()

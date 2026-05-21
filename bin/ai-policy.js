@@ -29,7 +29,7 @@ function main(argv) {
     return configure(["claude", ...rest]);
   }
   if (command === "disable") {
-    return runConfigure(["--disable", ...withDefaultRoot(rest)]);
+    return runClaudeConfigure(["--disable", ...withDefaultRoot(rest)]);
   }
   if (command === "plugin") {
     return plugin(rest);
@@ -148,9 +148,40 @@ function extractOptionValue(args, name) {
   return { agent: value, rest };
 }
 
+function optionValue(args, name) {
+  for (let index = 0; index < args.length; index += 1) {
+    const item = args[index];
+    if (item === name) {
+      return args[index + 1] || "";
+    }
+    if (item.startsWith(`${name}=`)) {
+      return item.slice(name.length + 1);
+    }
+  }
+  return null;
+}
+
+function projectConfigHasPolicyRoot(args) {
+  const root = optionValue(args, "--root") || process.cwd();
+  const configPath = path.join(root, ".policy", "config.json");
+  if (!fs.existsSync(configPath)) {
+    return false;
+  }
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    return typeof config.policyRoot === "string" && config.policyRoot.trim() !== "";
+  } catch {
+    return false;
+  }
+}
+
 function withDefaultPolicyRoot(command, args) {
   const commandsUsingPolicyAssets = new Set(["resolve", "explain", "validate", "run", "model"]);
-  if (!commandsUsingPolicyAssets.has(command) || hasOption(args, "--policy-root")) {
+  if (
+    !commandsUsingPolicyAssets.has(command)
+    || hasOption(args, "--policy-root")
+    || projectConfigHasPolicyRoot(args)
+  ) {
     return args;
   }
   return ["--policy-root", PACKAGE_ROOT, ...args];

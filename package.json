@@ -1,7 +1,7 @@
 {
   "name": "ai-policy-runtime",
-  "version": "0.1.0",
-  "description": "Task-scoped policy runtime and Claude/Codex agent plugin tooling.",
+  "version": "0.1.1",
+  "description": "Task-aware coding policies for Codex, Claude Code, and AI coding workflows.",
   "license": "Apache-2.0",
   "author": {
     "name": "Miles Li"

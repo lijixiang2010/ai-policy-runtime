@@ -19,6 +19,7 @@ from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.domain.pack import PackRegistry, SkillPack
 from ai_policy_runtime.domain.rule import RuleAction
 from ai_policy_runtime.task_analysis import TaskAnalyzer, TaskSignals
+from ai_policy_runtime.task_analysis.analyzer import default_embedding_provider
 from ai_policy_runtime.task_analysis.schema import TaskAnalysis
 from ai_policy_runtime.task_analysis.embeddings import (
     OpenAICompatibleEmbeddingConfig,
@@ -29,7 +30,7 @@ from ai_policy_runtime.task_analysis.semantic_index import SemanticTaskIndex
 from ai_policy_runtime.adapters.agent import build_post_refinement_task, merge_pack_ids
 from ai_policy_runtime.adapters.codex.wrapper import _build_codex_command
 from ai_policy_runtime.adapters.claude.wrapper import _build_claude_command
-from ai_policy_runtime.interfaces.cli import CommandDispatcher
+from ai_policy_runtime.interfaces.cli import CommandDispatcher, _runtime_from_args
 from ai_policy_runtime.services.project_context import (
     ProjectContextAnalyzer,
     merge_project_analysis,
@@ -2579,6 +2580,52 @@ class PolicyRuntimeTests(unittest.TestCase):
             for key, value in env.items():
                 self.assertEqual(os.environ[key], value)
 
+    def test_codex_hook_local_provider_clears_stale_remote_embedding_model(
+        self,
+    ) -> None:
+        config = user_prompt_submit.ProjectHookConfig.from_mapping(
+            {"embeddingProvider": "local"}
+        )
+        env = {
+            "AI_POLICY_EMBEDDING_PROVIDER": "openai-compatible",
+            "AI_POLICY_EMBEDDING_BASE_URL": "https://env.example.test/v1",
+            "AI_POLICY_EMBEDDING_API_KEY": "env-key",
+            "AI_POLICY_EMBEDDING_MODEL": "nvidia/llama-nemotron-embed-vl-1b-v2:free",
+            "AI_POLICY_EMBEDDING_TIMEOUT": "3",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config.apply_environment()
+
+            self.assertEqual(os.environ["AI_POLICY_EMBEDDING_PROVIDER"], "local")
+            self.assertNotIn("AI_POLICY_EMBEDDING_BASE_URL", os.environ)
+            self.assertNotIn("AI_POLICY_EMBEDDING_API_KEY", os.environ)
+            self.assertNotIn("AI_POLICY_EMBEDDING_MODEL", os.environ)
+            self.assertNotIn("AI_POLICY_EMBEDDING_TIMEOUT", os.environ)
+
+    def test_codex_hook_local_provider_applies_project_model(
+        self,
+    ) -> None:
+        config = user_prompt_submit.ProjectHookConfig.from_mapping(
+            {
+                "embeddingProvider": "local",
+                "embeddingModel": "D:/models/paraphrase-multilingual-MiniLM-L12-v2",
+            }
+        )
+
+        with patch.dict(
+            os.environ,
+            {"AI_POLICY_EMBEDDING_MODEL": "env-model"},
+            clear=True,
+        ):
+            config.apply_environment()
+
+            self.assertEqual(os.environ["AI_POLICY_EMBEDDING_PROVIDER"], "local")
+            self.assertEqual(
+                os.environ["AI_POLICY_EMBEDDING_MODEL"],
+                "D:/models/paraphrase-multilingual-MiniLM-L12-v2",
+            )
+
     def test_codex_hook_loads_project_config(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -2855,6 +2902,7 @@ class PolicyRuntimeTests(unittest.TestCase):
             root = Path(tmp) / "project"
             plugin_root = Path(tmp) / "plugin"
 
+            configure_policy(root, plugin_root, enabled=True)
             policy_path = configure_policy(root, plugin_root, enabled=False)
             settings_path = configure_claude_settings(
                 root,
@@ -2866,6 +2914,7 @@ class PolicyRuntimeTests(unittest.TestCase):
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
 
         self.assertFalse(policy["enabled"])
+        self.assertNotIn("claude", policy["agents"])
         self.assertFalse(settings["enabledPlugins"][PLUGIN_ID])
 
     def test_configure_claude_desktop_status_reports_current_features(self) -> None:
@@ -3390,6 +3439,119 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(policy["embeddingModel"], "embedding-model")
         self.assertEqual(policy["embeddingTimeout"], "12.5")
 
+    def test_ai_policy_disable_clears_claude_runtime_state(self) -> None:
+        if shutil.which("node") is None:
+            self.skipTest("node is not available")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            env = {
+                **os.environ,
+                "AI_POLICY_PYTHON": sys.executable,
+            }
+            subprocess.run(
+                [
+                    "node",
+                    "bin/ai-policy.js",
+                    "configure",
+                    "claude",
+                    "--root",
+                    str(root),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            completed = subprocess.run(
+                [
+                    "node",
+                    "bin/ai-policy.js",
+                    "disable",
+                    "--root",
+                    str(root),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            policy = json.loads(
+                (root / ".policy" / "config.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertFalse(policy["enabled"])
+        self.assertNotIn("claude", policy["agents"])
+
+    def test_runtime_from_args_reads_project_policy_and_embedding_config(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            policy_root = Path(tmp) / "policy-assets"
+            config = root / ".policy" / "config.json"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                json.dumps(
+                    {
+                        "policyRoot": str(policy_root),
+                        "embeddingProvider": "openai_compatible",
+                        "embeddingBaseUrl": "https://embedding.example.test/v1",
+                        "embeddingApiKey": "project-key",
+                        "embeddingModel": "embedding-model",
+                        "embeddingTimeout": "12.5",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = argparse.Namespace(
+                root=str(root),
+                policy_root=None,
+                skills="skills",
+                packs="packs",
+            )
+
+            runtime = _runtime_from_args(args)
+
+        self.assertEqual(runtime.config.policy_root, policy_root)
+        self.assertIsNotNone(runtime.config.embedding)
+        assert runtime.config.embedding is not None
+        self.assertEqual(runtime.config.embedding.provider, "openai-compatible")
+        self.assertEqual(
+            runtime.config.embedding.base_url,
+            "https://embedding.example.test/v1",
+        )
+        self.assertEqual(runtime.config.embedding.api_key, "project-key")
+        self.assertEqual(runtime.config.embedding.model, "embedding-model")
+        self.assertEqual(runtime.config.embedding.timeout_seconds, 12.5)
+
+    def test_runtime_from_args_resolves_project_local_model_from_root(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            config = root / ".policy" / "config.json"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                json.dumps(
+                    {
+                        "embeddingProvider": "LOCAL",
+                        "embeddingModel": "models/custom-model",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = argparse.Namespace(
+                root=str(root),
+                policy_root=None,
+                skills="skills",
+                packs="packs",
+            )
+
+            runtime = _runtime_from_args(args)
+
+        self.assertIsNotNone(runtime.config.embedding)
+        assert runtime.config.embedding is not None
+        self.assertEqual(runtime.config.embedding.provider, "local")
+        self.assertEqual(runtime.config.embedding.model, str(root / "models" / "custom-model"))
+
     def test_cli_embedding_configure_local_can_install_default_model(self) -> None:
         args = argparse.Namespace(
             command="embedding",
@@ -3547,6 +3709,29 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         check.assert_called_once_with(root / "models" / "custom-model")
         self.assertTrue(output["embedding"]["ok"])
+
+    def test_forced_local_embedding_prefers_explicit_model_over_default_install(self) -> None:
+        with TemporaryDirectory() as tmp:
+            policy_root = Path(tmp) / "policy"
+            default_model = policy_root / "models" / "paraphrase-multilingual-MiniLM-L12-v2"
+            default_model.mkdir(parents=True)
+            provider = object()
+
+            with patch.dict(
+                os.environ,
+                {
+                    "AI_POLICY_EMBEDDING_PROVIDER": "local",
+                    "AI_POLICY_EMBEDDING_MODEL": "models/custom-model",
+                },
+                clear=True,
+            ), patch(
+                "ai_policy_runtime.task_analysis.analyzer.SentenceTransformerEmbeddingProvider",
+                return_value=provider,
+            ) as sentence_transformer:
+                selected = default_embedding_provider(policy_root)
+
+        self.assertIs(selected, provider)
+        sentence_transformer.assert_called_once_with("models/custom-model")
 
     def test_ai_policy_status_codex_command_is_read_only(self) -> None:
         if shutil.which("node") is None:

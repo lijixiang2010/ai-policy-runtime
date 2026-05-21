@@ -2,7 +2,7 @@
   "name": "ai-policy-runtime",
   "displayName": "AI Policy Runtime",
   "description": "Generate better AI code with task-aware policies for Codex and Claude Code.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "cppmore",
   "author": {
     "name": "Miles Li"
@@ -134,12 +134,12 @@
         "aiPolicy.policyRoot": {
           "type": "string",
           "default": "",
-          "description": "Optional policy asset root for development or advanced overrides. Leave empty to use the runtime bundled with this extension."
+          "description": "Optional policy asset root. Leave empty to use the runtime bundled with this extension."
         },
         "aiPolicy.autoInstall": {
           "type": "boolean",
           "default": true,
-          "description": "Install missing AI Policy Runtime Python dependencies automatically when agent hooks run."
+          "description": "Install missing Python dependencies automatically when agent hooks run."
         },
         "aiPolicy.embeddingProvider": {
           "type": "string",
@@ -174,7 +174,7 @@
         "aiPolicy.embeddingLocalModel": {
           "type": "string",
           "default": "",
-          "description": "Optional local sentence-transformers model path or model name."
+          "description": "Local sentence-transformers model path or model name."
         },
         "aiPolicy.embeddingTimeout": {
           "type": "string",

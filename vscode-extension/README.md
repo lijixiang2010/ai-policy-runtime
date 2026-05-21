@@ -1,62 +1,84 @@
 # AI Policy Runtime
 
-Generate better AI code with task-aware policies.
+Task-aware coding guidance for Codex and Claude Code in VS Code.
 
-AI Policy Runtime helps Codex and Claude Code adjust their coding guidance to
-the work in front of them. Instead of using one generic instruction set for
-every prompt, your agent can apply focused policies for safety, API design,
-review, modernization, performance-sensitive code, and post-task refinement.
+AI Policy Runtime gives your AI coding agent focused engineering rules for the
+current task. It can apply different guidance for safe implementation, review,
+refactoring, API design, performance-sensitive work, Git, CMake, Python, and
+post-task refinement.
 
-It is designed for general AI coding workflows. C++ currently has the deepest
-policy coverage, including ownership, lifetime, bounds safety, modern C++,
-low-latency constraints, and library API design.
+Instead of relying on one generic instruction set, each workspace gets a clear
+policy configuration that your selected agents use automatically.
 
-## Why Use It
+## Why Install It
 
-- Improve generated code quality without rewriting prompts by hand.
-- Keep agent behavior consistent across a workspace.
-- Apply different policy packs for implementation, review, refactoring, and API design.
-- Add a focused refinement pass before an agent finishes a task.
-- Inspect the active policy when you need to understand what guided a response.
+- Improve generated code without rewriting prompts by hand.
+- Keep Codex and Claude Code behavior consistent in a workspace.
+- Choose focused policy packs for the kind of work you do.
+- Use OpenAI-compatible or local embeddings for better task matching.
+- Inspect the exact Effective Rules generated for the latest prompt.
 
-## Requirements
-
-Install the Codex or Claude Code extension you want to use in VS Code. Then
-enable AI Policy Runtime for the workspace and select the matching agent.
-
-AI Policy Runtime ships its policy runtime inside the VS Code extension package.
-Each workspace only stores its own `.policy` and agent hook configuration; users
-do not need to copy the runtime into their projects.
+C++ has the deepest policy coverage today. Python, CMake, Git, and general
+refinement packs are also included.
 
 ## Quick Start
 
-1. Open a workspace.
-2. Open the AI Policy Runtime side bar.
-3. Enable the runtime.
-4. Select Codex, Claude Code, or both.
-5. Choose the policy packs for your project.
-6. Run `AI Policy Runtime: Validate Runtime` if you want a readiness report.
+1. Install Codex or Claude Code for VS Code.
+2. Install **AI Policy Runtime**.
+3. Open a workspace.
+4. Open the AI Policy Runtime side bar.
+5. Enable the runtime.
+6. Select Codex, Claude Code, or both.
+7. Choose policy packs.
+8. Run **AI Policy Runtime: Validate Runtime**.
 
-Your selected AI coding agents will use the workspace policy automatically.
-For Codex, approve the generated project hooks when Codex asks you to trust them.
+For Codex, approve the generated workspace hooks when Codex asks you to trust
+them.
+
+## Embeddings
+
+Embeddings are optional but recommended for better task matching.
+
+Choose one provider in the side bar:
+
+- **Auto**: use a configured OpenAI-compatible endpoint, otherwise use a
+  configured local model when available.
+- **OpenAI-compatible**: use an embeddings endpoint such as OpenAI, OpenRouter,
+  or another `/v1/embeddings` service.
+- **Local sentence-transformers**: use a local model path that you provide.
+
+The extension does not ship a local model by default. If you choose local
+embeddings, set **Local model path** to an existing sentence-transformers model
+directory.
 
 ## What It Creates
 
-AI Policy Runtime automatically creates and maintains workspace-local files:
+AI Policy Runtime keeps configuration in your workspace:
 
 - `.policy/config.json`
-- `.codex/hooks.json`
-- `.codex/config.toml`
+- `.policy/current/effective-prompt.md`
+- `.policy/current/agent-hook-state.json`
+- `.codex/hooks.json` and `.codex/config.toml` when Codex is enabled
+- `.claude/settings.local.json` when Claude Code is enabled
 
-The latest hook run is reported in `.policy/current/agent-hook-state.json`, and
-the rendered rules are written to `.policy/current/effective-prompt.md`.
+These files are plain text so you can inspect what was configured and what
+rules were generated.
 
-## Available Commands
+## Commands
 
-- `AI Policy Runtime: Enable`
-- `AI Policy Runtime: Disable`
-- `AI Policy Runtime: Configure Packs`
-- `AI Policy Runtime: Enable Post-Task Refinement`
-- `AI Policy Runtime: Show Status`
-- `AI Policy Runtime: Show Effective Rules`
-- `AI Policy Runtime: Validate Runtime`
+- **AI Policy Runtime: Enable**
+- **AI Policy Runtime: Disable**
+- **AI Policy Runtime: Configure Packs**
+- **AI Policy Runtime: Enable Post-Task Refinement**
+- **AI Policy Runtime: Show Status**
+- **AI Policy Runtime: Show Effective Rules**
+- **AI Policy Runtime: Validate Runtime**
+
+## Privacy
+
+AI Policy Runtime is not an LLM. It prepares policy context for the AI agent you
+already use.
+
+Remote embedding requests are only made when you configure a remote embedding
+provider or credentials. Local embeddings use the model path you configure on
+your machine.

@@ -43,6 +43,9 @@ type EmbeddingEnvironmentConfig = Pick<
 type LocalModelState = {
   defaultPath: string;
   installed: boolean;
+  configuredPath?: string;
+  configuredInstalled?: boolean;
+  available: boolean;
 };
 
 type EmbeddingAvailabilityState = {
@@ -660,6 +663,8 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     const byId = (id) => document.getElementById(id);
     const selected = new Set(state.config.packs || []);
     const agents = new Set(state.config.agents || ['codex']);
+    let draftEmbeddingModel = state.config.embeddingModel || '';
+    let draftEmbeddingLocalModel = state.config.embeddingLocalModel || '';
     byId('enabled').checked = Boolean(state.config.enabled);
     byId('autoInstall').checked = Boolean(state.config.autoInstall);
     byId('agentCodex').checked = agents.has('codex');
@@ -697,15 +702,30 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       const field = byId('embeddingModel');
       const provider = byId('embeddingProvider').value;
       const configured = provider === 'local'
-        ? state.config.embeddingLocalModel || ''
-        : state.config.embeddingModel || '';
+        ? draftEmbeddingLocalModel
+        : draftEmbeddingModel;
       const environment = provider === 'local' ? '' : envConfig.embeddingModel || '';
       field.value = configured || environment;
       field.dataset.envValue = environment;
       field.dataset.configured = configured ? 'true' : 'false';
       field.dataset.userEdited = 'false';
-      field.addEventListener('input', () => { field.dataset.userEdited = 'true'; });
-      field.addEventListener('change', () => { field.dataset.userEdited = 'true'; });
+      field.addEventListener('input', () => {
+        field.dataset.userEdited = 'true';
+        rememberProviderModelValue();
+      });
+      field.addEventListener('change', () => {
+        field.dataset.userEdited = 'true';
+        rememberProviderModelValue();
+      });
+    }
+
+    function rememberProviderModelValue(provider = byId('embeddingProvider').value) {
+      const value = byId('embeddingModel').value.trim();
+      if (provider === 'local') {
+        draftEmbeddingLocalModel = value;
+      } else {
+        draftEmbeddingModel = value;
+      }
     }
 
     function packMarkup(pack) {
@@ -760,9 +780,11 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     byId('packSearch').addEventListener('input', renderPacks);
     byId('embeddingProvider').addEventListener('change', () => {
       const provider = byId('embeddingProvider');
+      const previousProvider = provider.dataset.previousProvider || '';
       if (provider.value !== provider.dataset.previousProvider) {
-        resetProviderScopedEmbeddingFields();
+        rememberProviderModelValue(previousProvider);
         provider.dataset.previousProvider = provider.value;
+        setProviderModelValue();
       }
       syncEmbeddingProviderFields();
       scheduleSave();
@@ -813,13 +835,11 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       byId('localModelStatus').hidden = !isLocal;
       byId('embeddingModelField').hidden = !(isOpenAi || isLocal);
       byId('embeddingTimeoutField').hidden = !isOpenAi;
-      byId('embeddingModelLabel').textContent = isLocal ? 'Override local model' : 'Embedding model';
+      byId('embeddingModelLabel').textContent = isLocal ? 'Local model path' : 'Embedding model';
       byId('embeddingModel').placeholder = isLocal
-        ? 'Leave empty to use the default local model'
+        ? 'Path to a sentence-transformers model directory'
         : 'text-embedding-3-small';
-      byId('localModelStatus').textContent = localModel.installed
-        ? 'Using default local model: ' + localModel.defaultPath
-        : 'Default local model not found: ' + localModel.defaultPath;
+      byId('localModelStatus').textContent = localModelStatusText();
       renderAutoEmbeddingStatus();
     }
 
@@ -827,13 +847,13 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       const status = byId('autoEmbeddingStatus');
       const lines = [
         'OpenAI-compatible: ' + (availability.remoteConfigured ? 'configured (' + availability.remoteSummary + ')' : 'not configured'),
-        'Local model: ' + (localModel.installed ? 'available (' + localModel.defaultPath + ')' : 'not found (' + localModel.defaultPath + ')')
+        autoLocalModelSummary()
       ];
       if (availability.remoteConfigured) {
         lines.push('Auto will use OpenAI-compatible embeddings.');
         status.classList.remove('warning');
-      } else if (localModel.installed) {
-        lines.push('Auto will use the default local sentence-transformers model.');
+      } else if (localModel.available) {
+        lines.push('Auto will use the local sentence-transformers model.');
         status.classList.remove('warning');
       } else {
         lines.push('Configure an OpenAI-compatible endpoint or install the default local model before using semantic analysis.');
@@ -842,19 +862,30 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       status.textContent = lines.join('\\n');
     }
 
-    function resetProviderScopedEmbeddingFields() {
-      for (const id of ['embeddingBaseUrl', 'embeddingApiKey', 'embeddingModel', 'embeddingTimeout']) {
-        const field = byId(id);
-        field.value = '';
-        field.dataset.configured = 'false';
-        field.dataset.userEdited = 'true';
+    function localModelStatusText() {
+      if (localModel.configuredPath) {
+        return localModel.configuredInstalled
+          ? 'Using configured local model: ' + localModel.configuredPath
+          : 'Configured local model not found: ' + localModel.configuredPath;
       }
+      return localModel.installed
+        ? 'Using default local model: ' + localModel.defaultPath
+        : 'Default local model not found: ' + localModel.defaultPath;
+    }
+
+    function autoLocalModelSummary() {
+      if (localModel.configuredPath) {
+        return 'Configured local model: ' + (localModel.configuredInstalled ? 'available (' : 'not found (') + localModel.configuredPath + ')';
+      }
+      return 'Local model: ' + (localModel.installed ? 'available (' : 'not found (') + localModel.defaultPath + ')';
     }
 
     function readConfig() {
+      rememberProviderModelValue();
       const postRefine = byId('postRefineEnabled').checked
         ? byId('postRefine').value
         : 'off';
+      const provider = byId('embeddingProvider').value;
       return {
         enabled: byId('enabled').checked,
         agents: ['codex', 'claude'].filter((agent) => byId('agent' + agent.charAt(0).toUpperCase() + agent.slice(1)).checked),
@@ -865,12 +896,12 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
         embeddingProvider: readEmbeddingField('embeddingProvider'),
         embeddingBaseUrl: readEmbeddingField('embeddingBaseUrl'),
         embeddingApiKey: readEmbeddingField('embeddingApiKey'),
-        embeddingModel: byId('embeddingProvider').value === 'local'
-          ? state.config.embeddingModel || undefined
+        embeddingModel: provider === 'local'
+          ? draftEmbeddingModel || undefined
           : readEmbeddingField('embeddingModel'),
-        embeddingLocalModel: byId('embeddingProvider').value === 'local'
-          ? readEmbeddingField('embeddingModel')
-          : state.config.embeddingLocalModel || undefined,
+        embeddingLocalModel: provider === 'local'
+          ? draftEmbeddingLocalModel || undefined
+          : draftEmbeddingLocalModel || undefined,
         embeddingTimeout: readEmbeddingField('embeddingTimeout'),
         postRefine,
         postRefinePacks: ${JSON.stringify(DEFAULT_POST_REFINE_PACKS)},
@@ -1466,10 +1497,25 @@ function readLocalModelState(
     'models',
     'paraphrase-multilingual-MiniLM-L12-v2'
   );
+  const configuredPath = config.embeddingLocalModel
+    ? resolveWorkspacePath(config.embeddingLocalModel, workspaceRoot)
+    : undefined;
+  const configuredInstalled = configuredPath ? existsSync(configuredPath) : undefined;
+  const installed = existsSync(defaultPath);
   return {
     defaultPath,
-    installed: existsSync(defaultPath)
+    installed,
+    configuredPath,
+    configuredInstalled,
+    available: configuredInstalled ?? installed
   };
+}
+
+function resolveWorkspacePath(value: string, workspaceRoot: string | undefined): string {
+  if (path.isAbsolute(value) || !workspaceRoot) {
+    return path.normalize(value);
+  }
+  return path.join(workspaceRoot, value);
 }
 
 function resolvePolicyRoot(

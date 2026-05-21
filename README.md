@@ -2,138 +2,101 @@
 
 # AI Policy Runtime
 
-Generate better AI code with task-aware policies.
+Task-aware coding guidance for AI agents.
 
-AI Policy Runtime helps Codex, Claude Code, and other AI coding workflows apply
-the right engineering guidance for each task. Instead of relying on one static
-prompt for every situation, it activates focused policies for the work at hand:
-implementation, review, refactoring, API design, performance-sensitive code,
-and post-task refinement.
+AI Policy Runtime helps Codex, Claude Code, and other AI coding workflows use
+the right engineering rules for the task in front of them. Instead of sending
+one large generic prompt every time, it detects the work type and supplies a
+focused policy: safe implementation, review, refactoring, API design,
+performance-sensitive code, Git workflow, CMake, Python, or post-task
+refinement.
 
-It is designed for general AI coding workflows. C++ currently has the deepest
-policy coverage, including ownership, lifetime, bounds safety, modern C++,
-low-latency constraints, and library API design.
+The result is calmer, more consistent agent behavior across a workspace.
 
-## Why Use It
+## What You Get
 
-- Improve AI-generated code quality without rewriting prompts by hand.
-- Keep agent behavior consistent across a workspace.
-- Apply different policy packs for generation, review, modernization, API
-  design, and performance-sensitive work.
-- Add an optional refinement pass before an agent finishes.
-- Inspect the active policy when you need to understand what guided a response.
+- Task-specific rules for coding, review, refactoring, and design work.
+- Workspace-level configuration shared by supported agents.
+- Optional semantic task matching with OpenAI-compatible or local embeddings.
+- Optional post-task refinement before an agent finishes.
+- Inspectable Effective Rules so you can see what guidance was applied.
+
+C++ currently has the deepest coverage, including ownership, lifetime, bounds
+safety, API design, modern C++, and low-latency work. Python, CMake, Git, and
+general refinement packs are also included.
 
 ## Install
 
-For command-line and agent integration workflows:
+### VS Code
+
+Install the **AI Policy Runtime** extension, then open its side bar in your
+workspace.
+
+Use it with the Codex or Claude Code extension you already use. Enable the
+runtime, select the agent, choose policy packs, and configure embeddings if you
+want semantic task matching.
+
+### Command Line
 
 ```powershell
 npm install -g ai-policy-runtime
 ai-policy doctor
 ```
 
-For VS Code, install the **AI Policy Runtime** extension alongside the Codex or
-Claude Code extension you already use.
-
-## Use It Three Ways
-
-| Entry point | Best for | Configuration |
-| --- | --- | --- |
-| VS Code Extension | Codex or Claude Code inside VS Code | Use the side bar. It saves VS Code workspace settings and syncs `.policy/config.json`. |
-| Command-Line Agent Hooks | Codex CLI, Claude Code CLI, or Claude Desktop Code sessions | Use `ai-policy configure ...`; hooks read `.policy/config.json`, with environment variables for CI or temporary overrides. |
-| Python Runtime | Custom tools, CI, or embedded workflows | Construct `PolicyRuntime(RuntimeConfig(...))`; embedding uses environment variables or the default local model under `policy_root/models`. |
-
-### 1. VS Code Extension
-
-Use this when you run Codex or Claude Code from VS Code.
-
-1. Install the Codex or Claude Code extension you want to use.
-2. Install **AI Policy Runtime**.
-3. Open the AI Policy Runtime side bar.
-4. Enable the runtime for the workspace.
-5. Select Codex, Claude Code, or both.
-6. Choose the policy packs for your project.
-
-Your selected AI coding agents will use the workspace policy automatically.
-
-### 2. Command-Line Agent Hooks
-
-Use this when you run the original Codex CLI, Claude Code CLI, or Claude
-Desktop Code sessions.
-
-Configure a project for Codex CLI:
+Configure a project for Codex:
 
 ```powershell
-ai-policy configure codex --root D:\work\target-project
+ai-policy configure codex --root D:\work\project
 ```
 
-Then run Codex normally from that project. AI Policy Runtime hooks will apply
-the workspace policy automatically.
-
-Configure embeddings for command-line hooks:
+Configure a project for Claude Code:
 
 ```powershell
-ai-policy embedding configure --root D:\work\target-project --provider local --install
-ai-policy embedding status --root D:\work\target-project
+ai-policy configure claude --root D:\work\project
 ```
 
-You can also use an existing local sentence-transformers model:
+## Embeddings
+
+AI Policy Runtime can classify tasks with embeddings. You choose the provider:
+
+- **Auto**: use a configured OpenAI-compatible endpoint, otherwise use a
+  configured local model when available.
+- **OpenAI-compatible**: use an endpoint such as OpenAI, OpenRouter, or another
+  `/v1/embeddings` service.
+- **Local**: use a sentence-transformers model path that you provide.
+
+The package does not include or download a local model by default.
+
+Configure a local model from the CLI:
 
 ```powershell
-ai-policy embedding configure --root D:\work\target-project --provider local --model D:\models\paraphrase-multilingual-MiniLM-L12-v2
+ai-policy embedding configure --root D:\work\project --provider local --model D:\models\paraphrase-multilingual-MiniLM-L12-v2
 ```
 
-Configure a project for Claude Code or Claude Desktop Code sessions:
+Or download the recommended default model:
 
 ```powershell
-ai-policy configure claude --root D:\work\target-project
+ai-policy embedding configure --root D:\work\project --provider local --install
 ```
 
-Enable a post-task refinement pass when you want the agent to review and polish
-its own work before finishing:
+Check the current embedding setup:
 
 ```powershell
-ai-policy post-refine standard --root D:\work\target-project
+ai-policy embedding status --root D:\work\project
 ```
 
-Check the active configuration:
+## Common Commands
 
 ```powershell
-ai-policy status --root D:\work\target-project
-ai-policy status --agent codex --root D:\work\target-project
-```
-
-### 3. Python Runtime
-
-Use this when you want to embed policy resolution in a custom tool, CI flow, or
-agent workflow.
-
-```python
-from ai_policy_runtime import PolicyRuntime, RuntimeConfig
-
-runtime = PolicyRuntime(RuntimeConfig.from_values(root="."))
-result = runtime.resolve(
-    "Implement a C++20 matching-engine API.",
-    ("cpp.low_latency",),
-)
-```
-
-Configure embeddings directly in Python when you do not want to rely on process
-environment variables:
-
-```python
-runtime = PolicyRuntime(RuntimeConfig.from_values(
-    root=".",
-    policy_root="D:/MilesLi/ai-policy-runtime",
-    embedding_provider="openai-compatible",
-    embedding_api_key="<key>",
-    embedding_model="text-embedding-3-small",
-))
+ai-policy status --root D:\work\project
+ai-policy resolve --pack cpp.safe_generation "Implement this C++ API"
+ai-policy explain "Review this change for ownership and lifetime risks"
+ai-policy validate
 ```
 
 ## Policy Packs
 
-Bundled packs include:
+Included packs:
 
 - `cpp.safe_generation`
 - `cpp.low_latency`
@@ -141,90 +104,31 @@ Bundled packs include:
 - `cpp.library_api_design`
 - `cpp.modernization`
 - `cpp.production_refinement`
-- `generic.production_refinement`
-- `git.best_practices`
-- `cmake.best_practices`
 - `python.best_practices`
+- `python.production_refinement`
+- `cmake.best_practices`
+- `cmake.production_refinement`
+- `git.best_practices`
+- `generic.production_refinement`
 
-C++ has the most complete code-generation coverage today. Generic refinement
-packs are available for broader coding workflows. Git workflow policies cover
-commit hygiene, staging, stashing, cleaning, branching, pull request readiness,
-conflict resolution, and history rewrite safety. CMake policies cover
-target-based project structure, usage requirements, source lists, compiler
-options, dependencies, packaging, presets, toolchains, testing, and quality tooling.
-Python policies use a tiered pack for compact core guidance, API/typing/testing
-design rules, and product-level packaging, security, CLI, concurrency, and
-performance rules that activate only when relevant.
+## Workspace Files
 
-## Useful Commands
+AI Policy Runtime stores project configuration in normal workspace files:
 
-Resolve a prompt into task-aware rules:
+- `.policy/config.json`
+- `.policy/current/effective-prompt.md`
+- `.policy/current/agent-hook-state.json`
+- `.codex/hooks.json` and `.codex/config.toml` when Codex is enabled
+- `.claude/settings.local.json` when Claude Code is enabled
 
-```powershell
-ai-policy resolve --pack cpp.low_latency "Implement a C++20 matching-engine API."
-```
-
-Explain how a task was classified:
-
-```powershell
-ai-policy explain "Review this API for ownership and lifetime risks."
-```
-
-Validate the bundled policies:
-
-```powershell
-ai-policy validate
-```
-
-Show generated rules for the current workspace:
-
-```powershell
-ai-policy inspect
-```
-
-## Agent Wrappers
-
-Hooks are the recommended path for normal Codex and Claude Code usage. Wrapper
-commands are also available when you want to run an agent through an explicit
-policy-aware command:
-
-```powershell
-policy-codex --pack cpp.low_latency "Implement a C++20 matching-engine API."
-policy-claude --pack cpp.production_refinement "Refactor this module safely."
-```
-
-## Documentation
-
-- [Usage Guide](docs/usage.md): command-line workflows, agent integrations,
-  embeddings, cache, and verification.
-- [NPM Install Guide](docs/npm-install.md): end-user installation and
-  troubleshooting.
-- [Post-Task Refinement](docs/post_task_refinement_workflow.md): refinement
-  modes and verification flow.
-- [Git Best Practices](docs/git_best_practices.md): Git workflow policies for
-  commits, branches, conflict resolution, and history safety.
-- [CMake Best Practices](docs/cmake_best_practices.md): CMake policies for
-  targets, dependencies, packaging, presets, toolchains, and quality tooling.
-- [Python Best Practices](docs/python_best_practices.md): tiered Python policies
-  for core code quality, design, testing, packaging, security, CLI, concurrency,
-  and performance work.
-- [Skill Policy Runtime](docs/skill_policy_runtime.md): runtime model and core
-  concepts.
-- [Skill DSL Syntax](docs/skill_dsl_syntax_specification.md): Skill file format.
-- [Skill Authoring Log](docs/skill_authoring_log.md): maintenance notes,
-  including the English-only DSL boundary.
-- [Effective Rules Output](docs/effective_rules_output_specification.md):
-  generated rule contract.
-- [C++ Skill Library Design](docs/cpp_skill_library_design.md): current C++
-  policy library structure.
-- [Reference Assets](docs/reference/): ontology and verification mapping
-  references used by the design documents.
-- [Release Guide](docs/release.md): release checks and publishing workflow.
+These files make the active policy visible and reproducible.
 
 ## Notes
 
-- The runtime produces task-aware policy context for AI agents; it is not itself
-  an LLM.
-- The default installation does not download models.
-- Optional semantic matching can use OpenAI-compatible embeddings or a local
-  sentence-transformers model.
+- AI Policy Runtime is not an LLM. It prepares task-aware policy context for AI
+  coding agents.
+- Local models are optional and user-configured.
+- Remote embedding requests are only used when you configure a remote provider
+  or credentials.
+- See [docs/usage.md](docs/usage.md) for advanced CLI, hook, and runtime
+  details.

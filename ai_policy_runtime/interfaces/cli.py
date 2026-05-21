@@ -146,12 +146,20 @@ def _add_runtime_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _runtime_from_args(args: argparse.Namespace) -> PolicyRuntime:
+    root = Path(args.root)
+    project_config = _read_project_config(root / ".policy" / "config.json")
     return PolicyRuntime(
         RuntimeConfig.from_values(
-            root=Path(args.root),
-            policy_root=getattr(args, "policy_root", None),
+            root=root,
+            policy_root=getattr(args, "policy_root", None)
+            or _optional_string(project_config.get("policyRoot")),
             skills_dir=getattr(args, "skills", "skills"),
             packs_dir=getattr(args, "packs", "packs"),
+            embedding_provider=_project_embedding_provider(project_config),
+            embedding_base_url=_optional_string(project_config.get("embeddingBaseUrl")),
+            embedding_api_key=_optional_string(project_config.get("embeddingApiKey")),
+            embedding_model=_project_embedding_model(root, project_config),
+            embedding_timeout_seconds=_optional_float(project_config.get("embeddingTimeout")),
         )
     )
 
@@ -163,6 +171,39 @@ def _read_project_config(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"Project config must be a JSON object: {path}")
     return data
+
+
+def _project_embedding_model(root: Path, config: dict[str, Any]) -> str | None:
+    model = _optional_string(config.get("embeddingModel"))
+    if not model or _project_embedding_provider(config) != "local":
+        return model
+    path = Path(model)
+    if path.is_absolute():
+        return model
+    return str(root / path)
+
+
+def _project_embedding_provider(config: dict[str, Any]) -> str | None:
+    provider = _optional_string(config.get("embeddingProvider"))
+    if provider is None:
+        return None
+    return provider.lower().replace("_", "-")
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(str(value).strip())
+    except ValueError:
+        return None
 
 
 def _configure_embedding(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any] | None:
