@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .lexicon import TaskGate, TaskLexicon
+from .lexicon import LexiconRule, TaskGate, TaskLexicon
 from .matching import ExactRuleMatcher, normalize_text
 from .resolution import (
     ExtractionState,
@@ -8,7 +8,15 @@ from .resolution import (
     signal_domain_evidence,
 )
 from .schema import ExtractionEvidence, TaskAnalysis, TaskSignals
-from .semantic_index import SemanticTaskIndex
+from .semantic_index import SemanticMatch, SemanticTaskIndex
+
+
+PROJECT_SIGNAL_SEMANTIC_TASK_MIN_CONFIDENCE = 0.6
+PROJECT_SIGNAL_CROSS_DOMAIN_SEMANTIC_TASK_MIN_CONFIDENCE = 0.65
+PROJECT_SIGNAL_BORDERLINE_CROSS_DOMAIN_CONFIDENCE = 0.64
+PROJECT_SIGNAL_BORDERLINE_MIN_TEXT_LENGTH = 12
+SHORT_GIT_COMMIT_INTENT_CONFIDENCE = 0.52
+SHORT_GIT_COMMIT_MAX_TEXT_LENGTH = 8
 
 
 class DeterministicTaskExtractor:
@@ -29,8 +37,12 @@ class DeterministicTaskExtractor:
         if _is_explicit_non_code_change_request(normalized):
             state.add(default_task_type_evidence())
             return state.to_analysis(self._lexicon)
+        if self._is_semantic_non_code_change_request(normalized):
+            state.add(default_task_type_evidence())
+            return state.to_analysis(self._lexicon)
         self._apply_domain(normalized, signals, state)
         self._apply_task_type(normalized, state)
+        self._apply_short_git_commit_intent(normalized, signals, state)
         self._apply_exact_context(normalized, state)
         self._apply_semantic_context(normalized, state, self._semantic_gate(state))
         return state.to_analysis(self._lexicon)
@@ -83,6 +95,56 @@ class DeterministicTaskExtractor:
         for rule, evidence in self._matcher.all(self._lexicon.context_rules, text):
             state.apply_rule(rule, evidence)
 
+    def _apply_short_git_commit_intent(
+        self,
+        text: str,
+        signals: TaskSignals | None,
+        state: ExtractionState,
+    ) -> None:
+        if not signals or not signals.git_has_changes or self._semantic_index is None:
+            return
+        if len(text.strip()) > SHORT_GIT_COMMIT_MAX_TEXT_LENGTH:
+            return
+        if state.best_value("task_type", "") != "unknown":
+            return
+        score = self._semantic_index.best_text_score(
+            text,
+            (
+                "commit current changes",
+                "create one git commit",
+                "make one commit",
+                "commit once",
+                "create a single commit",
+                "commit the current work",
+                "save current code changes into git history",
+            ),
+        )
+        if score < SHORT_GIT_COMMIT_INTENT_CONFIDENCE:
+            return
+        state.apply_rule(
+            _semantic_signal_rule(
+                "git.workflow.commit_hygiene",
+                "task_type",
+                "prepare_commit",
+                set_context={"git_working_tree_sensitive": True},
+                tags=("git",),
+            ),
+            ExtractionEvidence(
+                field="task_type",
+                value="prepare_commit",
+                source="signal:git_working_tree:semantic_short_commit_intent",
+                confidence=max(score, 0.66),
+            ),
+        )
+        state.add(
+            ExtractionEvidence(
+                field="domain",
+                value="git",
+                source="signal:git_working_tree:semantic_short_commit_intent",
+                confidence=0.72,
+            )
+        )
+
     def _apply_semantic_context(
         self,
         text: str,
@@ -102,7 +164,7 @@ class DeterministicTaskExtractor:
                 bootstrapped_scope = self._lexicon.generic_semantic_scope()
                 for match in self._semantic_index.search_scoped(text, scope=bootstrapped_scope):
                     if match.rule.field == "task_type":
-                        state.apply_rule(match.rule, match.evidence())
+                        self._apply_semantic_task_match(match, state)
                 gate = self._semantic_gate(state)
                 if gate is None:
                     return
@@ -114,7 +176,7 @@ class DeterministicTaskExtractor:
         if gate.task_type is None:
             for match in self._semantic_index.search_scoped(text, scope=scope):
                 if match.rule.field == "task_type":
-                    state.apply_rule(match.rule, match.evidence())
+                    self._apply_semantic_task_match(match, state)
             gated = self._semantic_gate(state)
             if gated is None or gated.task_type is None:
                 return
@@ -132,21 +194,20 @@ class DeterministicTaskExtractor:
         if self._semantic_index is None:
             return
         current_domain = state.best_value("domain", "")
+        domain_from_project_signal = _domain_from_project_signal(state, current_domain)
         for match in self._semantic_index.search_scoped(text, scope=None):
             if match.rule.field != "task_type":
                 continue
             evidence = match.evidence()
             domain = self._lexicon.domain_for_skill(match.rule.skill_id)
-            if domain and current_domain and domain != current_domain:
-                if (
-                    domain not in {"git", "cmake"}
-                    or evidence.confidence < 0.5
-                    or not _can_cross_project_domain_from_semantic_task(
-                        domain,
-                        str(match.rule.value),
-                    )
-                ):
-                    continue
+            if not self._semantic_task_allowed(
+                match,
+                evidence,
+                current_domain,
+                domain_from_project_signal,
+                text,
+            ):
+                continue
             if not current_domain and (not domain or domain == "generic_code"):
                 continue
             if domain and not current_domain:
@@ -169,6 +230,58 @@ class DeterministicTaskExtractor:
                 )
             return
 
+    def _apply_semantic_task_match(
+        self,
+        match: SemanticMatch,
+        state: ExtractionState,
+    ) -> None:
+        evidence = match.evidence()
+        current_domain = state.best_value("domain", "")
+        if not self._semantic_task_allowed(
+            match,
+            evidence,
+            current_domain,
+            _domain_from_project_signal(state, current_domain),
+            "",
+        ):
+            return
+        state.apply_rule(match.rule, evidence)
+
+    def _semantic_task_allowed(
+        self,
+        match: SemanticMatch,
+        evidence: ExtractionEvidence,
+        current_domain: str,
+        domain_from_project_signal: bool,
+        text: str,
+    ) -> bool:
+        domain = self._lexicon.domain_for_skill(match.rule.skill_id)
+        if (
+            domain
+            and current_domain
+            and domain == current_domain
+            and domain == "python"
+            and domain_from_project_signal
+            and evidence.confidence < PROJECT_SIGNAL_SEMANTIC_TASK_MIN_CONFIDENCE
+        ):
+            return False
+        if domain and current_domain and domain != current_domain:
+            min_confidence = (
+                _project_signal_cross_domain_min_confidence(text)
+                if domain_from_project_signal
+                else 0.5
+            )
+            if (
+                domain not in {"git", "cmake"}
+                or evidence.confidence < min_confidence
+                or not _can_cross_project_domain_from_semantic_task(
+                    domain,
+                    str(match.rule.value),
+                )
+            ):
+                return False
+        return True
+
     def _semantic_gate(self, state: ExtractionState) -> TaskGate | None:
         """Build the first-stage gate from exact evidence and nonsemantic signals."""
 
@@ -180,6 +293,24 @@ class DeterministicTaskExtractor:
             domain=domain or None,
             task_type=task_type if task_type != "unknown" else None,
             standard=_int_or_none(state.context.get("standard")),
+        )
+
+    def _is_semantic_non_code_change_request(self, text: str) -> bool:
+        if self._semantic_index is None:
+            return False
+        return (
+            self._semantic_index.best_text_score(
+                text,
+                (
+                    "no code changes",
+                    "do not change source code",
+                    "explain code only without modifying it",
+                    "summarize text or logs without changing code",
+                    "rewrite documentation copy without code changes",
+                    "write release notes or issue text without source changes",
+                ),
+            )
+            >= 0.7
         )
 
 
@@ -261,6 +392,41 @@ def _can_cross_project_domain_from_semantic_task(domain: str, task_type: str) ->
     return domain == "cmake"
 
 
+def _domain_from_project_signal(state: ExtractionState, current_domain: str) -> bool:
+    return any(
+        item.field == "domain"
+        and item.value == current_domain
+        and item.source == "signal:project_language"
+        for item in state.evidence
+    )
+
+
+def _project_signal_cross_domain_min_confidence(text: str) -> float:
+    if len(text.strip()) >= PROJECT_SIGNAL_BORDERLINE_MIN_TEXT_LENGTH:
+        return PROJECT_SIGNAL_BORDERLINE_CROSS_DOMAIN_CONFIDENCE
+    return PROJECT_SIGNAL_CROSS_DOMAIN_SEMANTIC_TASK_MIN_CONFIDENCE
+
+
+def _semantic_signal_rule(
+    skill_id: str,
+    field: str,
+    value: object,
+    *,
+    set_context: dict[str, object] | None = None,
+    tags: tuple[str, ...] = (),
+) -> LexiconRule:
+    return LexiconRule(
+        skill_id=skill_id,
+        field=field,
+        value=value,
+        phrases=(),
+        confidence=1.0,
+        source="signal:semantic",
+        set_context=set_context or {},
+        tags=tags,
+    )
+
+
 _GIT_NO_SIGNAL_SEMANTIC_BOOTSTRAP_TASKS = {
     "prepare_commit",
     "write_commit_message",
@@ -281,17 +447,5 @@ def _is_explicit_non_code_change_request(text: str) -> bool:
             "explain only",
             "only explain",
             "summarize only",
-            "不需要改代码",
-            "不用改代码",
-            "不要改代码",
-            "不改代码",
-            "不需要修改",
-            "不要修改",
-            "只分析",
-            "只分析，不改",
-            "只分析不改",
-            "只分析，不修改",
-            "只解释",
-            "只总结",
         )
     )

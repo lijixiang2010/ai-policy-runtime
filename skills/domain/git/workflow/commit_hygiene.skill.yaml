@@ -72,20 +72,31 @@ task_analysis:
 
   trigger_semantics:
     prepare_commit:
+      - commit this code
+      - commit code changes
       - create a focused Git commit from related changes
       - create a commit for code changes
       - commit code changes with a clean scope
+      - commit the current code changes
+      - make one commit for the completed code changes
       - save the current completed work as a repository commit
+      - save the current changes into Git history
       - commit the staged implementation after reviewing the diff
       - turn local code changes into a clean version control checkpoint
       - split unrelated changes into separate commits
       - prepare a reviewable commit
     write_commit_message:
+      - commit message
+      - commit title
       - write a clear Git commit subject and body
       - summarize the intent and impact of a code change for version control history
       - choose a commit title that matches the staged changes
       - draft a commit message after looking at the diff
       - improve recent Git commit messages without changing commit content
+      - optimize recent commit messages
+      - optimize the last few commit messages
+      - improve the last few commit messages
+      - polish recent commit messages
       - rewrite the last few commit subjects so history is easier to read
       - polish commit titles and bodies for recent Git commits
     review_git_history:

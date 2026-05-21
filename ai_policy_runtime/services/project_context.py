@@ -137,6 +137,7 @@ class ProjectContextAnalyzer:
                 self._compile_commands_facts,
                 self._cmake_facts,
                 self._manifest_facts,
+                self._git_working_tree_facts,
                 self._git_commit_style_facts,
                 self._language_version_facts,
                 self._tooling_facts,
@@ -203,6 +204,54 @@ class ProjectContextAnalyzer:
         facts: list[ProjectFact] = []
         facts.extend(self._commit_tool_facts())
         facts.extend(self._commit_history_facts())
+        return facts
+
+    def _git_working_tree_facts(self) -> list[ProjectFact]:
+        if not (self.root / ".git").exists():
+            return []
+        try:
+            completed = subprocess.run(
+                ["git", "-C", str(self.root), "status", "--porcelain"],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except OSError:
+            return []
+        if completed.returncode != 0:
+            return []
+        lines = [line for line in completed.stdout.splitlines() if line.strip()]
+        if not lines:
+            return [
+                ProjectFact("context.git_has_changes", False, "git status --porcelain", 0.95)
+            ]
+        staged = any(line[:1] != " " and line[:1] != "?" for line in lines)
+        unstaged = any(len(line) > 1 and line[1] != " " for line in lines)
+        untracked = any(line.startswith("??") for line in lines)
+        facts = [
+            ProjectFact("context.git_has_changes", True, "git status --porcelain", 0.95),
+            ProjectFact(
+                "context.git_change_count",
+                len(lines),
+                "git status --porcelain",
+                0.9,
+            ),
+        ]
+        if staged:
+            facts.append(
+                ProjectFact("context.git_has_staged_changes", True, "git status --porcelain", 0.92)
+            )
+        if unstaged:
+            facts.append(
+                ProjectFact("context.git_has_unstaged_changes", True, "git status --porcelain", 0.92)
+            )
+        if untracked:
+            facts.append(
+                ProjectFact("context.git_has_untracked_files", True, "git status --porcelain", 0.9)
+            )
         return facts
 
     def _configured_git_commit_style(self) -> str:
@@ -473,11 +522,11 @@ class ProjectContextAnalyzer:
             if not path.exists():
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore").lower()
-            if any(token in text for token in ("low latency", "low-latency", "低延迟")):
+            if any(token in text for token in ("low latency", "low-latency")):
                 facts.append(
                     ProjectFact("tag", "low_latency", _relative(path, self.root), WEAK_TAG_CONFIDENCE)
                 )
-            if any(token in text for token in ("matching engine", "撮合")):
+            if any(token in text for token in ("matching engine",)):
                 facts.append(
                     ProjectFact("tag", "trading", _relative(path, self.root), WEAK_TAG_CONFIDENCE)
                 )

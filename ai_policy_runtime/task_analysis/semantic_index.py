@@ -47,6 +47,17 @@ class SemanticTaskIndex:
     def search(self, text: str, *, limit: int = 32) -> tuple[SemanticMatch, ...]:
         return self.search_scoped(text, scope=None, limit=limit)
 
+    def best_text_score(self, text: str, candidates: Sequence[str]) -> float:
+        """Return the best semantic score between input text and candidate intents."""
+
+        if not candidates:
+            return 0.0
+        vectors = self._provider.encode((text, *candidates))
+        if len(vectors) < 2:
+            return 0.0
+        query = vectors[0]
+        return max(cosine_similarity(query, vector) for vector in vectors[1:])
+
     def search_scoped(
         self,
         text: str,
@@ -190,7 +201,7 @@ def _expand_query_text(text: str) -> str:
 
     lowered = text.lower()
     hints: list[str] = []
-    if _has_any(lowered, ("提交消息", "提交说明", "提交标题", "commit message", "commit title")):
+    if _has_any(lowered, ("commit message", "commit title")):
         hints.extend(
             (
                 "write git commit message",
@@ -198,9 +209,9 @@ def _expand_query_text(text: str) -> str:
                 "polish the last few commit messages",
             )
         )
-    if _has_any(lowered, ("最近", "last few", "recent")) and _has_any(
+    if _has_any(lowered, ("last few", "recent")) and _has_any(
         lowered,
-        ("提交", "commit"),
+        ("commit",),
     ):
         hints.extend(
             (
@@ -209,9 +220,9 @@ def _expand_query_text(text: str) -> str:
                 "clean up commit history messages",
             )
         )
-    if _has_any(lowered, ("提交", "commit")) and _has_any(
+    if _has_any(lowered, ("commit",)) and _has_any(
         lowered,
-        ("代码", "code", "changes", "改动", "修改"),
+        ("code", "changes"),
     ):
         hints.extend(
             (

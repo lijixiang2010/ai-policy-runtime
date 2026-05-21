@@ -4,6 +4,7 @@ import os
 import json
 import argparse
 import io
+import math
 import re
 import shutil
 import subprocess
@@ -15,7 +16,7 @@ from unittest.mock import patch
 
 from ai_policy_runtime import PolicyEngine, Skill, SkillRegistry, TaskContext
 from ai_policy_runtime.application.runtime import NonApplicableTaskError, PolicyRuntime
-from ai_policy_runtime.domain.config import RuntimeConfig
+from ai_policy_runtime.domain.config import EmbeddingConfig, RuntimeConfig
 from ai_policy_runtime.domain.pack import PackRegistry, SkillPack
 from ai_policy_runtime.domain.rule import RuleAction
 from ai_policy_runtime.task_analysis import TaskAnalyzer, TaskSignals
@@ -282,16 +283,24 @@ class KeywordConceptEmbeddingProvider:
             (
                 "commit",
                 "commits",
-                "commit message",
-                "commit title",
                 "conventional commit",
                 "atomic commit",
                 "logical commit",
                 "staged diff",
-                "提交信息",
-                "提交说明",
                 "拆分提交",
                 "changelog",
+            ),
+        ),
+        (
+            "git_commit_message",
+            (
+                "commit message",
+                "commit title",
+                "commit subject",
+                "commit body",
+                "提交信息",
+                "提交说明",
+                "提交消息",
             ),
         ),
         (
@@ -354,6 +363,24 @@ class KeywordConceptEmbeddingProvider:
                 "dry run",
                 "保存未完成修改",
                 "清理未跟踪文件",
+            ),
+        ),
+        (
+            "non_code_change",
+            (
+                "no code changes",
+                "do not change source code",
+                "do not change code",
+                "without changing code",
+                "explain code only",
+                "summarize logs without changing code",
+                "rewrite documentation copy without code changes",
+                "不需要改代码",
+                "不要改代码",
+                "不需要修改",
+                "不要修改",
+                "只解释",
+                "先不要修改代码",
             ),
         ),
         (
@@ -656,6 +683,28 @@ class CountingEmbeddingProvider(KeywordConceptEmbeddingProvider):
         return super().encode(texts)
 
 
+class TargetedScoreEmbeddingProvider:
+    """Embedding provider that gives one semantic entry a controlled score."""
+
+    def __init__(self, *, query_marker: str, target_marker: str, score: float) -> None:
+        self.query_marker = query_marker
+        self.target_marker = target_marker
+        self.score = score
+
+    def encode(self, texts: list[str] | tuple[str, ...]) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        tail = math.sqrt(max(1.0 - (self.score * self.score), 0.0))
+        for text in texts:
+            lowered = text.lower()
+            if self.query_marker in lowered:
+                vectors.append([self.score, tail])
+            elif self.target_marker in lowered:
+                vectors.append([1.0, 0.0])
+            else:
+                vectors.append([0.0, 0.0])
+        return vectors
+
+
 class FakeHttpResponse:
     def __init__(self, payload: dict[str, object]) -> None:
         self._payload = payload
@@ -905,7 +954,98 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertEqual(task.domain, "git")
         self.assertEqual(task.task_type, "prepare_commit")
-        self.assertIn("git.workflow.commit_hygiene", task.context["semantic_skill_matches"])
+        self.assertIn("git_workflow", task.capabilities)
+
+    def test_short_commit_intent_uses_git_working_tree_context(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=TargetedScoreEmbeddingProvider(
+                query_marker="提交一下",
+                target_marker="commit current changes",
+                score=0.56,
+            ),
+        )
+        analysis = analyzer.analyze(
+            "提交一下",
+            TaskSignals(project_language="python", git_has_changes=True),
+        )
+
+        self.assertEqual(analysis.task.domain, "git")
+        self.assertEqual(analysis.task.task_type, "prepare_commit")
+        self.assertTrue(analysis.task.context["git_working_tree_sensitive"])
+        self.assertTrue(analysis.activation_ready)
+
+    def test_short_commit_intent_without_git_changes_stays_unknown(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=TargetedScoreEmbeddingProvider(
+                query_marker="提交一下",
+                target_marker="commit current changes",
+                score=0.56,
+            ),
+        )
+        analysis = analyzer.analyze(
+            "提交一下",
+            TaskSignals(project_language="python", git_has_changes=False),
+        )
+
+        self.assertEqual(analysis.task.domain, "python")
+        self.assertEqual(analysis.task.task_type, "unknown")
+        self.assertFalse(analysis.activation_ready)
+
+    def test_project_language_signal_does_not_promote_weak_same_domain_task(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=TargetedScoreEmbeddingProvider(
+                query_marker="weak same-domain probe",
+                target_marker="write python code",
+                score=0.59,
+            ),
+        )
+        analysis = analyzer.analyze(
+            "weak same-domain probe",
+            TaskSignals(project_language="python"),
+        )
+
+        self.assertEqual(analysis.task.domain, "python")
+        self.assertEqual(analysis.task.task_type, "unknown")
+        self.assertFalse(analysis.activation_ready)
+
+    def test_project_language_signal_does_not_promote_weak_cross_domain_task(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=TargetedScoreEmbeddingProvider(
+                query_marker="weak cross-domain probe",
+                target_marker="prepare a git branch",
+                score=0.63,
+            ),
+        )
+        analysis = analyzer.analyze(
+            "weak cross-domain probe",
+            TaskSignals(project_language="python"),
+        )
+
+        self.assertEqual(analysis.task.domain, "python")
+        self.assertEqual(analysis.task.task_type, "unknown")
+        self.assertFalse(analysis.activation_ready)
+
+    def test_project_language_signal_still_allows_strong_git_commit_semantics(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=TargetedScoreEmbeddingProvider(
+                query_marker="strong git commit probe",
+                target_marker="create a commit for code changes",
+                score=0.7,
+            ),
+        )
+        analysis = analyzer.analyze(
+            "strong git commit probe",
+            TaskSignals(project_language="python"),
+        )
+
+        self.assertEqual(analysis.task.domain, "git")
+        self.assertEqual(analysis.task.task_type, "prepare_commit")
+        self.assertTrue(analysis.activation_ready)
 
     def test_task_analyzer_allows_plain_commit_style_override(self) -> None:
         task = analyze("Write a commit message with no conventional commits.").task
@@ -1255,6 +1395,25 @@ class PolicyRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Unsupported"):
                 TaskAnalyzer.from_skills_dir("skills")
 
+    def test_env_local_provider_ignores_auto_remote_model_from_project_config(self) -> None:
+        embedding = EmbeddingConfig(model="remote/model:name")
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AI_POLICY_EMBEDDING_PROVIDER": "local",
+                    "AI_POLICY_EMBEDDING_MODEL": "local-model-path",
+                },
+                clear=True,
+            ),
+            patch(
+                "ai_policy_runtime.task_analysis.analyzer.SentenceTransformerEmbeddingProvider"
+            ) as provider,
+        ):
+            default_embedding_provider(".", embedding)
+
+        provider.assert_called_once_with("local-model-path")
+
     def test_local_model_manager_lists_and_installs_known_model(self) -> None:
         with TemporaryDirectory() as tmp:
             manager = LocalModelManager(tmp)
@@ -1388,6 +1547,21 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(context["has_clang_format"])
         self.assertTrue(context["has_ruff"])
         self.assertEqual(context["python_requires"], ">=3.10")
+
+    def test_project_context_detects_git_working_tree_changes(self) -> None:
+        if shutil.which("git") is None:
+            self.skipTest("git is not available")
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init"], cwd=root, check=True, stdout=subprocess.DEVNULL)
+            (root / "file.txt").write_text("change\n", encoding="utf-8")
+
+            analysis = ProjectContextAnalyzer(root).analyze()
+            context = analysis.context()
+
+        self.assertTrue(context["git_has_changes"])
+        self.assertEqual(context["git_change_count"], 1)
+        self.assertTrue(context["git_has_untracked_files"])
 
     def test_project_context_yaml_overrides_detected_facts(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -2678,11 +2852,38 @@ class PolicyRuntimeTests(unittest.TestCase):
             runtime = PolicyRuntime(RuntimeConfig.from_values(root=tmp, policy_root="."))
 
             with patch(
-                "ai_policy_runtime.task_analysis.embeddings.urlopen",
-                side_effect=AssertionError("status query should not request embeddings"),
+                "ai_policy_runtime.application.runtime.default_embedding_provider",
+                return_value=KeywordConceptEmbeddingProvider(),
             ):
                 result = runtime.resolve_if_applicable(
                     "请检查当前项目，并说明 AI Policy Runtime 是否通过 Claude Code plugin 启用了。",
+                    ("cpp.safe_generation",),
+                )
+
+            self.assertFalse(result.applicable)
+            self.assertFalse((Path(tmp) / ".policy" / "current").exists())
+
+    def test_resolve_if_applicable_skips_semantic_status_query_without_evaluating(self) -> None:
+        with TemporaryDirectory() as tmp:
+            runtime = PolicyRuntime(RuntimeConfig.from_values(root=tmp, policy_root="."))
+
+            with (
+                patch(
+                    "ai_policy_runtime.application.runtime.default_embedding_provider",
+                    return_value=TargetedScoreEmbeddingProvider(
+                        query_marker="ai policy runtime",
+                        target_marker="check whether ai policy runtime is enabled",
+                        score=0.7,
+                    ),
+                ),
+                patch.object(
+                    runtime,
+                    "_evaluate",
+                    side_effect=AssertionError("status query should not resolve rules"),
+                ),
+            ):
+                result = runtime.resolve_if_applicable(
+                    "Inspect whether AI Policy Runtime is active for this project.",
                     ("cpp.safe_generation",),
                 )
 

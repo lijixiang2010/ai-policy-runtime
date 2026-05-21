@@ -102,7 +102,7 @@ def default_embedding_provider(
     if provider == "local":
         configured_model = (
             embedding.model
-            if embedding and embedding.model
+            if embedding and embedding.provider and embedding.model
             else os.environ.get("AI_POLICY_EMBEDDING_MODEL")
         )
         if configured_model:

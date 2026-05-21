@@ -33,6 +33,7 @@ from ai_policy_runtime.task_analysis import (
     TaskSignals,
 )
 from ai_policy_runtime.task_analysis.analyzer import default_embedding_provider
+from ai_policy_runtime.task_analysis.embeddings import cosine_similarity
 
 
 class NonApplicableTaskError(RuntimeError):
@@ -139,7 +140,11 @@ class PolicyRuntime:
         task_text: str,
         pack_ids: tuple[str, ...] = (),
     ) -> ResolveApplicabilityResult:
-        if _is_runtime_status_query(task_text) or _is_trivial_non_task_query(task_text):
+        if (
+            _is_runtime_status_query(task_text)
+            or _is_trivial_non_task_query(task_text)
+            or self._is_semantic_runtime_status_query(task_text)
+        ):
             return ResolveApplicabilityResult(
                 applicable=False,
                 resolve_result=None,
@@ -244,7 +249,10 @@ class PolicyRuntime:
             cache_dir=paths.root / ".policy" / "cache" / "semantic-index",
         ).analyze(
             task_text,
-            TaskSignals(project_language=project_language),
+            TaskSignals(
+                project_language=project_language,
+                git_has_changes=_project_git_has_changes(project),
+            ),
         )
         return merge_project_analysis(
             analysis,
@@ -311,6 +319,18 @@ class PolicyRuntime:
             self.config.embedding,
         )
 
+    def _is_semantic_runtime_status_query(self, task_text: str) -> bool:
+        if not _mentions_runtime_subject(task_text):
+            return False
+        try:
+            vectors = self._embedding_provider().encode((task_text, *_RUNTIME_STATUS_INTENTS))
+        except RuntimeError:
+            return False
+        if len(vectors) < 2:
+            return False
+        query = vectors[0]
+        return max(cosine_similarity(query, vector) for vector in vectors[1:]) >= 0.62
+
 
 def _contributing_skill_ids(effective_rules: EffectiveRules) -> list[str]:
     sources = {
@@ -327,6 +347,11 @@ def _contributing_skill_ids(effective_rules: EffectiveRules) -> list[str]:
     return sorted(sources)
 
 
+def _project_git_has_changes(project: ProjectAnalysis) -> bool:
+    fact = project.fact("context.git_has_changes")
+    return bool(fact and fact.value is True and fact.confidence >= 0.7)
+
+
 def _has_policy_content(effective_rules: EffectiveRules) -> bool:
     return any(
         (
@@ -340,6 +365,20 @@ def _has_policy_content(effective_rules: EffectiveRules) -> bool:
 
 def _is_runtime_status_query(task_text: str) -> bool:
     text = " ".join(task_text.lower().split())
+    status_terms = (
+        "status",
+        "enabled",
+        "enable",
+        "configured",
+        "configuration",
+    )
+    return _mentions_runtime_subject(task_text) and any(
+        term in text for term in status_terms
+    )
+
+
+def _mentions_runtime_subject(task_text: str) -> bool:
+    text = " ".join(task_text.lower().split())
     runtime_terms = (
         "ai policy runtime",
         "policy runtime",
@@ -347,27 +386,18 @@ def _is_runtime_status_query(task_text: str) -> bool:
         "claude code plugin",
         "codex plugin",
         "plugin",
-        "插件",
     )
-    status_terms = (
-        "status",
-        "enabled",
-        "enable",
-        "configured",
-        "configuration",
-        "启用",
-        "开启",
-        "状态",
-        "配置",
-        "是否",
-        "正确",
-        "输出效果",
-        "检查当前项目",
-        "通过",
-    )
-    return any(term in text for term in runtime_terms) and any(
-        term in text for term in status_terms
-    )
+    return any(term in text for term in runtime_terms)
+
+
+_RUNTIME_STATUS_INTENTS = (
+    "check whether AI Policy Runtime is enabled",
+    "show AI Policy Runtime status",
+    "verify the plugin configuration",
+    "inspect the current project runtime setup",
+    "confirm whether the Claude Code plugin is configured correctly",
+    "explain whether the Effective Rules output is correct",
+)
 
 
 def _is_trivial_non_task_query(task_text: str) -> bool:
@@ -376,9 +406,6 @@ def _is_trivial_non_task_query(task_text: str) -> bool:
         "hello",
         "hi",
         "hey",
-        "你好",
-        "您好",
-        "嗨",
     }
 
 

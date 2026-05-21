@@ -92,6 +92,8 @@ task_analysis:
     review_code:
       - review Python code for correctness, readability, and maintainability
       - check a Python module for bugs and maintainability risks
+      - inspect Python code logic for defects and edge cases
+      - audit a Python implementation for logic errors
     refactor_code:
       - refactor Python code while preserving behavior
       - clean up Python code without changing what it does

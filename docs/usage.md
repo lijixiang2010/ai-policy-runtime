@@ -68,10 +68,10 @@ $env:AI_POLICY_EMBEDDING_BASE_URL="https://gateway.example.com/v1"
 If `AI_POLICY_EMBEDDING_MODEL` is omitted for a remote endpoint, the runtime
 uses `text-embedding-3-small`.
 
-If no remote provider is configured, the runtime tries the bundled local model
-path shown below. If neither provider is available, the runtime reports a
-configuration error because semantic embedding recall is required for task
-analysis.
+If no remote provider is configured, the runtime tries the default local model
+path shown below when that model has already been installed. If neither provider
+is available, the runtime reports a configuration error because semantic
+embedding recall is required for task analysis.
 
 To verify which semantic path works in your environment, run:
 
@@ -99,8 +99,8 @@ configured, otherwise the local model when installed. When a provider is forced
 explicitly, configuration or endpoint errors are reported instead of silently
 falling back to a weaker provider.
 
-Transformer-based semantic recall is optional. Install the optional extra when
-you want it:
+Local transformer-based semantic recall is optional. Install the optional extra
+when you want to use a local sentence-transformers model:
 
 ```powershell
 pip install "ai-policy-runtime[semantic]"

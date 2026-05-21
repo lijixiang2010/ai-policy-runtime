@@ -32,6 +32,7 @@ class TaskSignals:
     file_path: Path | None = None
     project_language: str | None = None
     execution_phase: str | None = None
+    git_has_changes: bool = False
 
 
 @dataclass(frozen=True)
