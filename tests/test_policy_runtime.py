@@ -2378,6 +2378,21 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertEqual(response, {"decision": "block", "reason": "Refine once."})
 
+    def test_stop_hook_main_outputs_ascii_safe_json(self) -> None:
+        with patch.object(stop_refinement, "_read_payload", return_value={}):
+            with patch.object(
+                stop_refinement,
+                "build_stop_response",
+                return_value={"decision": "block", "reason": "提交一次代码"},
+            ):
+                with patch("sys.stdout", new=io.StringIO()) as stdout:
+                    exit_code = stop_refinement.main()
+
+        output = stdout.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("\\u63d0\\u4ea4\\u4e00\\u6b21\\u4ee3\\u7801", output)
+        self.assertEqual(json.loads(output)["reason"], "提交一次代码")
+
     def test_stop_hook_does_not_reuse_stale_turn_state_without_matching_payload_id(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

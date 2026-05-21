@@ -1,6 +1,6 @@
 {
   "name": "ai-policy-runtime",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Task-aware coding policies for Codex, Claude Code, and AI coding workflows.",
   "license": "Apache-2.0",
   "author": {

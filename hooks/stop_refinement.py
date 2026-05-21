@@ -36,7 +36,7 @@ def main() -> int:
                 f"{type(exc).__name__}: {exc}"
             ),
         }
-    print(json.dumps(response, ensure_ascii=False))
+    print(json.dumps(response))
     return 0
 
 

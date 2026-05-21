@@ -2,6 +2,10 @@
 
 Maintained by Miles Li.
 
+## 0.1.2
+
+- Preserve non-ASCII prompt text in post-task refinement on Windows by emitting ASCII-safe hook JSON.
+
 ## 0.1.1
 
 - Improve Marketplace description and README for product clarity.
