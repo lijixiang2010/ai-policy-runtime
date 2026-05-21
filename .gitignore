@@ -11,6 +11,7 @@ venv/
 # Runtime state
 .policy/
 .codex/
+.claude/
 .vscode/
 AGENTS.md
 CLAUDE.md
