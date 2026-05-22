@@ -78,8 +78,7 @@ def configure_policy(root: Path, plugin_root: Path, *, enabled: bool = True) -> 
         config["agents"] = _append_unique(config.get("agents"), "codex")
         if not config.get("packs"):
             config["packs"] = [DEFAULT_PACK]
-        if not config.get("policyRoot"):
-            config["policyRoot"] = str(plugin_root)
+        config["policyRoot"] = str(plugin_root)
         _ensure_git_commit_style(config)
     else:
         agents = [agent for agent in _string_list(config.get("agents")) if agent != "codex"]
@@ -101,6 +100,8 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
     plugin_manifest = plugin_root / ".codex-plugin" / "plugin.json"
     hooks_config = plugin_root / PLUGIN_HOOKS_CONFIG_FILE
     project_hooks_config = _read_json_object(project_hooks)
+    policy_root = policy.get("policyRoot")
+    hook_roots = _project_hook_runtime_roots(project_hooks_config)
     return {
         "policy_config": str(policy_path),
         "codex_config": str(codex_config),
@@ -108,11 +109,16 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
         "runtime_enabled": bool(policy.get("enabled", False)),
         "codex_agent_enabled": "codex" in _string_list(policy.get("agents")),
         "packs": _string_list(policy.get("packs")),
-        "policy_root": policy.get("policyRoot"),
+        "policy_root": policy_root,
+        "policy_root_matches_expected": _same_path(policy_root, plugin_root),
         "git_commit_style": _git_commit_style(policy),
         "codex_hooks_enabled": _codex_hooks_enabled(codex_config),
         "project_hooks_present": project_hooks.exists(),
         "project_hooks_configured": _project_hooks_configured(project_hooks_config),
+        "project_hook_runtime_roots": hook_roots,
+        "project_hook_runtime_roots_match_expected": all(
+            _same_path(root, plugin_root) for root in hook_roots
+        ),
         "plugin_manifest": str(plugin_manifest),
         "hooks_config": str(hooks_config),
         "plugin_assets_present": plugin_manifest.exists() and hooks_config.exists(),
@@ -282,6 +288,60 @@ def _event_has_ai_policy_hook(hooks: dict[str, Any], event: str) -> bool:
     if not isinstance(entries, list):
         return False
     return any(_is_ai_policy_hook_entry(entry) for entry in entries)
+
+
+def _project_hook_runtime_roots(config: dict[str, Any]) -> list[str]:
+    hooks = config.get("hooks")
+    if not isinstance(hooks, dict):
+        return []
+    roots: set[str] = set()
+    for event in ("UserPromptSubmit", "Stop"):
+        entries = hooks.get(event)
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            hook_items = entry.get("hooks")
+            if not isinstance(hook_items, list):
+                continue
+            for item in hook_items:
+                if not isinstance(item, dict):
+                    continue
+                root = _runtime_root_from_command(str(item.get("command", "")))
+                if root:
+                    roots.add(str(root))
+    return sorted(roots)
+
+
+def _runtime_root_from_command(command: str) -> Path | None:
+    marker = "bin"
+    script = "ai-policy-hook.js"
+    normalized = command.replace("\\", "/")
+    index = normalized.lower().find(f"/{marker}/{script}".lower())
+    if index < 0:
+        return None
+    prefix = command[:index].strip().strip('"')
+    if not prefix:
+        return None
+    first_quote = prefix.rfind('"')
+    if first_quote >= 0:
+        prefix = prefix[first_quote + 1 :]
+    parts = prefix.split()
+    candidate = parts[-1] if parts else prefix
+    return Path(candidate.strip('"')).resolve()
+
+
+def _same_path(left: Any, right: Path) -> bool:
+    if not left:
+        return False
+    try:
+        left_path = Path(str(left)).resolve()
+    except OSError:
+        return False
+    if sys.platform == "win32":
+        return str(left_path).lower() == str(right.resolve()).lower()
+    return left_path == right.resolve()
 
 
 def _node_command() -> str:

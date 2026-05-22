@@ -187,8 +187,7 @@ def configure_policy(
             config["agents"] = _append_unique(config.get("agents"), "claude")
             if not config.get("packs"):
                 config["packs"] = [DEFAULT_PACK]
-            if not config.get("policyRoot"):
-                config["policyRoot"] = str(plugin_root)
+            config["policyRoot"] = str(plugin_root)
             _ensure_git_commit_style(config)
         else:
             config["agents"] = [
@@ -246,13 +245,16 @@ def status(root: Path, plugin_root: Path, scope: str) -> dict[str, Any]:
     settings = _read_json_object(settings_path)
     enabled_plugins = settings.get("enabledPlugins", {})
     marketplaces = settings.get("extraKnownMarketplaces", {})
+    marketplace_root = _marketplace_runtime_root(settings)
+    policy_root = policy.get("policyRoot")
     return {
         "policy_config": str(policy_path),
         "claude_settings": str(settings_path),
         "runtime_enabled": bool(policy.get("enabled", False)),
         "claude_agent_enabled": "claude" in _string_list(policy.get("agents")),
         "packs": _string_list(policy.get("packs")),
-        "policy_root": policy.get("policyRoot"),
+        "policy_root": policy_root,
+        "policy_root_matches_expected": _same_path(policy_root, plugin_root),
         "git_commit_style": _git_commit_style(policy),
         "post_refine": policy.get("postRefine", "off"),
         "post_refine_packs": _string_list(policy.get("postRefinePacks")),
@@ -265,6 +267,8 @@ def status(root: Path, plugin_root: Path, scope: str) -> dict[str, Any]:
             isinstance(marketplaces, dict)
             and MARKETPLACE_NAME in marketplaces
         ),
+        "marketplace_root": marketplace_root,
+        "marketplace_root_matches_expected": _same_path(marketplace_root, plugin_root),
         "expected_plugin_root": str(plugin_root),
     }
 
@@ -333,6 +337,34 @@ def _git_commit_style(config: dict[str, Any]) -> str:
     if isinstance(git_config, dict):
         return str(git_config.get("commitStyle") or "auto")
     return str(config.get("gitCommitStyle") or "auto")
+
+
+def _marketplace_runtime_root(settings: dict[str, Any]) -> str | None:
+    marketplaces = settings.get("extraKnownMarketplaces")
+    if not isinstance(marketplaces, dict):
+        return None
+    marketplace = marketplaces.get(MARKETPLACE_NAME)
+    if not isinstance(marketplace, dict):
+        return None
+    source = marketplace.get("source")
+    if not isinstance(source, dict):
+        return None
+    if source.get("source") != "directory":
+        return None
+    path = source.get("path")
+    return str(path) if path else None
+
+
+def _same_path(left: Any, right: Path) -> bool:
+    if not left:
+        return False
+    try:
+        left_path = Path(str(left)).resolve()
+    except OSError:
+        return False
+    if sys.platform == "win32":
+        return str(left_path).lower() == str(right.resolve()).lower()
+    return left_path == right.resolve()
 
 
 def _append_unique(value: Any, item: str) -> list[str]:

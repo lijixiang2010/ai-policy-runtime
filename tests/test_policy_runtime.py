@@ -3120,6 +3120,29 @@ class PolicyRuntimeTests(unittest.TestCase):
             str(plugin_root),
         )
 
+    def test_configure_claude_desktop_updates_stale_policy_root(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            old_plugin = Path(tmp) / "old-plugin"
+            plugin_root = Path(tmp) / "plugin"
+            policy = root / ".policy"
+            policy.mkdir(parents=True)
+            (policy / "config.json").write_text(
+                json.dumps(
+                    {
+                        "enabled": True,
+                        "agents": ["claude"],
+                        "policyRoot": str(old_plugin),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            policy_path = configure_policy(root, plugin_root)
+            current = json.loads(policy_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(current["policyRoot"], str(plugin_root))
+
     def test_configure_claude_desktop_can_enable_post_refinement(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"
@@ -3190,6 +3213,8 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(current["post_refine"], "standard")
         self.assertEqual(current["post_refine_packs"], [DEFAULT_POST_REFINE_PACK])
         self.assertEqual(current["git_commit_style"], "auto")
+        self.assertTrue(current["policy_root_matches_expected"])
+        self.assertTrue(current["marketplace_root_matches_expected"])
 
     def test_configure_claude_desktop_plugin_only_update_preserves_policy(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -3318,6 +3343,29 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(policy["policyRoot"], str(Path.cwd()))
         self.assertEqual(policy["git"], {"commitStyle": "auto"})
         self.assertFalse(claude_settings_exists)
+
+    def test_configure_codex_updates_stale_policy_root(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            old_plugin = Path(tmp) / "old-plugin"
+            plugin_root = Path.cwd()
+            policy = root / ".policy"
+            policy.mkdir(parents=True)
+            (policy / "config.json").write_text(
+                json.dumps(
+                    {
+                        "enabled": True,
+                        "agents": ["codex"],
+                        "policyRoot": str(old_plugin),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            policy_path = configure_codex_policy(root, plugin_root)
+            current = json.loads(policy_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(current["policyRoot"], str(plugin_root))
 
     def test_configure_codex_hooks_writes_project_hook_commands(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -3480,6 +3528,8 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(current["project_hooks_configured"])
         self.assertTrue(current["plugin_assets_present"])
         self.assertEqual(current["expected_plugin_root"], str(Path.cwd()))
+        self.assertTrue(current["policy_root_matches_expected"])
+        self.assertTrue(current["project_hook_runtime_roots_match_expected"])
         self.assertEqual(current["git_commit_style"], "auto")
 
     def test_configure_codex_status_does_not_treat_unrelated_hooks_as_configured(self) -> None:
