@@ -11,6 +11,58 @@ refinement without making you rewrite prompts for every request.
 
 The result is more consistent agent behavior across a workspace.
 
+## How it works
+
+AI Policy Runtime sits between the user's task and the coding agent. It reads
+the current request, workspace signals, selected packs, and Skill DSL assets,
+then compiles the relevant policy into a small task-specific rule set.
+
+The agent does not receive the full Skill library. It receives the generated
+Effective Rules for the current task, rendered as prompt text and structured
+JSON. Those same rules can also be used after the agent acts for review,
+refinement, and repair.
+
+## The Basic Workflow
+
+```text
+User Task
+  ↓
+Task Analyzer
+  ↓
+Structured Context
+  ↓
+Policy Compilation
+  - activate Skills and selected Packs
+  - apply dependencies and when / unless filters
+  - resolve conflicts
+  - reduce rules
+  ↓
+Effective Rules
+  - effective-prompt.md
+  - effective-rules.json
+  ↓
+Agent
+  ↓
+Post refinement
+  - review output
+  - apply refinement packs
+  - verify / repair when needed
+  ↓
+Agent
+  ↓
+Work done
+```
+
+1. The user sends a task to Codex or Claude Code.
+2. The runtime analyzes the task and builds structured context.
+3. Matching Skills, selected Packs, dependencies, and rule conditions are
+   evaluated.
+4. Conflicts are resolved and redundant rules are reduced.
+5. Effective Rules are written to the workspace and injected into the agent.
+6. The agent works with the task-specific rules.
+7. Optional post-task refinement reviews the output and can run a constrained
+   second pass.
+
 ## What It Does
 
 - Detects the task type and applies focused coding rules.
@@ -38,6 +90,10 @@ For Codex, trust the generated workspace hooks when Codex asks. Until the hooks
 are trusted, Codex will not run them, so AI Policy Runtime will appear enabled
 but no rules will be injected.
 
+After updating the VS Code extension, reload the window and run
+**AI Policy Runtime: Validate Runtime**. Validation refreshes workspace hook
+files when they still point at an older extension runtime.
+
 ### Command Line
 
 ```powershell
@@ -56,6 +112,11 @@ Configure a project for Claude Code:
 ```powershell
 ai-policy configure claude --root D:\work\project
 ```
+
+After updating the npm package, rerun `ai-policy configure codex` or
+`ai-policy configure claude` for each workspace that should use the new
+runtime. The command refreshes `.policy/config.json` and agent hook paths to the
+current installed package.
 
 ## Embeddings
 
@@ -135,3 +196,18 @@ committing workspace-specific settings.
 - Remote embedding requests are only used when you configure a remote provider
   or credentials.
 - See [docs/usage.md](docs/usage.md) for CLI and advanced setup details.
+
+## Philosophy
+
+Large rule libraries are useful for humans and tools, but they are noisy when
+sent directly to an agent. AI Policy Runtime treats policy as something to
+compile, not paste.
+
+The goal is to preserve useful complexity in the Skill library while giving the
+agent only the rules that matter for the current task. Packs expand candidate
+Skills, but conditions, conflict resolution, and reduction decide what becomes
+effective.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE) for details.
