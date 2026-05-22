@@ -1,6 +1,6 @@
 {
   "name": "ai-policy-runtime",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Generate better AI code with task-aware policies for Claude Code.",
   "author": {
     "name": "Miles Li"

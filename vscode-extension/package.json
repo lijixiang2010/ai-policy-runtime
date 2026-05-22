@@ -2,7 +2,7 @@
   "name": "ai-policy-runtime",
   "displayName": "AI Policy Runtime",
   "description": "Generate better AI code with task-aware policies for Codex and Claude Code.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "cppmore",
   "author": {
     "name": "Miles Li"

@@ -15,8 +15,9 @@ PROJECT_SIGNAL_SEMANTIC_TASK_MIN_CONFIDENCE = 0.6
 PROJECT_SIGNAL_CROSS_DOMAIN_SEMANTIC_TASK_MIN_CONFIDENCE = 0.65
 PROJECT_SIGNAL_BORDERLINE_CROSS_DOMAIN_CONFIDENCE = 0.64
 PROJECT_SIGNAL_BORDERLINE_MIN_TEXT_LENGTH = 12
-SHORT_GIT_COMMIT_INTENT_CONFIDENCE = 0.52
-SHORT_GIT_COMMIT_MAX_TEXT_LENGTH = 8
+SHORT_GIT_COMMIT_INTENT_CONFIDENCE = 0.47
+SHORT_GIT_COMMIT_MAX_TEXT_LENGTH = 6
+GIT_WORKING_TREE_COMMIT_INTENT_CONFIDENCE = 0.6
 
 
 class DeterministicTaskExtractor:
@@ -42,7 +43,7 @@ class DeterministicTaskExtractor:
             return state.to_analysis(self._lexicon)
         self._apply_domain(normalized, signals, state)
         self._apply_task_type(normalized, state)
-        self._apply_short_git_commit_intent(normalized, signals, state)
+        self._apply_git_working_tree_commit_intent(normalized, signals, state)
         self._apply_exact_context(normalized, state)
         self._apply_semantic_context(normalized, state, self._semantic_gate(state))
         return state.to_analysis(self._lexicon)
@@ -95,7 +96,7 @@ class DeterministicTaskExtractor:
         for rule, evidence in self._matcher.all(self._lexicon.context_rules, text):
             state.apply_rule(rule, evidence)
 
-    def _apply_short_git_commit_intent(
+    def _apply_git_working_tree_commit_intent(
         self,
         text: str,
         signals: TaskSignals | None,
@@ -103,23 +104,45 @@ class DeterministicTaskExtractor:
     ) -> None:
         if not signals or not signals.git_has_changes or self._semantic_index is None:
             return
-        if len(text.strip()) > SHORT_GIT_COMMIT_MAX_TEXT_LENGTH:
-            return
         if state.best_value("task_type", "") != "unknown":
             return
+        text_length = len(text.strip())
         score = self._semantic_index.best_text_score(
             text,
             (
                 "commit current changes",
+                "commit the current changes",
+                "commit code changes",
+                "commit these changes",
+                "commit workspace changes",
                 "create one git commit",
+                "create a commit for the current changes",
                 "make one commit",
+                "make one commit for current changes",
                 "commit once",
+                "commit now",
+                "make the commit",
+                "commit it",
+                "ready for commit",
+                "prepare to commit",
+                "prepare a git commit for current changes",
+                "can commit now",
+                "you can commit now",
+                "you can commit release preparation changes now",
                 "create a single commit",
                 "commit the current work",
+                "commit the release preparation changes",
+                "stage and commit current changes",
+                "turn current changes into one git commit",
                 "save current code changes into git history",
             ),
         )
-        if score < SHORT_GIT_COMMIT_INTENT_CONFIDENCE:
+        threshold = (
+            SHORT_GIT_COMMIT_INTENT_CONFIDENCE
+            if text_length <= SHORT_GIT_COMMIT_MAX_TEXT_LENGTH
+            else GIT_WORKING_TREE_COMMIT_INTENT_CONFIDENCE
+        )
+        if score < threshold:
             return
         state.apply_rule(
             _semantic_signal_rule(

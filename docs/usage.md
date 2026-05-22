@@ -437,13 +437,13 @@ continuation workflow by writing `postRefine` and `postRefinePacks`.
 Available commands:
 
 ```text
-AI Policy: Enable
-AI Policy: Disable
-AI Policy: Enable Post-Task Refinement
-AI Policy: Configure Packs
-AI Policy: Show Status
-AI Policy: Show Effective Rules
-AI Policy: Validate Runtime
+AI Policy Runtime: Enable
+AI Policy Runtime: Disable
+AI Policy Runtime: Enable Post-Task Refinement
+AI Policy Runtime: Configure Packs
+AI Policy Runtime: Show Status
+AI Policy Runtime: Show Effective Rules
+AI Policy Runtime: Validate Runtime
 ```
 
 During development, build and install the extension with:
@@ -452,7 +452,8 @@ During development, build and install the extension with:
 cd D:\MilesLi\ai-policy-runtime\vscode-extension
 npm ci
 npm run package
-& "$env:LOCALAPPDATA\Programs\Microsoft VS Code\bin\code.cmd" --install-extension ".\ai-policy-runtime-0.1.2.vsix" --force
+$vsix = Get-ChildItem .\ai-policy-runtime-*.vsix | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+& "$env:LOCALAPPDATA\Programs\Microsoft VS Code\bin\code.cmd" --install-extension $vsix.FullName --force
 ```
 
 Reload VS Code after reinstalling:

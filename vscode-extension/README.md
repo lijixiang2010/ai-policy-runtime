@@ -1,11 +1,10 @@
 # AI Policy Runtime
 
-Task-aware coding guidance for Codex and Claude Code in VS Code.
+Generate better AI code with task-aware policies for Codex and Claude Code.
 
 AI Policy Runtime gives your AI coding agent focused engineering rules for the
-current task. It can apply different guidance for safe implementation, review,
-refactoring, API design, performance-sensitive work, Git, CMake, Python, and
-post-task refinement.
+current task. It can guide implementation, review, refactoring, API design,
+performance-sensitive work, Git, CMake, Python, and post-task refinement.
 
 Instead of relying on one generic instruction set, each workspace gets a clear
 policy configuration that your selected agents use automatically.
@@ -33,11 +32,12 @@ refinement packs are also included.
 8. Run **AI Policy Runtime: Validate Runtime**.
 
 For Codex, approve the generated workspace hooks when Codex asks you to trust
-them.
+them. Until the hooks are trusted, Codex will not run them, so AI Policy Runtime
+can look enabled while no rules are injected.
 
 ## Embeddings
 
-Embeddings are optional but recommended for better task matching.
+Embeddings are recommended for product-quality multilingual task matching.
 
 Choose one provider in the side bar:
 
@@ -62,7 +62,7 @@ AI Policy Runtime keeps configuration in your workspace:
 - `.claude/settings.local.json` when Claude Code is enabled
 
 These files are plain text so you can inspect what was configured and what
-rules were generated.
+rules were generated. Review them before committing workspace-specific settings.
 
 ## Commands
 

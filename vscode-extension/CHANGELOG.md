@@ -2,6 +2,12 @@
 
 Maintained by Miles Li.
 
+## 0.1.3
+
+- Improve multilingual semantic task detection while keeping Skills DSL authoring English-only.
+- Use Git working-tree context to recognize short commit requests when there are repository changes.
+- Clarify local embedding model setup and VS Code extension development install docs.
+
 ## 0.1.2
 
 - Preserve non-ASCII prompt text in post-task refinement on Windows by emitting ASCII-safe hook JSON.

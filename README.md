@@ -2,24 +2,22 @@
 
 # AI Policy Runtime
 
-Task-aware coding guidance for AI agents.
+Generate better AI code with task-aware policies for Codex and Claude Code.
 
-AI Policy Runtime helps Codex, Claude Code, and other AI coding workflows use
-the right engineering rules for the task in front of them. Instead of sending
-one large generic prompt every time, it detects the work type and supplies a
-focused policy: safe implementation, review, refactoring, API design,
-performance-sensitive code, Git workflow, CMake, Python, or post-task
-refinement.
+AI Policy Runtime gives your AI coding agent focused engineering rules for the
+task at hand. It can guide implementation, review, refactoring, API design,
+performance-sensitive work, Git workflows, CMake, Python, and post-task
+refinement without making you rewrite prompts for every request.
 
-The result is calmer, more consistent agent behavior across a workspace.
+The result is more consistent agent behavior across a workspace.
 
-## What You Get
+## What It Does
 
-- Task-specific rules for coding, review, refactoring, and design work.
-- Workspace-level configuration shared by supported agents.
-- Optional semantic task matching with OpenAI-compatible or local embeddings.
-- Optional post-task refinement before an agent finishes.
-- Inspectable Effective Rules so you can see what guidance was applied.
+- Detects the task type and applies focused coding rules.
+- Shares one workspace configuration across Codex and Claude Code.
+- Uses embeddings for stronger multilingual task matching.
+- Can run a post-task refinement pass before the agent finishes.
+- Shows the exact Effective Rules used for the latest prompt.
 
 C++ currently has the deepest coverage, including ownership, lifetime, bounds
 safety, API design, modern C++, and low-latency work. Python, CMake, Git, and
@@ -35,6 +33,10 @@ workspace.
 Use it with the Codex or Claude Code extension you already use. Enable the
 runtime, select the agent, choose policy packs, and configure embeddings if you
 want semantic task matching.
+
+For Codex, trust the generated workspace hooks when Codex asks. Until the hooks
+are trusted, Codex will not run them, so AI Policy Runtime will appear enabled
+but no rules will be injected.
 
 ### Command Line
 
@@ -57,7 +59,8 @@ ai-policy configure claude --root D:\work\project
 
 ## Embeddings
 
-AI Policy Runtime can classify tasks with embeddings. You choose the provider:
+AI Policy Runtime uses embeddings for product-quality multilingual task
+matching. You choose the provider:
 
 - **Auto**: use a configured OpenAI-compatible endpoint, otherwise use a
   configured local model when available.
@@ -113,7 +116,7 @@ Included packs:
 
 ## Workspace Files
 
-AI Policy Runtime stores project configuration in normal workspace files:
+AI Policy Runtime stores transparent project state in workspace files:
 
 - `.policy/config.json`
 - `.policy/current/effective-prompt.md`
@@ -121,7 +124,8 @@ AI Policy Runtime stores project configuration in normal workspace files:
 - `.codex/hooks.json` and `.codex/config.toml` when Codex is enabled
 - `.claude/settings.local.json` when Claude Code is enabled
 
-These files make the active policy visible and reproducible.
+These files make the active policy visible and reproducible. Review them before
+committing workspace-specific settings.
 
 ## Notes
 
@@ -130,5 +134,4 @@ These files make the active policy visible and reproducible.
 - Local models are optional and user-configured.
 - Remote embedding requests are only used when you configure a remote provider
   or credentials.
-- See [docs/usage.md](docs/usage.md) for advanced CLI, hook, and runtime
-  details.
+- See [docs/usage.md](docs/usage.md) for CLI and advanced setup details.

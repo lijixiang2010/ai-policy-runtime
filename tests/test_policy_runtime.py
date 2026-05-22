@@ -961,8 +961,8 @@ class PolicyRuntimeTests(unittest.TestCase):
             "skills",
             embeddings=TargetedScoreEmbeddingProvider(
                 query_marker="提交一下",
-                target_marker="commit current changes",
-                score=0.56,
+                target_marker="commit now",
+                score=0.48,
             ),
         )
         analysis = analyzer.analyze(
@@ -987,6 +987,43 @@ class PolicyRuntimeTests(unittest.TestCase):
         analysis = analyzer.analyze(
             "提交一下",
             TaskSignals(project_language="python", git_has_changes=False),
+        )
+
+        self.assertEqual(analysis.task.domain, "python")
+        self.assertEqual(analysis.task.task_type, "unknown")
+        self.assertFalse(analysis.activation_ready)
+
+    def test_long_commit_intent_uses_git_working_tree_context(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=TargetedScoreEmbeddingProvider(
+                query_marker="long commit probe",
+                target_marker="prepare a git commit for current changes",
+                score=0.61,
+            ),
+        )
+        analysis = analyzer.analyze(
+            "long commit probe with current workspace changes",
+            TaskSignals(project_language="python", git_has_changes=True),
+        )
+
+        self.assertEqual(analysis.task.domain, "git")
+        self.assertEqual(analysis.task.task_type, "prepare_commit")
+        self.assertTrue(analysis.task.context["git_working_tree_sensitive"])
+        self.assertTrue(analysis.activation_ready)
+
+    def test_weak_long_commit_intent_stays_unknown(self) -> None:
+        analyzer = TaskAnalyzer.from_skills_dir(
+            "skills",
+            embeddings=TargetedScoreEmbeddingProvider(
+                query_marker="weak long commit probe",
+                target_marker="prepare a git commit for current changes",
+                score=0.59,
+            ),
+        )
+        analysis = analyzer.analyze(
+            "weak long commit probe with current workspace changes",
+            TaskSignals(project_language="python", git_has_changes=True),
         )
 
         self.assertEqual(analysis.task.domain, "python")
