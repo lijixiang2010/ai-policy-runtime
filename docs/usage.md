@@ -462,6 +462,10 @@ Reload VS Code after reinstalling:
 Developer: Reload Window
 ```
 
+After updating the extension, run **AI Policy Runtime: Validate Runtime** in
+each workspace that already uses the runtime. Validation refreshes generated
+workspace hook files if they still point at an older extension install.
+
 For local development in this repository, project `.codex/config.toml` can point
 Codex at the same hook implementation used by the plugin.
 
@@ -485,6 +489,10 @@ D:\work\target-project\.codex\config.toml
 The generated `.codex/hooks.json` invokes the installed package's hook runner,
 so users can run the normal `codex` CLI in that project without using
 `policy-codex`.
+
+After updating the npm package, rerun `ai-policy configure codex --root
+D:\work\target-project` for each Codex workspace that should use the new
+runtime. Reconfiguration replaces stale `policyRoot` and hook runner paths.
 
 After publishing this repository to GitHub, users can add it as a Codex plugin
 marketplace:
@@ -623,6 +631,10 @@ only update Claude settings. `--post-refine standard` writes `postRefine` and
 off` only disables that second pass. Use `--scope project` to write
 `.claude/settings.json` instead, or `--scope user` to write
 `%USERPROFILE%\.claude\settings.json`.
+
+After updating the npm package, rerun `ai-policy configure claude --root
+D:\work\target-project` for each Claude workspace that should use the new
+runtime. Reconfiguration replaces stale plugin marketplace paths.
 
 When working from a source checkout, the development helper is still available:
 

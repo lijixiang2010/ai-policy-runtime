@@ -35,6 +35,10 @@ For Codex, approve the generated workspace hooks when Codex asks you to trust
 them. Until the hooks are trusted, Codex will not run them, so AI Policy Runtime
 can look enabled while no rules are injected.
 
+After updating AI Policy Runtime, reload the VS Code window and run
+**AI Policy Runtime: Validate Runtime**. Validation refreshes workspace hook
+files if they still point at an older extension runtime.
+
 ## Embeddings
 
 Embeddings are recommended for product-quality multilingual task matching.

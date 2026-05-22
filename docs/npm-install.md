@@ -129,6 +129,10 @@ no packs are configured, records the installed NPM package as `policyRoot`, and
 enables project-local Codex hooks for bare `codex` CLI usage. It does not write
 `.claude/settings.local.json`.
 
+After updating `ai-policy-runtime`, rerun this command for each Codex workspace
+that should use the new package. Reconfiguration replaces stale `policyRoot`
+and hook runner paths with the current installed package.
+
 Disable only Codex in the shared policy:
 
 ```powershell
@@ -152,6 +156,10 @@ ai-policy plugin disable --root D:\work\target-project
 
 Plugin-only toggles update Claude settings without creating or changing
 `.policy/config.json`.
+
+After updating `ai-policy-runtime`, rerun `ai-policy configure claude --root
+<project>` for each Claude Code workspace that should use the new package.
+Reconfiguration refreshes both `.policy/config.json` and Claude plugin settings.
 
 ## Post-Task Refinement
 
