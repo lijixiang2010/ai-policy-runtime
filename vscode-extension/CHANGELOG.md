@@ -2,6 +2,12 @@
 
 Maintained by Miles Li.
 
+## 0.1.4
+
+- Refresh workspace agent hooks to the current VS Code extension runtime after upgrades.
+- Show stale Codex and Claude runtime paths in validation output and report automatic repairs.
+- Update CLI configuration to replace stale policy roots when reconfiguring upgraded npm installs.
+
 ## 0.1.3
 
 - Improve multilingual semantic task detection while keeping Skills DSL authoring English-only.
