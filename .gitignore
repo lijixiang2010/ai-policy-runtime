@@ -25,6 +25,7 @@ dist/
 *.egg-info/
 node_modules/
 *.log
+*.tgz
 vscode-extension/out/
 *.vsix
 
