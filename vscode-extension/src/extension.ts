@@ -1105,6 +1105,14 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
     return;
   }
 
+  const beforeCodexHooks = (await exists(paths.codexHooks)) ? await readJsonObject(paths.codexHooks) : {};
+  const beforeCodexRoots = codexHookRuntimeRoots(objectValue(beforeCodexHooks, 'hooks'));
+  const beforeCodexStaleRoots = staleRuntimeRoots(beforeCodexRoots, paths.policyRoot);
+  const beforeClaudeSettings = (await exists(paths.claudeSettings)) ? await readJsonObject(paths.claudeSettings) : {};
+  const beforeClaudeRoot = claudeMarketplaceRuntimeRoot(beforeClaudeSettings);
+  const beforeClaudeStaleRoot =
+    beforeClaudeRoot && !samePath(beforeClaudeRoot, paths.policyRoot) ? beforeClaudeRoot : undefined;
+
   await workspace.syncProjectConfig();
   const config = workspace.readConfig();
   const missingRuntime = await missingRuntimePaths(paths.policyRoot);
@@ -1118,10 +1126,14 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
   const codexFeatureEnabled = tomlBool(codexConfigText, 'features', 'hooks');
   const userPromptConfigured = eventHasAiPolicyHook(hooks, 'UserPromptSubmit');
   const stopConfigured = eventHasAiPolicyHook(hooks, 'Stop');
+  const codexRoots = codexHookRuntimeRoots(hooks);
+  const codexStaleRoots = staleRuntimeRoots(codexRoots, paths.policyRoot);
   const claudeIsActive = config.enabled && config.agents.includes('claude');
   const claudeSettingsExists = await exists(paths.claudeSettings);
   const claudeSettings = claudeSettingsExists ? await readJsonObject(paths.claudeSettings) : {};
   const claudeMarketplaceRegistered = claudeMarketplaceIsRegistered(claudeSettings, paths.policyRoot);
+  const claudeRoot = claudeMarketplaceRuntimeRoot(claudeSettings);
+  const claudeStaleRoot = claudeRoot && !samePath(claudeRoot, paths.policyRoot) ? claudeRoot : undefined;
   const claudePluginEnabled = claudePluginIsEnabled(claudeSettings);
   const hookState = (await exists(paths.hookState)) ? await readJsonObject(paths.hookState) : {};
   const latestPrompt = optionalJsonString(hookState.prompt);
@@ -1136,15 +1148,26 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
     ...(codexIsActive && codexConfigExists && !codexFeatureEnabled ? ['Codex project hooks feature is not enabled.'] : []),
     ...(codexIsActive && codexHooksExists && !userPromptConfigured ? ['Codex UserPromptSubmit hook is not configured.'] : []),
     ...(codexIsActive && codexHooksExists && !stopConfigured ? ['Codex Stop hook is not configured.'] : []),
+    ...(codexIsActive && codexStaleRoots.length
+      ? codexStaleRoots.map((item) => `Codex hook points to a stale runtime: ${item}`)
+      : []),
     ...(claudeIsActive && !claudeSettingsExists ? [`Missing Claude settings: ${paths.claudeSettings}`] : []),
     ...(claudeIsActive && claudeSettingsExists && !claudeMarketplaceRegistered ? ['Claude plugin marketplace is not registered.'] : []),
+    ...(claudeIsActive && claudeSettingsExists && claudeStaleRoot
+      ? [`Claude plugin marketplace points to a stale runtime: ${claudeStaleRoot}`]
+      : []),
     ...(claudeIsActive && claudeSettingsExists && !claudePluginEnabled ? ['Claude plugin is not enabled.'] : []),
     ...(latestError ? [`Latest hook error: ${latestError}`] : [])
   ];
   const ready = problems.length === 0;
+  const repaired = [
+    ...beforeCodexStaleRoots.map((item) => `Codex hooks updated from ${item}`),
+    ...(beforeClaudeStaleRoot ? [`Claude plugin marketplace updated from ${beforeClaudeStaleRoot}`] : [])
+  ];
 
   const content = [
     ready ? 'AI Policy Runtime validation passed.' : 'AI Policy Runtime validation found issues.',
+    ...(repaired.length ? ['', 'Auto-Repair', ...repaired.map((item) => `- ${item}`)] : []),
     '',
     'Workspace',
     `- Root: ${paths.root}`,
@@ -1160,10 +1183,12 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
     `- [features].hooks: ${codexFeatureEnabled ? 'true' : 'false'}`,
     `- UserPromptSubmit: ${userPromptConfigured ? 'configured' : 'missing'}`,
     `- Stop: ${stopConfigured ? 'configured' : 'missing'}`,
+    `- Runtime roots: ${codexRoots.length ? codexRoots.join(', ') : '(none)'}`,
     '',
     'Claude Code Plugin',
     `- Settings: ${claudeSettingsExists ? paths.claudeSettings : 'missing'}`,
     `- Marketplace: ${claudeMarketplaceRegistered ? 'registered' : 'missing'}`,
+    `- Runtime root: ${claudeRoot || '(none)'}`,
     `- Plugin enabled: ${claudePluginEnabled ? 'true' : 'false'}`,
     '',
     'Latest Hook State',
@@ -1173,7 +1198,7 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
     `- Hook error: ${latestError || '(none)'}`,
     '',
     ready
-      ? 'Next step: use Codex in this workspace. If Codex asks about project hooks, approve the AI Policy Runtime hooks.'
+      ? 'Next step: reload any already-open Codex or Claude Code sessions so they pick up the current runtime path. If Codex asks about project hooks, approve the AI Policy Runtime hooks.'
       : `Issues:\n${problems.map((item) => `- ${item}`).join('\n')}`
   ].join('\n');
 
@@ -1321,16 +1346,71 @@ function eventHasAiPolicyHook(hooks: Record<string, unknown>, event: 'UserPrompt
   return hookEventEntries(hooks, event).some((entry) => isAiPolicyHookEntry(entry));
 }
 
+function codexHookRuntimeRoots(hooks: Record<string, unknown>): string[] {
+  const roots = new Set<string>();
+  for (const event of ['UserPromptSubmit', 'Stop'] as const) {
+    for (const entry of hookEventEntries(hooks, event)) {
+      for (const command of aiPolicyHookCommands(entry)) {
+        const root = runtimeRootFromHookCommand(command);
+        if (root) {
+          roots.add(root);
+        }
+      }
+    }
+  }
+  return [...roots].sort();
+}
+
+function staleRuntimeRoots(roots: string[], policyRoot: string): string[] {
+  return roots.filter((root) => !samePath(root, policyRoot));
+}
+
+function aiPolicyHookCommands(entry: unknown): string[] {
+  if (!isRecord(entry) || !Array.isArray(entry.hooks)) {
+    return [];
+  }
+  return entry.hooks
+    .filter(isRecord)
+    .map((item) => optionalJsonString(item.command))
+    .filter((item): item is string => Boolean(item && item.includes('ai-policy-hook.js')));
+}
+
+function runtimeRootFromHookCommand(command: string): string | undefined {
+  const match = command.match(/"([^"]*[\\/]bin[\\/]ai-policy-hook\.js)"|(\S*[\\/]bin[\\/]ai-policy-hook\.js)/i);
+  const hookPath = match?.[1] || match?.[2];
+  if (!hookPath) {
+    return undefined;
+  }
+  return path.dirname(path.dirname(path.normalize(hookPath)));
+}
+
 function claudeMarketplaceIsRegistered(settings: Record<string, unknown>, policyRoot: string): boolean {
+  const root = claudeMarketplaceRuntimeRoot(settings);
+  return Boolean(root && samePath(root, policyRoot));
+}
+
+function claudeMarketplaceRuntimeRoot(settings: Record<string, unknown>): string | undefined {
   const marketplaces = asRecord(settings.extraKnownMarketplaces);
   const marketplace = asRecord(marketplaces?.[CLAUDE_MARKETPLACE_NAME]);
   const source = asRecord(marketplace?.source);
-  return source?.source === 'directory' && source.path === policyRoot;
+  if (source?.source !== 'directory' || typeof source.path !== 'string') {
+    return undefined;
+  }
+  return source.path;
 }
 
 function claudePluginIsEnabled(settings: Record<string, unknown>): boolean {
   const enabledPlugins = asRecord(settings.enabledPlugins);
   return enabledPlugins?.[CLAUDE_PLUGIN_ID] === true;
+}
+
+function samePath(left: string, right: string): boolean {
+  const normalizedLeft = path.normalize(left);
+  const normalizedRight = path.normalize(right);
+  if (process.platform === 'win32') {
+    return normalizedLeft.toLowerCase() === normalizedRight.toLowerCase();
+  }
+  return normalizedLeft === normalizedRight;
 }
 
 function optionalJsonString(value: unknown): string | undefined {
