@@ -108,6 +108,26 @@ For Codex-specific policy status:
 ai-policy status --agent codex --root D:\work\target-project
 ```
 
+## Use Remote Embeddings
+
+Downloading a local model can take time. To make the CLI usable immediately,
+configure an OpenAI-compatible remote embedding provider with environment
+variables:
+
+```powershell
+$env:AI_POLICY_EMBEDDING_PROVIDER = "openai-compatible"
+$env:AI_POLICY_EMBEDDING_BASE_URL = "https://openrouter.ai/api/v1"
+$env:AI_POLICY_EMBEDDING_API_KEY = "<your-api-key>"
+$env:AI_POLICY_EMBEDDING_MODEL = "<embedding-model>"
+```
+
+Then verify the provider:
+
+```powershell
+ai-policy embedding status --root D:\work\target-project
+ai-policy embedding test --root D:\work\target-project
+```
+
 ## Configure Codex
 
 Configure the shared project policy for Codex:

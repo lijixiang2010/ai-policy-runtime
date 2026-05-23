@@ -131,6 +131,16 @@ matching. You choose the provider:
 
 The package does not include or download a local model by default.
 
+If you want the CLI to use a remote embedding model immediately, configure an
+OpenAI-compatible endpoint through environment variables:
+
+```powershell
+$env:AI_POLICY_EMBEDDING_PROVIDER = "openai-compatible"
+$env:AI_POLICY_EMBEDDING_BASE_URL = "https://openrouter.ai/api/v1"
+$env:AI_POLICY_EMBEDDING_API_KEY = "<your-api-key>"
+$env:AI_POLICY_EMBEDDING_MODEL = "<embedding-model>"
+```
+
 Configure a local model from the CLI:
 
 ```powershell
