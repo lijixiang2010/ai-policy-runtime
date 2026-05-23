@@ -8,9 +8,13 @@ from typing import Any
 from ai_policy_runtime.application.runtime import NonApplicableTaskError, PolicyRuntime
 from ai_policy_runtime.domain.config import RuntimeConfig
 from ai_policy_runtime.infrastructure.schema_loader import SchemaLoader
-from ai_policy_runtime.services.embedding_health import inspect_embedding_health
+from ai_policy_runtime.services.embedding_health import (
+    inspect_embedding_health,
+    test_embedding_provider,
+)
 from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_file
+from ai_policy_runtime.services.workspace_cleanup import clean_workspace
 
 
 def main() -> None:
@@ -52,6 +56,16 @@ def main() -> None:
     cache.add_argument("action", choices=("list", "clear"))
     cache.add_argument("--root", default=".", help="Project root.")
 
+    cleanup = subparsers.add_parser(
+        "cleanup", help="Remove AI Policy Runtime workspace configuration and generated state."
+    )
+    cleanup.add_argument("--root", default=".", help="Project root.")
+    cleanup.add_argument(
+        "--keep-current",
+        action="store_true",
+        help="Keep .policy/current generated state while removing integration config.",
+    )
+
     model = subparsers.add_parser("model", help="Inspect or install local embedding models.")
     model.add_argument("action", choices=("list", "install"))
     model.add_argument(
@@ -68,7 +82,7 @@ def main() -> None:
     embedding = subparsers.add_parser(
         "embedding", help="Configure project embedding provider settings."
     )
-    embedding.add_argument("action", choices=("status", "configure"))
+    embedding.add_argument("action", choices=("status", "configure", "test"))
     embedding.add_argument("--root", default=".", help="Project root.")
     embedding.add_argument(
         "--provider",
@@ -261,6 +275,7 @@ class CommandDispatcher:
             "schema": self._schema,
             "inspect": self._inspect,
             "cache": self._cache,
+            "cleanup": self._cleanup,
             "model": self._model,
             "embedding": self._embedding,
             "verify": self._verify,
@@ -325,6 +340,14 @@ class CommandDispatcher:
                 item.unlink()
         return {"cache": str(cache_dir), "cleared": True}, 0
 
+    def _cleanup(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+        return {
+            "cleanup": clean_workspace(
+                args.root,
+                remove_current=not args.keep_current,
+            )
+        }, 0
+
     def _model(self, args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         manager = LocalModelManager(args.policy_root)
         if args.action == "list":
@@ -343,6 +366,14 @@ class CommandDispatcher:
                 check_loadable=True,
             )
             return {"config": str(path), "embedding": status}, 0
+        if args.action == "test":
+            status = test_embedding_provider(
+                root=args.root,
+                policy_root=getattr(args, "policy_root", None),
+                config=config,
+                include_env=True,
+            )
+            return {"config": str(path), "embedding": status}, int(not status["probe_ok"])
         if args.provider is None:
             raise ValueError("--provider is required for embedding configure")
         if args.install and args.provider != "local":

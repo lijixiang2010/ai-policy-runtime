@@ -1,6 +1,8 @@
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
+import * as childProcess from 'child_process';
 import * as path from 'path';
+import * as util from 'util';
 import * as vscode from 'vscode';
 
 type PolicyConfig = {
@@ -61,7 +63,9 @@ type PackItem = vscode.QuickPickItem & {
 };
 
 const CONFIG_SECTION = 'aiPolicy';
+const execFile = util.promisify(childProcess.execFile);
 const POLICY_CONFIG_FILE = path.join('.policy', 'config.json');
+const POLICY_CURRENT_DIR = path.join('.policy', 'current');
 const CODEX_HOOKS_FILE = path.join('.codex', 'hooks.json');
 const CODEX_CONFIG_FILE = path.join('.codex', 'config.toml');
 const CLAUDE_SETTINGS_FILE = path.join('.claude', 'settings.local.json');
@@ -70,7 +74,7 @@ const HOOK_STATE_FILE = path.join('.policy', 'current', 'agent-hook-state.json')
 const CLAUDE_MARKETPLACE_NAME = 'ai-policy-runtime';
 const CLAUDE_PLUGIN_ID = 'ai-policy-runtime@ai-policy-runtime';
 const DEFAULT_AGENTS: AgentTarget[] = ['codex'];
-const DEFAULT_PACKS = ['cpp.safe_generation'];
+const DEFAULT_PACKS: string[] = [];
 const DEFAULT_POST_REFINE_PACKS = ['generic.production_refinement'];
 const REQUIRED_RUNTIME_PATHS = [
   path.join('bin', 'ai-policy-hook.js'),
@@ -96,8 +100,31 @@ const COMMANDS = {
   configurePacks: 'aiPolicy.configurePacks',
   showStatus: 'aiPolicy.showStatus',
   showEffectiveRules: 'aiPolicy.showEffectiveRules',
-  validateRuntime: 'aiPolicy.validateRuntime'
+  testEmbedding: 'aiPolicy.testEmbedding',
+  installLocalModel: 'aiPolicy.installLocalModel',
+  validateRuntime: 'aiPolicy.validateRuntime',
+  cleanupWorkspace: 'aiPolicy.cleanupWorkspace'
 } as const;
+
+const CONFIG_KEYS: (keyof PolicyConfig)[] = [
+  'enabled',
+  'agents',
+  'packs',
+  'policyRoot',
+  'autoInstall',
+  'embeddingProvider',
+  'embeddingBaseUrl',
+  'embeddingApiKey',
+  'embeddingModel',
+  'embeddingLocalModel',
+  'embeddingTimeout',
+  'gitCommitStyle',
+  'postRefine',
+  'postRefinePacks',
+  'verifyTarget'
+];
+
+let ignoreConfigurationSyncUntil = 0;
 
 const KNOWN_PACKS: PackItem[] = [
   {
@@ -188,9 +215,17 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(COMMANDS.configurePacks, () => configurePacks(workspace)),
     vscode.commands.registerCommand(COMMANDS.showStatus, () => showStatus(workspace)),
     vscode.commands.registerCommand(COMMANDS.showEffectiveRules, () => showEffectiveRules(workspace)),
+    vscode.commands.registerCommand(COMMANDS.testEmbedding, () => testEmbeddingProvider(workspace)),
+    vscode.commands.registerCommand(COMMANDS.installLocalModel, () => installLocalEmbeddingModel(workspace, status, panel)),
     vscode.commands.registerCommand(COMMANDS.validateRuntime, () => validateRuntime(workspace)),
+    vscode.commands.registerCommand(COMMANDS.cleanupWorkspace, () => cleanupWorkspaceConfiguration(workspace, status, panel)),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(CONFIG_SECTION)) {
+        if (Date.now() < ignoreConfigurationSyncUntil) {
+          status.refresh();
+          panel.refresh();
+          return;
+        }
         void workspace.syncProjectConfig().then(() => {
           status.refresh();
           panel.refresh();
@@ -282,6 +317,13 @@ class PolicyWorkspace {
       .update(key, value, vscode.ConfigurationTarget.Workspace);
   }
 
+  async clearSettings(): Promise<void> {
+    const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+    for (const key of CONFIG_KEYS) {
+      await config.update(key, undefined, vscode.ConfigurationTarget.Workspace);
+    }
+  }
+
   pathsOrWarn(): PolicyPaths | undefined {
     const root = this.workspaceRoot();
     if (!root) {
@@ -359,6 +401,24 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     }
     if (message.type === 'showEffectiveRules') {
       await showEffectiveRules(this.workspace);
+      return;
+    }
+    if (message.type === 'testEmbedding') {
+      if (message.config) {
+        const next = normalizeConfig(message.config);
+        await this.workspace.saveConfig(next);
+        this.status.refresh();
+      }
+      await testEmbeddingProvider(this.workspace);
+      return;
+    }
+    if (message.type === 'installLocalModel') {
+      if (message.config) {
+        const next = normalizeConfig(message.config);
+        await this.workspace.saveConfig(next);
+        this.status.refresh();
+      }
+      await installLocalEmbeddingModel(this.workspace, this.status, this);
       return;
     }
     if (message.type === 'validateRuntime') {
@@ -509,6 +569,17 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       border-color: var(--vscode-inputValidation-warningBorder, var(--line));
       background: var(--vscode-inputValidation-warningBackground, var(--vscode-editorWidget-background));
     }
+    button {
+      width: fit-content;
+      color: var(--accent-text);
+      background: var(--accent);
+      border: 1px solid var(--vscode-button-border, transparent);
+      padding: 7px 10px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
     .pack {
       display: grid;
       grid-template-columns: 18px 1fr;
@@ -652,6 +723,8 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       <label for="embeddingTimeout">Embedding timeout seconds</label>
       <input id="embeddingTimeout" type="text" placeholder="30">
     </div>
+    <button id="installLocalModel" type="button">Install local model</button>
+    <button id="testEmbedding" type="button">Test embedding provider</button>
   </div>
 
   <script nonce="${nonce}">
@@ -778,6 +851,12 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     syncPostRefineControls();
 
     byId('packSearch').addEventListener('input', renderPacks);
+    byId('testEmbedding').addEventListener('click', () => {
+      vscode.postMessage({ type: 'testEmbedding', config: readConfig() });
+    });
+    byId('installLocalModel').addEventListener('click', () => {
+      vscode.postMessage({ type: 'installLocalModel', config: readConfig() });
+    });
     byId('embeddingProvider').addEventListener('change', () => {
       const provider = byId('embeddingProvider');
       const previousProvider = provider.dataset.previousProvider || '';
@@ -833,6 +912,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       byId('openAiEmbeddingFields').hidden = !isOpenAi;
       byId('localEmbeddingNote').hidden = !isLocal;
       byId('localModelStatus').hidden = !isLocal;
+      byId('installLocalModel').hidden = !(isLocal || (!provider && !availability.remoteConfigured && !localModel.available));
       byId('embeddingModelField').hidden = !(isOpenAi || isLocal);
       byId('embeddingTimeoutField').hidden = !isOpenAi;
       byId('embeddingModelLabel').textContent = isLocal ? 'Local model path' : 'Embedding model';
@@ -977,6 +1057,189 @@ async function setEnabled(
   maybeShowClaudeRestartHint(before, after);
 }
 
+async function cleanupWorkspaceConfiguration(
+  workspace: PolicyWorkspace,
+  status: PolicyStatusBar,
+  panel: PolicyConfigViewProvider
+): Promise<void> {
+  const paths = workspace.pathsOrWarn();
+  if (!paths) {
+    return;
+  }
+  const choice = await vscode.window.showWarningMessage(
+    'Clean AI Policy Runtime configuration for this workspace? This removes AI Policy Codex/Claude integration entries, .policy/config.json, generated .policy/current state, and aiPolicy workspace settings. Caches and local models are kept.',
+    { modal: true },
+    'Clean Workspace'
+  );
+  if (choice !== 'Clean Workspace') {
+    return;
+  }
+
+  const result = await cleanWorkspaceLocally(paths);
+  ignoreConfigurationSyncUntil = Date.now() + 3000;
+  await workspace.clearSettings();
+  status.refresh();
+  panel.refresh();
+  await showCleanupResult(result);
+  vscode.window.showInformationMessage('AI Policy Runtime workspace configuration cleaned.');
+}
+
+async function cleanWorkspaceLocally(paths: PolicyPaths): Promise<{
+  ok: boolean;
+  output: { cleanup: Record<string, unknown> };
+}> {
+  const cleanup: {
+    root: string;
+    removed: string[];
+    updated: string[];
+    skipped: string[];
+  } = {
+    root: paths.root,
+    removed: [],
+    updated: [],
+    skipped: []
+  };
+  const codexHooksRemain = await cleanCodexHooksFile(paths.codexHooks, cleanup);
+  await cleanCodexConfigFile(paths.codexConfig, cleanup, !codexHooksRemain);
+  await cleanClaudeSettingsFile(paths.claudeSettings, cleanup);
+  await removeFileIfExists(paths.config, cleanup);
+  await removeDirectoryIfExists(path.join(paths.root, POLICY_CURRENT_DIR), cleanup);
+  return { ok: true, output: { cleanup } };
+}
+
+async function cleanCodexHooksFile(
+  filePath: string,
+  cleanup: { updated: string[]; skipped: string[] }
+): Promise<boolean> {
+  if (!(await exists(filePath))) {
+    cleanup.skipped.push(filePath);
+    return false;
+  }
+  const hooksConfig = await readJsonObject(filePath);
+  const hooks = objectValue(hooksConfig, 'hooks');
+  hooksConfig.hooks = hooks;
+  const before = JSON.stringify(hooks);
+  removeEventHook(hooks, 'UserPromptSubmit');
+  removeEventHook(hooks, 'Stop');
+  const changed = JSON.stringify(hooks) !== before;
+  if (changed) {
+    await fs.writeFile(filePath, `${JSON.stringify(hooksConfig, null, 2)}\n`, 'utf8');
+    cleanup.updated.push(filePath);
+  } else {
+    cleanup.skipped.push(filePath);
+  }
+  return Object.values(hooks).some((value) => Array.isArray(value) && value.length > 0);
+}
+
+async function cleanCodexConfigFile(
+  filePath: string,
+  cleanup: { updated: string[]; skipped: string[] },
+  disableHooks: boolean
+): Promise<void> {
+  if (!(await exists(filePath))) {
+    cleanup.skipped.push(filePath);
+    return;
+  }
+  const original = await fs.readFile(filePath, 'utf8');
+  let updated = removeTomlKeys(original, 'features', ['codex_hooks']);
+  if (disableHooks) {
+    updated = setTomlBool(updated, 'features', 'hooks', false);
+  }
+  if (updated !== original) {
+    await fs.writeFile(filePath, updated, 'utf8');
+    cleanup.updated.push(filePath);
+  } else {
+    cleanup.skipped.push(filePath);
+  }
+}
+
+async function cleanClaudeSettingsFile(
+  filePath: string,
+  cleanup: { updated: string[]; skipped: string[] }
+): Promise<void> {
+  if (!(await exists(filePath))) {
+    cleanup.skipped.push(filePath);
+    return;
+  }
+  const settings = await readJsonObject(filePath);
+  let changed = false;
+  const enabledPlugins = asRecord(settings.enabledPlugins);
+  if (enabledPlugins && CLAUDE_PLUGIN_ID in enabledPlugins) {
+    delete enabledPlugins[CLAUDE_PLUGIN_ID];
+    changed = true;
+    if (!Object.keys(enabledPlugins).length) {
+      delete settings.enabledPlugins;
+    }
+  }
+  const marketplaces = asRecord(settings.extraKnownMarketplaces);
+  if (marketplaces && CLAUDE_MARKETPLACE_NAME in marketplaces) {
+    delete marketplaces[CLAUDE_MARKETPLACE_NAME];
+    changed = true;
+    if (!Object.keys(marketplaces).length) {
+      delete settings.extraKnownMarketplaces;
+    }
+  }
+  if (changed) {
+    await fs.writeFile(filePath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+    cleanup.updated.push(filePath);
+  } else {
+    cleanup.skipped.push(filePath);
+  }
+}
+
+async function removeFileIfExists(
+  filePath: string,
+  cleanup: { removed: string[]; skipped: string[] }
+): Promise<void> {
+  if (await exists(filePath)) {
+    await fs.rm(filePath, { force: true });
+    cleanup.removed.push(filePath);
+  } else {
+    cleanup.skipped.push(filePath);
+  }
+}
+
+async function removeDirectoryIfExists(
+  dirPath: string,
+  cleanup: { removed: string[]; skipped: string[] }
+): Promise<void> {
+  if (await exists(dirPath)) {
+    await fs.rm(dirPath, { recursive: true, force: true });
+    cleanup.removed.push(dirPath);
+  } else {
+    cleanup.skipped.push(dirPath);
+  }
+}
+
+async function showCleanupResult(result: {
+  ok: boolean;
+  output?: Record<string, unknown>;
+  error?: string;
+  nextStep?: string;
+}): Promise<void> {
+  const cleanup = asRecord(result.output?.cleanup) ?? {};
+  const removed = arrayOfStrings(cleanup.removed);
+  const updated = arrayOfStrings(cleanup.updated);
+  const skipped = arrayOfStrings(cleanup.skipped);
+  const content = [
+    result.ok ? 'Workspace cleanup completed.' : 'Workspace cleanup failed.',
+    '',
+    'Removed',
+    ...listOrNone(removed),
+    '',
+    'Updated',
+    ...listOrNone(updated),
+    '',
+    'Skipped',
+    ...listOrNone(skipped),
+    '',
+    `Error: ${result.error || '(none)'}`,
+    `Next step: ${result.nextStep || '(none)'}`,
+  ].join('\n');
+  const document = await vscode.workspace.openTextDocument({ language: 'plaintext', content });
+  await vscode.window.showTextDocument(document);
+}
+
 async function enablePostRefine(
   workspace: PolicyWorkspace,
   status: PolicyStatusBar,
@@ -1085,6 +1348,135 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
   await vscode.window.showTextDocument(document);
 }
 
+async function testEmbeddingProvider(workspace: PolicyWorkspace): Promise<void> {
+  const paths = workspace.pathsOrWarn();
+  if (!paths) {
+    return;
+  }
+
+  await workspace.syncProjectConfig();
+  const result = await runAiPolicyJson(paths.policyRoot, [
+    'embedding',
+    'test',
+    '--root',
+    paths.root,
+    '--policy-root',
+    paths.policyRoot
+  ]);
+  const embedding = asRecord(result.output?.embedding) ?? {};
+  const ok = result.ok && embedding.probe_ok === true;
+  const content = [
+    ok ? 'Embedding provider test passed.' : 'Embedding provider test failed.',
+    '',
+    'Effective Provider',
+    `- Provider: ${optionalJsonString(embedding.provider) || '(auto)'}`,
+    `- Base URL: ${optionalJsonString(embedding.base_url) || '(default)'}`,
+    `- Model: ${optionalJsonString(embedding.model) || '(default)'}`,
+    `- API key configured: ${embedding.api_key_configured === true ? 'yes' : 'no'}`,
+    `- Remote configured: ${embedding.remote_configured === true ? 'yes' : 'no'}`,
+    `- Local available: ${embedding.local_available === true ? 'yes' : embedding.local_available === false ? 'no' : '(not selected)'}`,
+    '',
+    'Probe',
+    `- Request succeeded: ${embedding.probe_ok === true ? 'yes' : 'no'}`,
+    `- Vector dimensions: ${typeof embedding.vector_dimensions === 'number' ? embedding.vector_dimensions : '(none)'}`,
+    `- Provider cache key: ${optionalJsonString(embedding.provider_cache_key) || '(none)'}`,
+    `- Error: ${optionalJsonString(embedding.probe_error) || result.error || '(none)'}`,
+    `- Next step: ${optionalJsonString(embedding.next_step) || result.nextStep || '(none)'}`,
+  ].join('\n');
+
+  const document = await vscode.workspace.openTextDocument({ language: 'plaintext', content });
+  await vscode.window.showTextDocument(document);
+  if (ok) {
+    vscode.window.showInformationMessage('AI Policy Runtime embedding provider test passed.');
+  } else {
+    vscode.window.showErrorMessage('AI Policy Runtime embedding provider test failed. Opened details.');
+  }
+}
+
+async function installLocalEmbeddingModel(
+  workspace: PolicyWorkspace,
+  status: PolicyStatusBar,
+  panel?: PolicyConfigViewProvider
+): Promise<void> {
+  const paths = workspace.pathsOrWarn();
+  if (!paths) {
+    return;
+  }
+
+  const choice = await vscode.window.showWarningMessage(
+    'Install the default local sentence-transformers embedding model for this workspace? This downloads model files and semantic Python dependencies when needed.',
+    { modal: true },
+    'Install'
+  );
+  if (choice !== 'Install') {
+    return;
+  }
+
+  await workspace.syncProjectConfig();
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: 'Installing AI Policy Runtime local embedding model',
+      cancellable: false
+    },
+    async () => {
+      const result = await runAiPolicyJson(paths.policyRoot, [
+        'embedding',
+        'configure',
+        '--root',
+        paths.root,
+        '--policy-root',
+        paths.policyRoot,
+        '--provider',
+        'local',
+        '--install'
+      ], 10 * 60 * 1000);
+      if (result.ok) {
+        const installed = asRecord(result.output?.installed_model);
+        await workspace.updateSetting('embeddingProvider', 'local');
+        await workspace.updateSetting('embeddingLocalModel', optionalJsonString(installed?.path) || '');
+      }
+      await workspace.syncProjectConfig();
+      status.refresh();
+      panel?.refresh();
+      await showLocalModelInstallResult(result);
+      if (result.ok) {
+        vscode.window.showInformationMessage('AI Policy Runtime local embedding model installed.');
+      } else {
+        vscode.window.showErrorMessage('AI Policy Runtime local embedding model install failed. Opened details.');
+      }
+    }
+  );
+}
+
+async function showLocalModelInstallResult(result: {
+  ok: boolean;
+  output?: Record<string, unknown>;
+  error?: string;
+  nextStep?: string;
+}): Promise<void> {
+  const embedding = asRecord(result.output?.embedding) ?? {};
+  const installed = asRecord(result.output?.installed_model) ?? {};
+  const content = [
+    result.ok ? 'Local embedding model install completed.' : 'Local embedding model install failed.',
+    '',
+    'Installed Model',
+    `- Key: ${optionalJsonString(installed.key) || '(unknown)'}`,
+    `- Repo: ${optionalJsonString(installed.repo_id) || '(unknown)'}`,
+    `- Path: ${optionalJsonString(installed.path) || '(unknown)'}`,
+    '',
+    'Effective Provider',
+    `- Provider: ${optionalJsonString(embedding.provider) || '(auto)'}`,
+    `- Model: ${optionalJsonString(embedding.model) || '(default)'}`,
+    `- Local available: ${embedding.local_available === true ? 'yes' : embedding.local_available === false ? 'no' : '(not checked)'}`,
+    `- Error: ${result.error || optionalJsonString(embedding.local_error) || '(none)'}`,
+    `- Next step: ${result.nextStep || optionalJsonString(embedding.next_step) || '(none)'}`,
+  ].join('\n');
+
+  const document = await vscode.workspace.openTextDocument({ language: 'plaintext', content });
+  await vscode.window.showTextDocument(document);
+}
+
 async function showEffectiveRules(workspace: PolicyWorkspace): Promise<void> {
   const paths = workspace.pathsOrWarn();
   if (!paths) {
@@ -1128,6 +1520,7 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
   const stopConfigured = eventHasAiPolicyHook(hooks, 'Stop');
   const codexRoots = codexHookRuntimeRoots(hooks);
   const codexStaleRoots = staleRuntimeRoots(codexRoots, paths.policyRoot);
+  const codexHookPython = await probeHookPython();
   const claudeIsActive = config.enabled && config.agents.includes('claude');
   const claudeSettingsExists = await exists(paths.claudeSettings);
   const claudeSettings = claudeSettingsExists ? await readJsonObject(paths.claudeSettings) : {};
@@ -1184,6 +1577,11 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
     `- UserPromptSubmit: ${userPromptConfigured ? 'configured' : 'missing'}`,
     `- Stop: ${stopConfigured ? 'configured' : 'missing'}`,
     `- Runtime roots: ${codexRoots.length ? codexRoots.join(', ') : '(none)'}`,
+    `- Python command: ${codexHookPython.command.join(' ')}`,
+    `- Python probe from VS Code: ${codexHookPython.available ? 'available' : 'not available'}`,
+    `- Python version: ${codexHookPython.version || '(unknown)'}`,
+    `- Python error: ${codexHookPython.error || '(none)'}`,
+    `- Python note: ${codexHookPython.available ? 'Codex hooks use this direct Python command.' : 'The VS Code extension host could not launch Python for probing; Codex may still run the direct hook command. If no hook state appears, run the Python command above in a terminal.'}`,
     '',
     'Claude Code Plugin',
     `- Settings: ${claudeSettingsExists ? paths.claudeSettings : 'missing'}`,
@@ -1209,6 +1607,62 @@ async function validateRuntime(workspace: PolicyWorkspace): Promise<void> {
   } else {
     vscode.window.showErrorMessage('AI Policy Runtime validation found issues. Opened details.');
   }
+}
+
+async function runAiPolicyJson(
+  policyRoot: string,
+  args: string[],
+  timeout = 90000
+): Promise<{ ok: boolean; output?: Record<string, unknown>; error?: string; nextStep?: string }> {
+  const node = process.env.AI_POLICY_NODE || process.execPath;
+  const script = path.join(policyRoot, 'bin', 'ai-policy.js');
+  try {
+    const { stdout } = await execFile(node, [script, ...args], {
+      cwd: policyRoot,
+      timeout,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true
+    });
+    return { ok: true, output: JSON.parse(stdout) as Record<string, unknown> };
+  } catch (error) {
+    const failed = error as {
+      stdout?: string;
+      stderr?: string;
+      message?: string;
+    };
+    if (failed.stdout) {
+      try {
+        return {
+          ok: false,
+          output: JSON.parse(failed.stdout) as Record<string, unknown>,
+          error: optionalJsonString(failed.stderr) || failed.message,
+          nextStep: aiPolicyFailureNextStep(optionalJsonString(failed.stderr) || failed.message || '')
+        };
+      } catch {
+        // Fall through to the plain error report.
+      }
+    }
+    return {
+      ok: false,
+      error: optionalJsonString(failed.stderr) || failed.message || 'ai-policy command failed',
+      nextStep: aiPolicyFailureNextStep(optionalJsonString(failed.stderr) || failed.message || '')
+    };
+  }
+}
+
+function aiPolicyFailureNextStep(message: string): string | undefined {
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes('could not run python interpreter') ||
+    normalized.includes('runtime rebuild manages the cached venv') ||
+    normalized.includes('no such file or directory') && normalized.includes('python')
+  ) {
+    return 'Run: ai-policy runtime rebuild, then test the embedding provider again.';
+  }
+  if (normalized.includes('python 3.10+ is required')) {
+    return 'Install Python 3.10+ or set AI_POLICY_PYTHON to a compatible Python executable.';
+  }
+  return undefined;
 }
 
 async function syncCodexAgentHooks(paths: PolicyPaths, config: PolicyConfig): Promise<void> {
@@ -1244,17 +1698,24 @@ async function configureCodexHooks(paths: PolicyPaths, config: PolicyConfig, ena
 }
 
 function codexHookEntry(policyRoot: string, hookName: string, statusMessage: string): Record<string, unknown> {
-  const hookRunner = path.join(policyRoot, 'bin', 'ai-policy-hook.js');
+  const hookScript = codexHookScript(policyRoot, hookName);
   return {
     hooks: [
       {
         type: 'command',
-        command: shellCommand(process.env.AI_POLICY_NODE || 'node', hookRunner, hookName),
+        command: shellCommand(...pythonCommand(), hookScript),
         timeout: 30,
         statusMessage
       }
     ]
   };
+}
+
+function codexHookScript(policyRoot: string, hookName: string): string {
+  if (hookName === 'codex-user-prompt-submit') {
+    return path.join(policyRoot, 'hooks', 'user_prompt_submit.py');
+  }
+  return path.join(policyRoot, 'hooks', 'stop_refinement.py');
 }
 
 function upsertEventHook(
@@ -1297,7 +1758,14 @@ function isAiPolicyHookEntry(entry: unknown): boolean {
   if (!Array.isArray(hooks)) {
     return false;
   }
-  return hooks.some((item) => isRecord(item) && String(item.command ?? '').includes('ai-policy-hook.js'));
+  return hooks.some((item) => isRecord(item) && isAiPolicyHookCommand(String(item.command ?? '')));
+}
+
+function isAiPolicyHookCommand(command: string): boolean {
+  const normalized = command.replace(/\\/g, '/');
+  return normalized.includes('ai-policy-hook.js') ||
+    normalized.includes('/hooks/user_prompt_submit.py') ||
+    normalized.includes('/hooks/stop_refinement.py');
 }
 
 async function configureCodexConfig(filePath: string, enabled: boolean): Promise<void> {
@@ -1372,11 +1840,11 @@ function aiPolicyHookCommands(entry: unknown): string[] {
   return entry.hooks
     .filter(isRecord)
     .map((item) => optionalJsonString(item.command))
-    .filter((item): item is string => Boolean(item && item.includes('ai-policy-hook.js')));
+    .filter((item): item is string => Boolean(item && isAiPolicyHookCommand(item)));
 }
 
 function runtimeRootFromHookCommand(command: string): string | undefined {
-  const match = command.match(/"([^"]*[\\/]bin[\\/]ai-policy-hook\.js)"|(\S*[\\/]bin[\\/]ai-policy-hook\.js)/i);
+  const match = command.match(/"([^"]*[\\/](?:bin[\\/]ai-policy-hook\.js|hooks[\\/](?:user_prompt_submit|stop_refinement)\.py))"|(\S*[\\/](?:bin[\\/]ai-policy-hook\.js|hooks[\\/](?:user_prompt_submit|stop_refinement)\.py))/i);
   const hookPath = match?.[1] || match?.[2];
   if (!hookPath) {
     return undefined;
@@ -1461,12 +1929,62 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;
 }
 
+function arrayOfStrings(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function listOrNone(items: string[]): string[] {
+  return items.length ? items.map((item) => `- ${item}`) : ['- (none)'];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function shellCommand(command: string, script: string, hookName: string): string {
-  return [command, script, hookName].map(quoteShell).join(' ');
+function pythonCommand(): string[] {
+  if (process.env.AI_POLICY_PYTHON) {
+    return [process.env.AI_POLICY_PYTHON];
+  }
+  return process.platform === 'win32' ? ['py', '-3'] : ['python3'];
+}
+
+async function probeHookPython(): Promise<{
+  command: string[];
+  available: boolean;
+  version?: string;
+  error?: string;
+}> {
+  const command = pythonCommand();
+  const [program, ...baseArgs] = command;
+  try {
+    const { stdout } = await execFile(
+      program,
+      [
+        ...baseArgs,
+        '-c',
+        "import sys,json; print(json.dumps('.'.join(map(str, sys.version_info[:3]))))"
+      ],
+      { timeout: 10000, maxBuffer: 64 * 1024, windowsHide: true }
+    );
+    return {
+      command,
+      available: true,
+      version: JSON.parse(stdout) as string
+    };
+  } catch (error) {
+    const failed = error as { stdout?: string; stderr?: string; message?: string };
+    return {
+      command,
+      available: false,
+      error: optionalJsonString(failed.stderr) || optionalJsonString(failed.stdout) || failed.message || 'Python command failed'
+    };
+  }
+}
+
+function shellCommand(...parts: string[]): string {
+  return parts.map(quoteShell).join(' ');
 }
 
 function quoteShell(value: string): string {
@@ -1522,6 +2040,31 @@ function setTomlBool(
     output.push(sectionHeader, target);
   } else if (inSection && !keyWritten) {
     output.push(target);
+  }
+
+  return `${output.join('\n').trimEnd()}\n`;
+}
+
+function removeTomlKeys(text: string, section: string, keys: string[]): string {
+  const lines = text.split(/\r?\n/);
+  const sectionHeader = `[${section}]`;
+  let inSection = false;
+  const output: string[] = [];
+
+  for (const [index, line] of lines.entries()) {
+    if (!line && index === lines.length - 1) {
+      continue;
+    }
+    const stripped = line.trim();
+    if (stripped.startsWith('[') && stripped.endsWith(']')) {
+      inSection = stripped === sectionHeader;
+      output.push(line);
+      continue;
+    }
+    if (inSection && keys.some((key) => stripped.startsWith(`${key} `) && stripped.includes('='))) {
+      continue;
+    }
+    output.push(line);
   }
 
   return `${output.join('\n').trimEnd()}\n`;

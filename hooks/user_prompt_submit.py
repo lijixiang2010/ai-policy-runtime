@@ -10,6 +10,8 @@ from typing import Any
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+if str(PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_ROOT))
 CONFIG_PATH = Path(".policy") / "config.json"
 HOOK_STATE_PATH = Path(".policy") / "current" / "agent-hook-state.json"
 FALSE_VALUES = {"0", "false", "no", "off"}

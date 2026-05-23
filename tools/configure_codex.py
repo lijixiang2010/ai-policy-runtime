@@ -4,12 +4,12 @@ import argparse
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import textwrap
 from typing import Any
 
 
-DEFAULT_PACK = "cpp.safe_generation"
 HOOKS_CONFIG_FILE = Path(".codex") / "hooks.json"
 PLUGIN_HOOKS_CONFIG_FILE = Path("hooks") / "codex-hooks.json"
 CODEX_CONFIG_FILE = Path(".codex") / "config.toml"
@@ -76,8 +76,7 @@ def configure_policy(root: Path, plugin_root: Path, *, enabled: bool = True) -> 
     if enabled:
         config["enabled"] = True
         config["agents"] = _append_unique(config.get("agents"), "codex")
-        if not config.get("packs"):
-            config["packs"] = [DEFAULT_PACK]
+        config.setdefault("packs", [])
         config["policyRoot"] = str(plugin_root)
         _ensure_git_commit_style(config)
     else:
@@ -102,6 +101,7 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
     project_hooks_config = _read_json_object(project_hooks)
     policy_root = policy.get("policyRoot")
     hook_roots = _project_hook_runtime_roots(project_hooks_config)
+    hook_python = _python_probe()
     return {
         "policy_config": str(policy_path),
         "codex_config": str(codex_config),
@@ -119,6 +119,10 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
         "project_hook_runtime_roots_match_expected": all(
             _same_path(root, plugin_root) for root in hook_roots
         ),
+        "hook_python_command": list(_python_command()),
+        "hook_python_available": hook_python["available"],
+        "hook_python_version": hook_python["version"],
+        "hook_python_error": hook_python["error"],
         "plugin_manifest": str(plugin_manifest),
         "hooks_config": str(hooks_config),
         "plugin_assets_present": plugin_manifest.exists() and hooks_config.exists(),
@@ -160,18 +164,25 @@ def configure_codex_hooks(root: Path, plugin_root: Path, *, enabled: bool = True
 
 
 def _codex_hook_entry(plugin_root: Path, hook_name: str, status_message: str) -> dict[str, object]:
-    node_command = _node_command()
-    hook_runner = plugin_root / "bin" / "ai-policy-hook.js"
+    hook_script = _codex_hook_script(plugin_root, hook_name)
     return {
         "hooks": [
             {
                 "type": "command",
-                "command": _shell_command(node_command, hook_runner, hook_name),
+                "command": _shell_command(*_python_command(), str(hook_script)),
                 "timeout": 30,
                 "statusMessage": status_message,
             }
         ]
     }
+
+
+def _codex_hook_script(plugin_root: Path, hook_name: str) -> Path:
+    scripts = {
+        "codex-user-prompt-submit": plugin_root / "hooks" / "user_prompt_submit.py",
+        "codex-stop-refinement": plugin_root / "hooks" / "stop_refinement.py",
+    }
+    return scripts[hook_name]
 
 
 def _upsert_event_hook(hooks: dict[str, object], event: str, entry: dict[str, object]) -> None:
@@ -207,9 +218,18 @@ def _is_ai_policy_hook_entry(entry: object) -> bool:
         if not isinstance(item, dict):
             continue
         command = str(item.get("command", ""))
-        if "ai-policy-hook.js" in command:
+        if _is_ai_policy_hook_command(command):
             return True
     return False
+
+
+def _is_ai_policy_hook_command(command: str) -> bool:
+    normalized = command.replace("\\", "/")
+    return (
+        "ai-policy-hook.js" in normalized
+        or "/hooks/user_prompt_submit.py" in normalized
+        or "/hooks/stop_refinement.py" in normalized
+    )
 
 
 def configure_codex_config(root: Path, *, enabled: bool = True) -> Path:
@@ -315,12 +335,16 @@ def _project_hook_runtime_roots(config: dict[str, Any]) -> list[str]:
 
 
 def _runtime_root_from_command(command: str) -> Path | None:
-    marker = "bin"
-    script = "ai-policy-hook.js"
     normalized = command.replace("\\", "/")
-    index = normalized.lower().find(f"/{marker}/{script}".lower())
-    if index < 0:
+    markers = (
+        "/bin/ai-policy-hook.js",
+        "/hooks/user_prompt_submit.py",
+        "/hooks/stop_refinement.py",
+    )
+    marker = next((item for item in markers if item.lower() in normalized.lower()), None)
+    if marker is None:
         return None
+    index = normalized.lower().find(marker.lower())
     prefix = command[:index].strip().strip('"')
     if not prefix:
         return None
@@ -344,14 +368,44 @@ def _same_path(left: Any, right: Path) -> bool:
     return left_path == right.resolve()
 
 
-def _node_command() -> str:
-    if os.environ.get("AI_POLICY_NODE"):
-        return os.environ["AI_POLICY_NODE"]
-    return "node"
+def _python_command() -> tuple[str, ...]:
+    if os.environ.get("AI_POLICY_PYTHON"):
+        return (os.environ["AI_POLICY_PYTHON"],)
+    if sys.platform == "win32":
+        return ("py", "-3")
+    return ("python3",)
 
 
-def _shell_command(command: str, script: Path, hook_name: str) -> str:
-    return " ".join((_quote_shell(command), _quote_shell(str(script)), _quote_shell(hook_name)))
+def _python_probe() -> dict[str, Any]:
+    command = _python_command()
+    try:
+        result = subprocess.run(
+            [
+                *command,
+                "-c",
+                "import sys,json; print(json.dumps('.'.join(map(str, sys.version_info[:3]))))",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return {"available": False, "version": None, "error": str(exc)}
+    if result.returncode != 0:
+        return {
+            "available": False,
+            "version": None,
+            "error": (result.stderr or result.stdout or "Python command failed").strip(),
+        }
+    try:
+        version = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        version = result.stdout.strip()
+    return {"available": True, "version": version, "error": None}
+
+
+def _shell_command(*parts: str) -> str:
+    return " ".join(_quote_shell(part) for part in parts)
 
 
 def _quote_shell(value: str) -> str:

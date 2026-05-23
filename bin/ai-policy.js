@@ -196,7 +196,7 @@ function runPython(args, options = {}) {
     ...process.env,
     PYTHONPATH: prependPath(PACKAGE_ROOT, process.env.PYTHONPATH),
   };
-  const result = spawnSync(python, args, { stdio: "inherit", env });
+  const result = spawnSync(python, args, { stdio: "inherit", env, windowsHide: true });
   if (result.error) {
     fail(result.error.message);
   }
@@ -209,7 +209,7 @@ function runPythonCapture(args) {
     ...process.env,
     PYTHONPATH: prependPath(PACKAGE_ROOT, process.env.PYTHONPATH),
   };
-  return spawnSync(python, args, { encoding: "utf8", env });
+  return spawnSync(python, args, { encoding: "utf8", env, windowsHide: true });
 }
 
 function ensurePython() {
@@ -239,7 +239,10 @@ function ensurePython() {
 function findBasePython() {
   const candidates = process.platform === "win32" ? ["py", "python", "python3"] : ["python3", "python"];
   for (const candidate of candidates) {
-    const result = spawnSync(candidate, pythonArgs(candidate, ["--version"]), { stdio: "ignore" });
+    const result = spawnSync(candidate, pythonArgs(candidate, ["--version"]), {
+      stdio: "ignore",
+      windowsHide: true,
+    });
     if (!result.error && result.status === 0 && pythonVersion(candidate)) {
       return candidate === "py" ? "py" : candidate;
     }
@@ -259,7 +262,10 @@ function assertPythonVersion(command) {
 
 function pythonVersion(command) {
   const code = "import sys,json; print(json.dumps(list(sys.version_info[:3])))";
-  const result = spawnSync(command, pythonArgs(command, ["-c", code]), { encoding: "utf8" });
+  const result = spawnSync(command, pythonArgs(command, ["-c", code]), {
+    encoding: "utf8",
+    windowsHide: true,
+  });
   if (result.error || result.status !== 0) {
     return null;
   }
@@ -285,7 +291,7 @@ function pythonArgs(command, args) {
 }
 
 function runChecked(command, args, env) {
-  const result = spawnSync(command, args, { stdio: "inherit", env });
+  const result = spawnSync(command, args, { stdio: "inherit", env, windowsHide: true });
   if (result.error) {
     fail(result.error.message);
   }
@@ -303,7 +309,10 @@ function requiresSemanticDependencies(command, args) {
 
 function ensureSemanticDependencies(python) {
   const probe = "import sentence_transformers, huggingface_hub";
-  const existing = spawnSync(python, pythonArgs(python, ["-c", probe]), { stdio: "ignore" });
+  const existing = spawnSync(python, pythonArgs(python, ["-c", probe]), {
+    stdio: "ignore",
+    windowsHide: true,
+  });
   if (!existing.error && existing.status === 0) {
     return;
   }
@@ -419,7 +428,7 @@ function inspectHookPython() {
   const result = spawnSync("python", [
     "-c",
     "import importlib.util,sys,json; print(json.dumps({'executable': sys.executable, 'version': '.'.join(map(str, sys.version_info[:3])), 'sentenceTransformers': importlib.util.find_spec('sentence_transformers') is not None}))",
-  ], { encoding: "utf8" });
+  ], { encoding: "utf8", windowsHide: true });
   if (result.error || result.status !== 0) {
     return {
       executable: null,
@@ -462,10 +471,12 @@ Usage:
   ai-policy configure claude [--root <project>]
   ai-policy configure codex [--root <project>]
   ai-policy embedding status [--root <project>]
+  ai-policy embedding test [--root <project>]
   ai-policy embedding configure [--root <project>] --provider <auto|openai-compatible|local>
                               [--install] [--model <model-or-path>]
                               [--base-url <url>] [--api-key <key>] [--timeout <seconds>]
   ai-policy model <list|install> [--policy-root <runtime-assets>] [--model <known-model>]
+  ai-policy cleanup [--root <project>] [--keep-current]
   ai-policy status [--agent <claude|codex>] [--root <project>]
   ai-policy disable [--root <project>]
   ai-policy plugin <enable|disable> [--root <project>]
@@ -480,6 +491,7 @@ Examples:
   ai-policy embedding configure --root D:\\work\\project --provider local --install
   ai-policy embedding configure --root D:\\work\\project --provider local --model D:\\models\\paraphrase-multilingual-MiniLM-L12-v2
   ai-policy model list --policy-root D:\\tools\\ai-policy-runtime
+  ai-policy cleanup --root D:\\work\\project
   ai-policy post-refine standard --root D:\\work\\project
   ai-policy status --agent codex --root D:\\work\\project
 `);

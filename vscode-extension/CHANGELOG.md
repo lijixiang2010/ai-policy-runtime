@@ -2,6 +2,16 @@
 
 Maintained by Miles Li.
 
+## 0.1.5
+
+- Run Codex hooks directly through Python to avoid Node child-process Python launch failures in restricted environments.
+- Report the direct Codex hook Python command in status/validation output before hooks fail silently.
+- Add an embedding provider test command and VS Code configuration action.
+- Add a VS Code command and configuration action to install the default local embedding model on demand.
+- Add explicit workspace cleanup commands for CLI, npm, and VS Code extension users.
+- Use the VS Code extension host Node runtime for bundled CLI actions when `AI_POLICY_NODE` is not set.
+- Leave policy packs unselected by default for new workspaces.
+
 ## 0.1.4
 
 - Refresh workspace agent hooks to the current VS Code extension runtime after upgrades.

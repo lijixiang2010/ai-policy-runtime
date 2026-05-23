@@ -4,10 +4,12 @@ import os
 from pathlib import Path
 from typing import Any, Mapping
 
+from ai_policy_runtime.domain.config import EmbeddingConfig
 from ai_policy_runtime.services.local_models import (
     LocalModelManager,
     check_sentence_transformer_model,
 )
+from ai_policy_runtime.task_analysis.analyzer import default_embedding_provider
 
 
 def inspect_embedding_health(
@@ -109,6 +111,55 @@ def inspect_embedding_health(
     }
 
 
+def test_embedding_provider(
+    *,
+    root: str | Path = ".",
+    policy_root: str | Path | None = None,
+    config: Mapping[str, Any] | None = None,
+    include_env: bool = True,
+    text: str = "AI Policy Runtime embedding health check",
+) -> dict[str, Any]:
+    """Run one embedding request against the effective provider."""
+
+    health = inspect_embedding_health(
+        root=root,
+        policy_root=policy_root,
+        config=config,
+        include_env=include_env,
+        check_loadable=True,
+    )
+    if not health["ok"]:
+        return {
+            **health,
+            "probe_ok": False,
+            "probe_error": health.get("next_step") or "Embedding provider is not configured.",
+        }
+
+    project_root = Path(root)
+    asset_root = _embedding_policy_root(project_root, policy_root, config or {})
+    embedding = _embedding_config(project_root, config or {}, include_env=include_env)
+    try:
+        provider = default_embedding_provider(asset_root, embedding)
+        vectors = provider.encode([text])
+        vector = vectors[0] if vectors else []
+        if not vector:
+            raise RuntimeError("Embedding provider returned an empty vector.")
+    except Exception as exc:
+        return {
+            **health,
+            "probe_ok": False,
+            "probe_error": str(exc),
+        }
+
+    return {
+        **health,
+        "probe_ok": True,
+        "probe_error": None,
+        "vector_dimensions": len(vector),
+        "provider_cache_key": str(getattr(provider, "model_name", provider.__class__.__name__)),
+    }
+
+
 def _effective_provider(config: Mapping[str, Any], *, include_env: bool) -> str:
     provider = _normalize_provider(config.get("embeddingProvider"))
     if provider:
@@ -139,6 +190,46 @@ def _local_model_path(root: Path, model: str) -> Path | str:
     return root / path
 
 
+def _embedding_config(
+    root: Path,
+    config: Mapping[str, Any],
+    *,
+    include_env: bool,
+) -> EmbeddingConfig | None:
+    provider = _normalize_provider(config.get("embeddingProvider")) or None
+    base_url = _first_string(
+        config.get("embeddingBaseUrl"),
+        os.environ.get("AI_POLICY_EMBEDDING_BASE_URL") if include_env else None,
+    )
+    api_key = _first_string(
+        config.get("embeddingApiKey"),
+        os.environ.get("AI_POLICY_EMBEDDING_API_KEY") if include_env else None,
+        os.environ.get("OPENAI_API_KEY") if include_env else None,
+    )
+    model = _first_string(
+        config.get("embeddingModel"),
+        os.environ.get("AI_POLICY_EMBEDDING_MODEL") if include_env else None,
+    )
+    timeout = _optional_float(
+        _first_string(
+            config.get("embeddingTimeout"),
+            os.environ.get("AI_POLICY_EMBEDDING_TIMEOUT") if include_env else None,
+        )
+    )
+    if provider == "local" and model:
+        model_path = _local_model_path(root, model)
+        model = str(model_path)
+    if not any(value is not None for value in (provider, base_url, api_key, model, timeout)):
+        return None
+    return EmbeddingConfig(
+        provider=provider,
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+        timeout_seconds=timeout,
+    )
+
+
 def _normalize_provider(value: object) -> str:
     provider = _optional_string(value)
     if provider in {None, "auto"}:
@@ -167,6 +258,16 @@ def _optional_string(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _optional_float(value: object) -> float | None:
+    text = _optional_string(value)
+    if text is None:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
 
 
 def _local_install_next_step() -> str:

@@ -47,6 +47,7 @@ from ai_policy_runtime.services.injector import (
 )
 from ai_policy_runtime.services.local_models import LocalModelManager
 from ai_policy_runtime.services.validator import validate_effective_rules_mapping
+from ai_policy_runtime.services.workspace_cleanup import clean_workspace
 
 
 NON_ENGLISH_DSL_PATTERN = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
@@ -3112,6 +3113,7 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertTrue(policy["enabled"])
         self.assertIn("claude", policy["agents"])
+        self.assertEqual(policy["packs"], [])
         self.assertEqual(policy["policyRoot"], str(plugin_root))
         self.assertEqual(policy["git"], {"commitStyle": "auto"})
         self.assertTrue(settings["enabledPlugins"][PLUGIN_ID])
@@ -3339,7 +3341,7 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertTrue(policy["enabled"])
         self.assertEqual(policy["agents"], ["codex"])
-        self.assertEqual(policy["packs"], ["cpp.safe_generation"])
+        self.assertEqual(policy["packs"], [])
         self.assertEqual(policy["policyRoot"], str(Path.cwd()))
         self.assertEqual(policy["git"], {"commitStyle": "auto"})
         self.assertFalse(claude_settings_exists)
@@ -3377,10 +3379,9 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         user_prompt = hooks["hooks"]["UserPromptSubmit"][0]["hooks"][0]
         stop = hooks["hooks"]["Stop"][0]["hooks"][0]
-        self.assertIn("ai-policy-hook.js", user_prompt["command"])
-        self.assertIn("codex-user-prompt-submit", user_prompt["command"])
-        self.assertIn("ai-policy-hook.js", stop["command"])
-        self.assertIn("codex-stop-refinement", stop["command"])
+        self.assertIn("user_prompt_submit.py", user_prompt["command"])
+        self.assertIn("stop_refinement.py", stop["command"])
+        self.assertNotIn("ai-policy-hook.js", user_prompt["command"])
 
     def test_configure_codex_hooks_preserves_existing_hooks(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -3413,7 +3414,7 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertEqual(len(entries), 2)
         self.assertEqual(entries[0]["hooks"][0]["command"], "echo existing")
-        self.assertIn("ai-policy-hook.js", entries[1]["hooks"][0]["command"])
+        self.assertIn("user_prompt_submit.py", entries[1]["hooks"][0]["command"])
 
     def test_configure_codex_hooks_disable_removes_only_ai_policy_hooks(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -3530,6 +3531,8 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(current["expected_plugin_root"], str(Path.cwd()))
         self.assertTrue(current["policy_root_matches_expected"])
         self.assertTrue(current["project_hook_runtime_roots_match_expected"])
+        self.assertIn("hook_python_available", current)
+        self.assertIn("hook_python_command", current)
         self.assertEqual(current["git_commit_style"], "auto")
 
     def test_configure_codex_status_does_not_treat_unrelated_hooks_as_configured(self) -> None:
@@ -3556,6 +3559,21 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(current["project_hooks_present"])
         self.assertFalse(current["project_hooks_configured"])
 
+    def test_configure_codex_status_reports_unavailable_hook_python(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+            configure_codex_policy(root, plugin_root)
+            configure_codex_hooks(root, plugin_root)
+            configure_codex_config(root)
+
+            with patch.dict(os.environ, {"AI_POLICY_PYTHON": str(root / "missing-python")}, clear=False):
+                current = codex_status(root, plugin_root)
+
+        self.assertFalse(current["hook_python_available"])
+        self.assertIn("missing-python", " ".join(current["hook_python_command"]))
+        self.assertTrue(current["hook_python_error"])
+
     def test_configure_codex_cli_updates_policy(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"
@@ -3573,6 +3591,74 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(policy["agents"], ["codex"])
         self.assertIn("UserPromptSubmit", hooks["hooks"])
         self.assertIn("hooks = true", codex_config)
+
+    def test_clean_workspace_removes_only_ai_policy_entries(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+            configure_codex_policy(root, plugin_root)
+            hooks_path = configure_codex_hooks(root, plugin_root)
+            codex_config = configure_codex_config(root)
+            claude_settings = configure_claude_settings(root, plugin_root, "local")
+            current = root / ".policy" / "current"
+            current.mkdir(parents=True)
+            (current / "agent-hook-state.json").write_text("{}", encoding="utf-8")
+
+            hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+            hooks["hooks"]["Stop"].append(
+                {"hooks": [{"type": "command", "command": "echo keep"}]}
+            )
+            hooks_path.write_text(json.dumps(hooks), encoding="utf-8")
+
+            result = clean_workspace(root)
+            cleaned_hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+            cleaned_codex_config = codex_config.read_text(encoding="utf-8")
+            cleaned_claude = json.loads(claude_settings.read_text(encoding="utf-8"))
+
+        self.assertIn(str(root / ".policy" / "config.json"), result["removed"])
+        self.assertIn(str(root / ".policy" / "current"), result["removed"])
+        self.assertNotIn("UserPromptSubmit", cleaned_hooks["hooks"])
+        self.assertEqual(
+            cleaned_hooks["hooks"]["Stop"][0]["hooks"][0]["command"],
+            "echo keep",
+        )
+        self.assertIn("hooks = true", cleaned_codex_config)
+        self.assertNotIn(PLUGIN_ID, cleaned_claude.get("enabledPlugins", {}))
+        self.assertNotIn("ai-policy-runtime", cleaned_claude.get("extraKnownMarketplaces", {}))
+
+    def test_clean_workspace_disables_codex_hooks_when_no_hooks_remain(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+            configure_codex_hooks(root, plugin_root)
+            codex_config = configure_codex_config(root)
+
+            clean_workspace(root)
+            cleaned_codex_config = codex_config.read_text(encoding="utf-8")
+
+        self.assertIn("hooks = false", cleaned_codex_config)
+
+    def test_cli_cleanup_removes_project_config_and_current_state(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            config = root / ".policy" / "config.json"
+            current = root / ".policy" / "current"
+            current.mkdir(parents=True)
+            config.write_text('{"enabled": true}\n', encoding="utf-8")
+            (current / "trace.json").write_text("{}", encoding="utf-8")
+
+            output, exit_code = CommandDispatcher().dispatch(
+                argparse.Namespace(
+                    command="cleanup",
+                    root=str(root),
+                    keep_current=False,
+                )
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIsInstance(output, dict)
+        self.assertFalse(config.exists())
+        self.assertFalse(current.exists())
 
     def test_npm_package_exposes_ai_policy_commands(self) -> None:
         package = json.loads(Path("package.json").read_text(encoding="utf-8"))
@@ -3997,6 +4083,71 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(output["embedding"]["provider"], "auto")
         self.assertTrue(output["embedding"]["ok"])
         self.assertTrue(output["embedding"]["remote_configured"])
+
+    def test_cli_embedding_test_runs_provider_probe(self) -> None:
+        args = argparse.Namespace(
+            command="embedding",
+            action="test",
+            root="",
+            provider=None,
+            base_url=None,
+            api_key=None,
+            model=None,
+            timeout=None,
+            policy_root=None,
+            install=False,
+        )
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            args.root = str(root)
+            with patch.dict(
+                os.environ,
+                {"AI_POLICY_EMBEDDING_API_KEY": "key"},
+                clear=True,
+            ), patch(
+                "ai_policy_runtime.services.embedding_health.default_embedding_provider",
+                return_value=KeywordConceptEmbeddingProvider(),
+            ) as provider:
+                output, exit_code = CommandDispatcher().dispatch(args)
+
+        self.assertEqual(exit_code, 0)
+        provider.assert_called_once()
+        self.assertTrue(output["embedding"]["probe_ok"])
+        self.assertGreater(output["embedding"]["vector_dimensions"], 0)
+
+    def test_cli_embedding_test_reports_probe_failure(self) -> None:
+        args = argparse.Namespace(
+            command="embedding",
+            action="test",
+            root="",
+            provider=None,
+            base_url=None,
+            api_key=None,
+            model=None,
+            timeout=None,
+            policy_root=None,
+            install=False,
+        )
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            config = root / ".policy" / "config.json"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                json.dumps(
+                    {
+                        "embeddingProvider": "local",
+                        "embeddingModel": "missing-model",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args.root = str(root)
+
+            output, exit_code = CommandDispatcher().dispatch(args)
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(output["embedding"]["probe_ok"])
+        self.assertIn("ai-policy embedding configure", output["embedding"]["probe_error"])
 
     def test_embedding_status_resolves_relative_local_model_from_project_root(self) -> None:
         args = argparse.Namespace(

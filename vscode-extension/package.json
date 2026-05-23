@@ -2,7 +2,7 @@
   "name": "ai-policy-runtime",
   "displayName": "AI Policy Runtime",
   "description": "Generate better AI code with task-aware policies for Codex and Claude Code.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "cppmore",
   "author": {
     "name": "Miles Li"
@@ -45,7 +45,10 @@
     "onCommand:aiPolicy.configurePacks",
     "onCommand:aiPolicy.showStatus",
     "onCommand:aiPolicy.showEffectiveRules",
+    "onCommand:aiPolicy.testEmbedding",
+    "onCommand:aiPolicy.installLocalModel",
     "onCommand:aiPolicy.validateRuntime",
+    "onCommand:aiPolicy.cleanupWorkspace",
     "onView:aiPolicy.config",
     "onStartupFinished"
   ],
@@ -95,8 +98,20 @@
         "title": "AI Policy Runtime: Show Effective Rules"
       },
       {
+        "command": "aiPolicy.testEmbedding",
+        "title": "AI Policy Runtime: Test Embedding Provider"
+      },
+      {
+        "command": "aiPolicy.installLocalModel",
+        "title": "AI Policy Runtime: Install Local Embedding Model"
+      },
+      {
         "command": "aiPolicy.validateRuntime",
         "title": "AI Policy Runtime: Validate Runtime"
+      },
+      {
+        "command": "aiPolicy.cleanupWorkspace",
+        "title": "AI Policy Runtime: Clean Workspace Configuration"
       }
     ],
     "configuration": {
@@ -126,9 +141,7 @@
           "items": {
             "type": "string"
           },
-          "default": [
-            "cpp.safe_generation"
-          ],
+          "default": [],
           "description": "Policy packs to activate for agent prompts."
         },
         "aiPolicy.policyRoot": {

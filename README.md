@@ -147,7 +147,19 @@ Check the current embedding setup:
 
 ```powershell
 ai-policy embedding status --root D:\work\project
+ai-policy embedding test --root D:\work\project
 ```
+
+Clean AI Policy Runtime workspace integration before uninstalling or when
+resetting a project:
+
+```powershell
+ai-policy cleanup --root D:\work\project
+```
+
+Cleanup removes AI Policy Codex/Claude integration entries, `.policy/config.json`,
+and generated `.policy/current` state. It keeps caches, local models, and
+unrelated agent settings.
 
 ## Common Commands
 

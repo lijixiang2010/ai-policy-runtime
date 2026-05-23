@@ -12,7 +12,6 @@ from typing import Any
 PLUGIN_NAME = "ai-policy-runtime"
 MARKETPLACE_NAME = "ai-policy-runtime"
 PLUGIN_ID = f"{PLUGIN_NAME}@{MARKETPLACE_NAME}"
-DEFAULT_PACK = "cpp.safe_generation"
 DEFAULT_POST_REFINE_PACK = "generic.production_refinement"
 POST_REFINE_MODES = ("off", "light", "standard", "strict")
 
@@ -185,8 +184,7 @@ def configure_policy(
         config["enabled"] = enabled
         if enabled:
             config["agents"] = _append_unique(config.get("agents"), "claude")
-            if not config.get("packs"):
-                config["packs"] = [DEFAULT_PACK]
+            config.setdefault("packs", [])
             config["policyRoot"] = str(plugin_root)
             _ensure_git_commit_style(config)
         else:

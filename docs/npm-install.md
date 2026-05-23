@@ -87,7 +87,7 @@ D:\work\target-project\.claude\settings.local.json
 It enables:
 
 - AI Policy Runtime for the Claude agent.
-- The default `cpp.safe_generation` pack.
+- No policy packs by default; choose packs explicitly for each workspace.
 - The installed NPM package as the Claude plugin marketplace root.
 - `ai-policy-runtime@ai-policy-runtime` in Claude settings.
 
@@ -124,8 +124,8 @@ D:\work\target-project\.codex\hooks.json
 D:\work\target-project\.codex\config.toml
 ```
 
-It enables the `codex` agent, sets the default `cpp.safe_generation` pack when
-no packs are configured, records the installed NPM package as `policyRoot`, and
+It enables the `codex` agent, leaves packs empty when no packs are configured,
+records the installed NPM package as `policyRoot`, and
 enables project-local Codex hooks for bare `codex` CLI usage. It does not write
 `.claude/settings.local.json`.
 
@@ -160,6 +160,21 @@ Plugin-only toggles update Claude settings without creating or changing
 After updating `ai-policy-runtime`, rerun `ai-policy configure claude --root
 <project>` for each Claude Code workspace that should use the new package.
 Reconfiguration refreshes both `.policy/config.json` and Claude plugin settings.
+
+## Clean Workspace Configuration
+
+Before uninstalling or when resetting a project, remove AI Policy Runtime
+workspace integration state:
+
+```powershell
+ai-policy cleanup --root D:\work\target-project
+```
+
+Cleanup removes AI Policy entries from Codex and Claude settings, deletes
+`.policy/config.json`, and removes generated `.policy/current` state. It leaves
+caches, local models, and unrelated agent settings in place. Use
+`--keep-current` if you want to preserve the generated current-state files for
+debugging.
 
 ## Post-Task Refinement
 

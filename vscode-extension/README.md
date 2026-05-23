@@ -15,6 +15,7 @@ policy configuration that your selected agents use automatically.
 - Keep Codex and Claude Code behavior consistent in a workspace.
 - Choose focused policy packs for the kind of work you do.
 - Use OpenAI-compatible or local embeddings for better task matching.
+- Install and test the local embedding model from the extension view or command palette.
 - Inspect the exact Effective Rules generated for the latest prompt.
 
 C++ has the deepest policy coverage today. Python, CMake, Git, and general
@@ -55,6 +56,14 @@ The extension does not ship a local model by default. If you choose local
 embeddings, set **Local model path** to an existing sentence-transformers model
 directory.
 
+## Cleanup
+
+Before uninstalling the extension or resetting a workspace, run
+**AI Policy Runtime: Clean Workspace Configuration** from the command palette.
+It removes AI Policy Codex/Claude integration entries, `.policy/config.json`,
+generated `.policy/current` state, and `aiPolicy.*` workspace settings while
+keeping caches, local models, and unrelated agent settings.
+
 ## What It Creates
 
 AI Policy Runtime keeps configuration in your workspace:
@@ -76,7 +85,10 @@ rules were generated. Review them before committing workspace-specific settings.
 - **AI Policy Runtime: Enable Post-Task Refinement**
 - **AI Policy Runtime: Show Status**
 - **AI Policy Runtime: Show Effective Rules**
+- **AI Policy Runtime: Test Embedding Provider**
+- **AI Policy Runtime: Install Local Embedding Model**
 - **AI Policy Runtime: Validate Runtime**
+- **AI Policy Runtime: Clean Workspace Configuration**
 
 ## Privacy
 
