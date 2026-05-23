@@ -1,6 +1,6 @@
 {
   "name": "ai-policy-runtime",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Generate better AI code with task-aware policies for Codex.",
   "hooks": "./hooks/codex-hooks.json",
   "interface": {
