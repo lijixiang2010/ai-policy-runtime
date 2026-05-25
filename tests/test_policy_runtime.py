@@ -31,6 +31,7 @@ from ai_policy_runtime.task_analysis.semantic_index import SemanticTaskIndex
 from ai_policy_runtime.adapters.agent import build_post_refinement_task, merge_pack_ids
 from ai_policy_runtime.adapters.codex.wrapper import _build_codex_command
 from ai_policy_runtime.adapters.claude.wrapper import _build_claude_command
+from ai_policy_runtime.adapters.opencode.wrapper import _build_opencode_command
 from ai_policy_runtime.interfaces.cli import CommandDispatcher, _runtime_from_args
 from ai_policy_runtime.services.project_context import (
     ProjectContextAnalyzer,
@@ -67,6 +68,13 @@ from tools.configure_codex import (
     configure_policy as configure_codex_policy,
     main as configure_codex_main,
     status as codex_status,
+)
+from tools.configure_opencode import (
+    configure_opencode_config,
+    configure_opencode_plugin,
+    configure_policy as configure_opencode_policy,
+    main as configure_opencode_main,
+    status as opencode_status,
 )
 
 
@@ -2278,6 +2286,49 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertNotIn(BEGIN, text)
         self.assertNotIn(END, text)
 
+    def test_opencode_injects_and_clears_agents_policy_block(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = root / ".policy" / "current"
+            current.mkdir(parents=True)
+            (current / "effective-prompt.md").write_text("HARD:\n- OpenCode rule\n", encoding="utf-8")
+            agents = root / "AGENTS.md"
+            agents.write_text("# Manual\n\nKeep me.\n", encoding="utf-8")
+
+            injected = inject_current_prompt(root, "opencode")
+            clear_injected_prompt(root, "opencode")
+            text = agents.read_text(encoding="utf-8")
+
+        self.assertEqual(injected, agents)
+        self.assertIn("Keep me.", text)
+        self.assertNotIn("OpenCode rule", text)
+        self.assertNotIn(BEGIN, text)
+        self.assertNotIn(END, text)
+
+    def test_cli_inject_supports_opencode_target(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = root / ".policy" / "current"
+            current.mkdir(parents=True)
+            (current / "effective-prompt.md").write_text("HARD:\n- OpenCode\n", encoding="utf-8")
+
+            output, exit_code = CommandDispatcher().dispatch(
+                argparse.Namespace(
+                    command="inject",
+                    root=str(root),
+                    policy_root=None,
+                    skills="skills",
+                    packs="packs",
+                    target="opencode",
+                )
+            )
+
+            agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output["target"], "opencode")
+        self.assertIn("- OpenCode", agents)
+
     def test_codex_hook_reads_project_config_packs(self) -> None:
         config = {"packs": ["cpp.safe_generation", "cpp.low_latency"]}
         with patch.dict(os.environ, {}, clear=True):
@@ -2308,6 +2359,13 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertFalse(user_prompt_submit._enabled_for(config, "codex"))
         self.assertTrue(user_prompt_submit._enabled_for(config, "claude"))
+        self.assertFalse(user_prompt_submit._enabled_for(config, "opencode"))
+
+    def test_hook_config_supports_opencode_agent(self) -> None:
+        config = {"enabled": True, "agents": ["opencode"]}
+
+        self.assertFalse(user_prompt_submit._enabled_for(config, "codex"))
+        self.assertTrue(user_prompt_submit._enabled_for(config, "opencode"))
 
     def test_hook_local_provider_bootstraps_semantic_dependencies(self) -> None:
         config = user_prompt_submit.ProjectHookConfig.from_mapping(
@@ -3095,6 +3153,24 @@ class PolicyRuntimeTests(unittest.TestCase):
             ),
         )
 
+    def test_opencode_wrapper_builds_command_with_task_last(self) -> None:
+        command = _build_opencode_command(
+            ("opencode", "run"),
+            ("--model", "anthropic/claude-sonnet-4"),
+            "帮我写一个 C++20 低延迟队列",
+        )
+
+        self.assertEqual(
+            command,
+            (
+                "opencode",
+                "run",
+                "--model",
+                "anthropic/claude-sonnet-4",
+                "帮我写一个 C++20 低延迟队列",
+            ),
+        )
+
     def test_configure_claude_desktop_writes_policy_and_settings(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"
@@ -3592,6 +3668,103 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("UserPromptSubmit", hooks["hooks"])
         self.assertIn("hooks = true", codex_config)
 
+    def test_configure_opencode_writes_policy_and_config(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+
+            policy_path = configure_opencode_policy(root, plugin_root)
+            config_path = configure_opencode_config(root)
+            plugin_path = configure_opencode_plugin(root, plugin_root)
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            plugin = plugin_path.read_text(encoding="utf-8")
+
+        self.assertTrue(policy["enabled"])
+        self.assertEqual(policy["agents"], ["opencode"])
+        self.assertEqual(policy["packs"], [])
+        self.assertEqual(policy["policyRoot"], str(plugin_root))
+        self.assertEqual(policy["git"], {"commitStyle": "auto"})
+        self.assertEqual(config["$schema"], "https://opencode.ai/config.json")
+        self.assertEqual(config["instructions"], ["AGENTS.md"])
+        self.assertIn("opencode-user-prompt-submit", plugin)
+        self.assertIn("opencode-plugin-state.json", plugin)
+        self.assertIn("opencode-post-refine-prompt.md", plugin)
+        self.assertIn(str(plugin_root).replace("\\", "\\\\"), plugin)
+
+    def test_configure_opencode_preserves_existing_instructions(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            config = root / "opencode.json"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                json.dumps({"instructions": ["README.md"], "model": "anthropic/claude"}),
+                encoding="utf-8",
+            )
+
+            config_path = configure_opencode_config(root)
+            current = json.loads(config_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(current["instructions"], ["README.md", "AGENTS.md"])
+        self.assertEqual(current["model"], "anthropic/claude")
+
+    def test_configure_opencode_disable_preserves_other_agents(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            policy = root / ".policy"
+            policy.mkdir(parents=True)
+            (policy / "config.json").write_text(
+                json.dumps({"enabled": True, "agents": ["opencode", "codex"]}),
+                encoding="utf-8",
+            )
+
+            policy_path = configure_opencode_policy(root, Path.cwd(), enabled=False)
+            current = json.loads(policy_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(current["enabled"])
+        self.assertEqual(current["agents"], ["codex"])
+
+    def test_configure_opencode_status_reports_current_features(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+            configure_opencode_policy(root, plugin_root)
+            configure_opencode_config(root)
+            configure_opencode_plugin(root, plugin_root)
+
+            current = opencode_status(root, plugin_root)
+
+        self.assertTrue(current["runtime_enabled"])
+        self.assertTrue(current["opencode_agent_enabled"])
+        self.assertTrue(current["opencode_config_present"])
+        self.assertTrue(current["agents_instruction_configured"])
+        self.assertTrue(current["project_plugin_present"])
+        self.assertTrue(current["project_plugin_configured"])
+        self.assertFalse(current["project_plugin_state_present"])
+        self.assertFalse(current["project_post_refine_prompt_present"])
+        self.assertTrue(current["project_plugin_runtime_root_matches_expected"])
+        self.assertTrue(current["policy_root_matches_expected"])
+        self.assertEqual(current["git_commit_style"], "auto")
+
+    def test_configure_opencode_cli_updates_policy_and_config(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+
+            with patch("sys.stdout", new=io.StringIO()):
+                exit_code = configure_opencode_main(["--root", str(root)])
+
+            policy = json.loads(
+                (root / ".policy" / "config.json").read_text(encoding="utf-8")
+            )
+            config = json.loads((root / "opencode.json").read_text(encoding="utf-8"))
+            plugin = root / ".opencode" / "plugins" / "ai-policy-runtime.js"
+            plugin_exists = plugin.exists()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(policy["agents"], ["opencode"])
+        self.assertEqual(config["instructions"], ["AGENTS.md"])
+        self.assertTrue(plugin_exists)
+
     def test_clean_workspace_removes_only_ai_policy_entries(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"
@@ -3599,10 +3772,16 @@ class PolicyRuntimeTests(unittest.TestCase):
             configure_codex_policy(root, plugin_root)
             hooks_path = configure_codex_hooks(root, plugin_root)
             codex_config = configure_codex_config(root)
+            opencode_config = configure_opencode_config(root)
+            opencode_plugin = configure_opencode_plugin(root, plugin_root)
             claude_settings = configure_claude_settings(root, plugin_root, "local")
             current = root / ".policy" / "current"
             current.mkdir(parents=True)
             (current / "agent-hook-state.json").write_text("{}", encoding="utf-8")
+            opencode_state = current / "opencode-plugin-state.json"
+            opencode_state.write_text("{}", encoding="utf-8")
+            opencode_prompt = current / "opencode-post-refine-prompt.md"
+            opencode_prompt.write_text("Refine once.\n", encoding="utf-8")
 
             hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
             hooks["hooks"]["Stop"].append(
@@ -3613,16 +3792,21 @@ class PolicyRuntimeTests(unittest.TestCase):
             result = clean_workspace(root)
             cleaned_hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
             cleaned_codex_config = codex_config.read_text(encoding="utf-8")
+            cleaned_opencode = json.loads(opencode_config.read_text(encoding="utf-8"))
             cleaned_claude = json.loads(claude_settings.read_text(encoding="utf-8"))
 
         self.assertIn(str(root / ".policy" / "config.json"), result["removed"])
         self.assertIn(str(root / ".policy" / "current"), result["removed"])
+        self.assertIn(str(opencode_state), result["removed"])
+        self.assertIn(str(opencode_prompt), result["removed"])
+        self.assertIn(str(opencode_plugin), result["removed"])
         self.assertNotIn("UserPromptSubmit", cleaned_hooks["hooks"])
         self.assertEqual(
             cleaned_hooks["hooks"]["Stop"][0]["hooks"][0]["command"],
             "echo keep",
         )
         self.assertIn("hooks = true", cleaned_codex_config)
+        self.assertNotIn("instructions", cleaned_opencode)
         self.assertNotIn(PLUGIN_ID, cleaned_claude.get("enabledPlugins", {}))
         self.assertNotIn("ai-policy-runtime", cleaned_claude.get("extraKnownMarketplaces", {}))
 
@@ -3668,6 +3852,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn(".codex-plugin/*.json", package["files"])
         self.assertIn(".claude-plugin/*.json", package["files"])
         self.assertIn("hooks/*.json", package["files"])
+        self.assertIn("hooks/*.js", package["files"])
         self.assertIn("hooks/*.py", package["files"])
         self.assertIn("docs/reference/**/*.yaml", package["files"])
         self.assertIn("skills/**/*.yaml", package["files"])
@@ -3803,6 +3988,39 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("UserPromptSubmit", hooks["hooks"])
         self.assertIn("hooks = true", codex_config)
         self.assertFalse(claude_settings_exists)
+
+    def test_ai_policy_configure_opencode_command_updates_policy_and_config(self) -> None:
+        if shutil.which("node") is None:
+            self.skipTest("node is not available")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            env = {
+                **os.environ,
+                "AI_POLICY_PYTHON": sys.executable,
+            }
+            subprocess.run(
+                [
+                    "node",
+                    "bin/ai-policy.js",
+                    "configure",
+                    "opencode",
+                    "--root",
+                    str(root),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            policy = json.loads(
+                (root / ".policy" / "config.json").read_text(encoding="utf-8")
+            )
+            config = json.loads((root / "opencode.json").read_text(encoding="utf-8"))
+
+        self.assertTrue(policy["enabled"])
+        self.assertEqual(policy["agents"], ["opencode"])
+        self.assertEqual(config["instructions"], ["AGENTS.md"])
 
     def test_ai_policy_embedding_configure_writes_project_config(self) -> None:
         if shutil.which("node") is None:
