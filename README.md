@@ -204,6 +204,33 @@ Included packs:
 - `git.best_practices`
 - `generic.production_refinement`
 
+## Custom Policy Directories
+
+Projects can layer team-specific Skills and Packs on top of the bundled policy
+library without copying files into the package directories:
+
+```powershell
+ai-policy resolve "fix the deadlock" `
+  --extra-skills D:\team\policy\skills `
+  --extra-packs D:\team\policy\packs
+```
+
+Or persist the paths in `.policy/config.json`:
+
+```json
+{
+  "extraSkillsDirs": ["custom/skills", "../shared-policy/skills"],
+  "extraPacksDirs": ["custom/packs"],
+  "onDuplicate": "error"
+}
+```
+
+Relative paths resolve from the configured policy root. Built-in `skills` and
+`packs` load first, then extra directories in order. Duplicate `skill_id` or
+`pack_id` values default to `error`; use `first_wins` or `last_wins` only when
+the override is intentional. `ai-policy validate` checks the same duplicate
+policy used by task analysis and rule activation.
+
 ## Workspace Files
 
 AI Policy Runtime stores transparent project state in workspace files:

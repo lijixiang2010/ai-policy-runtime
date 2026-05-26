@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from ai_policy_runtime.domain.config import VALID_ON_DUPLICATE
 from ai_policy_runtime.domain.diagnostics import Diagnostic
 from ai_policy_runtime.infrastructure.conditions import ConditionError, evaluate_condition
 from ai_policy_runtime.infrastructure.loader import (
@@ -21,6 +22,8 @@ GROUP_KEYWORDS = {
     "soft": {"should", "should_not", "allow"},
     "preference": {"prefer"},
 }
+SKILL_FILE_SUFFIXES = (".skill.yaml", ".skill.yml", ".skill.json")
+PACK_FILE_SUFFIXES = (".pack.yaml", ".pack.yml", ".pack.json")
 
 
 class DslValidator:
@@ -39,23 +42,43 @@ class DslValidator:
         self,
         skills_dir: str | Path | Sequence[str | Path],
         packs_dir: str | Path | Sequence[str | Path],
+        *,
+        on_duplicate: str = "error",
     ) -> list[Diagnostic]:
+        if on_duplicate not in VALID_ON_DUPLICATE:
+            raise ValueError(
+                f"on_duplicate must be one of {VALID_ON_DUPLICATE}, got: {on_duplicate!r}"
+            )
         diagnostics: list[Diagnostic] = []
         skills_paths = _normalize_paths(skills_dir)
         packs_paths = _normalize_paths(packs_dir)
         skill_ids: set[str] = set()
+        skill_locations: dict[str, list[str]] = {}
+        pack_locations: dict[str, list[str]] = {}
 
         for skills_path in skills_paths:
-            for path in sorted(skills_path.rglob("*.skill.yaml")):
+            for path in _iter_skill_files(skills_path):
                 data = load_mapping(path)
                 diagnostics.extend(self._skills.validate(data, str(path)))
                 skill = data.get("skill", {})
                 if skill.get("id"):
-                    skill_ids.add(str(skill["id"]))
+                    skill_id = str(skill["id"])
+                    skill_ids.add(skill_id)
+                    skill_locations.setdefault(skill_id, []).append(str(path))
+
+        if on_duplicate == "error":
+            diagnostics.extend(_duplicate_id_diagnostics("skill_id", skill_locations))
 
         diagnostics.extend(self._validate_dependencies(skills_paths, skill_ids))
         for packs_path in packs_paths:
             diagnostics.extend(self._packs.validate_files(packs_path))
+            for path in _iter_pack_files(packs_path):
+                data = load_mapping(path)
+                pack = data.get("pack", {})
+                if pack.get("id"):
+                    pack_locations.setdefault(str(pack["id"]), []).append(str(path))
+        if on_duplicate == "error":
+            diagnostics.extend(_duplicate_id_diagnostics("pack_id", pack_locations))
         diagnostics.extend(self._validate_packs(packs_paths, skill_ids))
         return diagnostics
 
@@ -143,7 +166,7 @@ class PackDslValidator:
 
     def validate_files(self, packs_path: Path) -> list[Diagnostic]:
         diagnostics: list[Diagnostic] = []
-        for path in sorted(packs_path.rglob("*.pack.yaml")):
+        for path in _iter_pack_files(packs_path):
             diagnostics.extend(self.validate(load_mapping(path), str(path)))
         return diagnostics
 
@@ -155,8 +178,14 @@ _EFFECTIVE_RULES_VALIDATOR = EffectiveRulesValidator()
 def validate_repository(
     skills_dir: str | Path | Sequence[str | Path],
     packs_dir: str | Path | Sequence[str | Path],
+    *,
+    on_duplicate: str = "error",
 ) -> list[Diagnostic]:
-    return _DEFAULT_VALIDATOR.validate_repository(skills_dir, packs_dir)
+    return _DEFAULT_VALIDATOR.validate_repository(
+        skills_dir,
+        packs_dir,
+        on_duplicate=on_duplicate,
+    )
 
 
 def _normalize_paths(
@@ -165,6 +194,43 @@ def _normalize_paths(
     if isinstance(value, (str, Path)):
         return [Path(value)]
     return [Path(item) for item in value]
+
+
+def _duplicate_id_diagnostics(
+    id_name: str, locations_by_id: dict[str, list[str]]
+) -> list[Diagnostic]:
+    diagnostics: list[Diagnostic] = []
+    for item_id, locations in sorted(locations_by_id.items()):
+        if len(locations) <= 1:
+            continue
+        diagnostics.append(
+            Diagnostic(
+                "E006",
+                f"Duplicate {id_name}: {item_id} ({'; '.join(locations)})",
+                item_id,
+            )
+        )
+    return diagnostics
+
+
+def _iter_skill_files(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    return [
+        path
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and path.name.endswith(SKILL_FILE_SUFFIXES)
+    ]
+
+
+def _iter_pack_files(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    return [
+        path
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and path.name.endswith(PACK_FILE_SUFFIXES)
+    ]
 
 
 def validate_effective_rules_mapping(data: dict[str, Any], path: str = "") -> list[Diagnostic]:

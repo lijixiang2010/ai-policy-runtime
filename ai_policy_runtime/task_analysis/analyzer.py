@@ -4,7 +4,7 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from ai_policy_runtime.domain.config import EmbeddingConfig
+from ai_policy_runtime.domain.config import EmbeddingConfig, VALID_ON_DUPLICATE
 
 from .deterministic_extractor import DeterministicTaskExtractor
 from .embeddings import (
@@ -35,6 +35,7 @@ class TaskAnalyzer:
         embeddings: EmbeddingProvider | None = None,
         semantic: bool = True,
         cache_dir: str | Path | None = None,
+        on_duplicate: str = "error",
     ) -> "TaskAnalyzer":
         """Build an analyzer whose deterministic rules come from Skill metadata."""
 
@@ -43,6 +44,7 @@ class TaskAnalyzer:
             embeddings=embeddings,
             semantic=semantic,
             cache_dir=cache_dir,
+            on_duplicate=on_duplicate,
         )
 
     @classmethod
@@ -53,6 +55,7 @@ class TaskAnalyzer:
         embeddings: EmbeddingProvider | None = None,
         semantic: bool = True,
         cache_dir: str | Path | None = None,
+        on_duplicate: str = "error",
     ) -> "TaskAnalyzer":
         """Build an analyzer from multiple skill directories."""
 
@@ -62,6 +65,7 @@ class TaskAnalyzer:
                 embeddings,
                 semantic=semantic,
                 cache_dir=cache_dir,
+                on_duplicate=on_duplicate,
             )
         )
 
@@ -77,15 +81,20 @@ def build_extractor(
     *,
     semantic: bool = True,
     cache_dir: str | Path | None = None,
+    on_duplicate: str = "error",
 ) -> DeterministicTaskExtractor:
     """Create the default task extractor with sensible runtime defaults."""
 
+    if on_duplicate not in VALID_ON_DUPLICATE:
+        raise ValueError(
+            f"on_duplicate must be one of {VALID_ON_DUPLICATE}, got: {on_duplicate!r}"
+        )
     paths: Sequence[str | Path]
     if isinstance(skills_dir, (str, Path)):
         paths = (skills_dir,)
     else:
         paths = tuple(skills_dir)
-    lexicon = TaskLexicon.from_skills_dirs(paths)
+    lexicon = TaskLexicon.from_skills_dirs(paths, on_duplicate=on_duplicate)
     if not semantic:
         return DeterministicTaskExtractor(lexicon)
     provider = embeddings or default_embedding_provider()

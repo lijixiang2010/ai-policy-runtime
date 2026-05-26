@@ -117,7 +117,11 @@ class PolicyRuntime:
 
     def validate(self) -> list[Diagnostic]:
         paths = self.config.paths
-        return validate_repository(paths.all_skills, paths.all_packs)
+        return validate_repository(
+            paths.all_skills,
+            paths.all_packs,
+            on_duplicate=self.config.on_duplicate,
+        )
 
     def resolve(self, task_text: str, pack_ids: tuple[str, ...] = ()) -> ResolveResult:
         project, analysis, effective_rules, contributing_skills = self._evaluate(
@@ -247,6 +251,7 @@ class PolicyRuntime:
             embeddings=embeddings,
             semantic=True,
             cache_dir=paths.root / ".policy" / "cache" / "semantic-index",
+            on_duplicate=self.config.on_duplicate,
         ).analyze(
             task_text,
             TaskSignals(

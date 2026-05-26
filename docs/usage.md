@@ -277,7 +277,7 @@ appended in the order given. CLI flags merge with the config arrays — CLI
 entries come first, then config entries, with duplicates removed.
 
 When the same `skill_id` (or `pack_id`) appears in more than one directory,
-`onDuplicate` controls the merge:
+`onDuplicate` controls the merge for both rule activation and task analysis:
 
 | Value         | Behavior                                                        |
 | ------------- | --------------------------------------------------------------- |
@@ -286,6 +286,11 @@ When the same `skill_id` (or `pack_id`) appears in more than one directory,
 | `last_wins`   | Replace earlier definitions with later ones.                    |
 
 Equivalent CLI flag: `--on-duplicate {error,first_wins,last_wins}`.
+
+`ai-policy validate` uses the same duplicate policy. With the default `error`
+mode it reports duplicate `skill_id` / `pack_id` values before `resolve` or
+`run` would fail. With `first_wins` or `last_wins`, duplicates are treated as an
+explicit override choice.
 
 Backward compatibility: if no extras and no `onDuplicate` are configured, the
 runtime behaves exactly as before — a single skills/packs directory with

@@ -643,7 +643,15 @@ class ProjectContextMerger:
             return
         if key == "language" and not self.project_domain_supported:
             return
-        if key in context or _has_prompt_evidence(evidence, fact.field):
+        if key in context:
+            if _has_explicit_prompt_evidence(evidence, fact.field):
+                return
+            if key != "standard" or not _has_semantic_evidence(evidence, fact.field):
+                return
+            context[key] = fact.value
+            evidence.append(_project_evidence(fact))
+            return
+        if _has_explicit_prompt_evidence(evidence, fact.field):
             return
         context[key] = fact.value
         evidence.append(_project_evidence(fact))
@@ -745,8 +753,20 @@ def _project_evidence(fact: ProjectFact) -> ExtractionEvidence:
     )
 
 
-def _has_prompt_evidence(evidence: Iterable[ExtractionEvidence], field: str) -> bool:
-    return any(item.field == field and not item.source.startswith("project:") for item in evidence)
+def _has_explicit_prompt_evidence(
+    evidence: Iterable[ExtractionEvidence], field: str
+) -> bool:
+    return any(
+        item.field == field
+        and not item.source.startswith("project:")
+        and not item.source.startswith("signal:")
+        and ":semantic:" not in item.source
+        for item in evidence
+    )
+
+
+def _has_semantic_evidence(evidence: Iterable[ExtractionEvidence], field: str) -> bool:
+    return any(item.field == field and ":semantic:" in item.source for item in evidence)
 
 
 def _merged_confidence(task_analysis: TaskAnalysis, project: ProjectAnalysis) -> float:

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from ai_policy_runtime.domain.config import VALID_ON_DUPLICATE
 from ai_policy_runtime.infrastructure.loader import PolicyLoader
 
 
@@ -64,11 +65,22 @@ class TaskLexicon:
     trigger_profiles: tuple[TriggerProfile, ...] = ()
 
     @classmethod
-    def from_skills_dir(cls, path: str | Path) -> "TaskLexicon":
-        return cls.from_skills_dirs((path,))
+    def from_skills_dir(
+        cls, path: str | Path, *, on_duplicate: str = "error"
+    ) -> "TaskLexicon":
+        return cls.from_skills_dirs((path,), on_duplicate=on_duplicate)
 
     @classmethod
-    def from_skills_dirs(cls, paths: Sequence[str | Path]) -> "TaskLexicon":
+    def from_skills_dirs(
+        cls,
+        paths: Sequence[str | Path],
+        *,
+        on_duplicate: str = "error",
+    ) -> "TaskLexicon":
+        if on_duplicate not in VALID_ON_DUPLICATE:
+            raise ValueError(
+                f"on_duplicate must be one of {VALID_ON_DUPLICATE}, got: {on_duplicate!r}"
+            )
         loader = PolicyLoader()
         skill_profiles: list[SkillProfile] = []
         skill_rules: list[LexiconRule] = []
@@ -77,8 +89,7 @@ class TaskLexicon:
         context_rules: list[LexiconRule] = []
         trigger_capabilities: dict[str, set[str]] = {}
 
-        for file_path in _iter_skill_files_multi(paths):
-            document = SkillAnalysisDocument(loader.load_mapping(file_path), file_path)
+        for document in _load_skill_documents(paths, loader, on_duplicate=on_duplicate):
             skill_profiles.append(document.skill_profile())
             if skill_rule := document.skill_rule():
                 skill_rules.append(skill_rule)
@@ -298,6 +309,26 @@ def _iter_skill_files(path: str | Path) -> Iterable[Path]:
 def _iter_skill_files_multi(paths: Sequence[str | Path]) -> Iterable[Path]:
     for path in paths:
         yield from _iter_skill_files(path)
+
+
+def _load_skill_documents(
+    paths: Sequence[str | Path],
+    loader: PolicyLoader,
+    *,
+    on_duplicate: str,
+) -> Iterable[SkillAnalysisDocument]:
+    documents: dict[str, SkillAnalysisDocument] = {}
+    for file_path in _iter_skill_files_multi(paths):
+        document = SkillAnalysisDocument(loader.load_mapping(file_path), file_path)
+        if document.skill_id not in documents:
+            documents[document.skill_id] = document
+            continue
+        if on_duplicate == "error":
+            raise ValueError(f"Duplicate skill_id: {document.skill_id}")
+        if on_duplicate == "last_wins":
+            del documents[document.skill_id]
+            documents[document.skill_id] = document
+    return documents.values()
 
 
 def _first(value: Any) -> Any:

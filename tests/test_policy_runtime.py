@@ -21,7 +21,7 @@ from ai_policy_runtime.domain.pack import PackRegistry, SkillPack
 from ai_policy_runtime.domain.rule import RuleAction
 from ai_policy_runtime.task_analysis import TaskAnalyzer, TaskSignals
 from ai_policy_runtime.task_analysis.analyzer import default_embedding_provider
-from ai_policy_runtime.task_analysis.schema import TaskAnalysis
+from ai_policy_runtime.task_analysis.schema import ExtractionEvidence, TaskAnalysis
 from ai_policy_runtime.task_analysis.embeddings import (
     OpenAICompatibleEmbeddingConfig,
     OpenAICompatibleEmbeddingProvider,
@@ -48,7 +48,10 @@ from ai_policy_runtime.services.injector import (
     inject_current_prompt,
 )
 from ai_policy_runtime.services.local_models import LocalModelManager
-from ai_policy_runtime.services.validator import validate_effective_rules_mapping
+from ai_policy_runtime.services.validator import (
+    validate_effective_rules_mapping,
+    validate_repository,
+)
 from ai_policy_runtime.services.workspace_cleanup import clean_workspace
 
 
@@ -1710,6 +1713,57 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertEqual(merged.task.context["standard"], 17)
         self.assertEqual(merged.task.domain, "cpp")
+
+    def test_project_context_overrides_semantic_standard_guess(self) -> None:
+        task_analysis = TaskAnalysis(
+            task=TaskContext(
+                domain="cpp",
+                task_type="design_api",
+                capabilities=("api_design",),
+                tags=("cpp", "cpp17"),
+                context={
+                    "language": "cpp",
+                    "standard": 17,
+                    "selected_standard_is_known": True,
+                    "designing_api": True,
+                },
+            ),
+            confidence=0.8,
+            evidence=(
+                ExtractionEvidence(
+                    field="context.standard",
+                    value=17,
+                    source=(
+                        "skill:cpp.standard.cpp17.best_practices:"
+                        "context:detect_cpp17_standard:semantic:"
+                        "compile or design this c++ code for the c++17 standard"
+                    ),
+                    confidence=0.509,
+                ),
+            ),
+            activation_ready=True,
+        )
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "CMakeLists.txt").write_text(
+                "cmake_minimum_required(VERSION 3.25)\n"
+                "project(example LANGUAGES CXX)\n"
+                "set(CMAKE_CXX_STANDARD 20)\n",
+                encoding="utf-8",
+            )
+
+            project = ProjectContextAnalyzer(root).analyze()
+            merged = merge_project_analysis(task_analysis, project)
+
+        self.assertEqual(merged.task.context["standard"], 20)
+        self.assertTrue(
+            any(
+                item.field == "context.standard"
+                and item.value == 20
+                and item.source.startswith("project:")
+                for item in merged.evidence
+            )
+        )
 
     def test_project_config_can_request_conventional_commits_for_git_tasks(self) -> None:
         task_analysis = _git_prepare_commit_analysis()
@@ -5270,6 +5324,36 @@ class MultipleSkillPathTests(unittest.TestCase):
             )
             self.assertEqual(registry.get("extras_test.alpha").name, "extra version")
 
+    def test_task_lexicon_obeys_duplicate_policy(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            primary = root / "primary"
+            extra = root / "extra"
+            primary.mkdir()
+            extra.mkdir()
+            self._write_skill(primary, "extras_test.alpha", name="primary version")
+            self._write_skill(extra, "extras_test.alpha", name="extra version")
+
+            with self.assertRaises(ValueError):
+                TaskLexicon.from_skills_dirs(
+                    (primary, extra),
+                    on_duplicate="error",
+                )
+
+            first = TaskLexicon.from_skills_dirs(
+                (primary, extra),
+                on_duplicate="first_wins",
+            )
+            last = TaskLexicon.from_skills_dirs(
+                (primary, extra),
+                on_duplicate="last_wins",
+            )
+
+            self.assertEqual(len(first.skill_rules), 1)
+            self.assertEqual(len(last.skill_rules), 1)
+            self.assertIn("primary version", first.skill_rules[0].semantic_texts)
+            self.assertIn("extra version", last.skill_rules[0].semantic_texts)
+
     def test_duplicate_pack_id_obeys_on_duplicate(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -5286,6 +5370,49 @@ class MultipleSkillPathTests(unittest.TestCase):
                 SkillRegistry.from_dirs_multi(
                     (skills,), (primary_packs, extra_packs), on_duplicate="error"
                 )
+
+    def test_validate_repository_reports_default_duplicate_ids(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            primary = root / "primary"
+            extra = root / "extra"
+            primary_packs = root / "packs"
+            extra_packs = root / "extra_packs"
+            primary.mkdir()
+            extra.mkdir()
+            primary_packs.mkdir()
+            extra_packs.mkdir()
+            self._write_skill(primary, "extras_test.alpha", name="primary version")
+            self._write_skill(extra, "extras_test.alpha", name="extra version")
+            self._write_pack(primary_packs, "extras.shared", ("extras_test.alpha",))
+            self._write_pack(extra_packs, "extras.shared", ("extras_test.alpha",))
+
+            diagnostics = validate_repository(
+                (primary, extra),
+                (primary_packs, extra_packs),
+            )
+
+            self.assertTrue(
+                any(
+                    item.code == "E006"
+                    and "Duplicate skill_id: extras_test.alpha" in item.message
+                    for item in diagnostics
+                )
+            )
+            self.assertTrue(
+                any(
+                    item.code == "E006"
+                    and "Duplicate pack_id: extras.shared" in item.message
+                    for item in diagnostics
+                )
+            )
+            self.assertFalse(
+                validate_repository(
+                    (primary, extra),
+                    (primary_packs, extra_packs),
+                    on_duplicate="last_wins",
+                )
+            )
 
     def test_cli_args_populate_extras(self) -> None:
         from ai_policy_runtime.interfaces.cli import _runtime_from_args
