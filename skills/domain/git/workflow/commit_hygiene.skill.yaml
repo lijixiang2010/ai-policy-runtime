@@ -218,6 +218,19 @@ rules:
       action: recommend
       rationale: Small coherent commits are easier to review, revert, bisect, and explain.
 
+    - id: git.commit.plan_split_for_large_or_mixed_changes
+      title: Plan focused commits for large or mixed changes
+      when: domain == "git" and task_type == "prepare_commit" and (git_atomic_commit_required == true or git_change_count >= 6)
+      should: >-
+        Before staging or committing, create a commit plan that groups the
+        working tree into focused commits by logical concern, then use explicit
+        path or hunk staging for each commit. Do not split tightly coupled
+        implementation, tests, and documentation only because they touch
+        different files.
+      target: commit_scope
+      action: recommend
+      rationale: Large or mixed working trees need an explicit plan so history stays reviewable without fragmenting coherent changes.
+
     - id: git.commit.write_useful_subject
       title: Write a useful subject
       when: domain == "git" and task_type in ["prepare_commit", "write_commit_message", "review_git_history"]

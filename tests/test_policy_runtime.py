@@ -1239,6 +1239,47 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("Do not discard, overwrite, reset, clean", prompt)
         self.assertNotIn("selected C++ standard", prompt)
 
+    def test_git_commit_plan_rule_triggers_for_large_working_tree(self) -> None:
+        registry = SkillRegistry.from_dirs("skills", "packs")
+        task = TaskContext(
+            domain="git",
+            task_type="prepare_commit",
+            capabilities=("git_workflow",),
+            tags=("git", "commit", "working-tree"),
+            context={
+                "language": "git",
+                "git_change_count": 8,
+            },
+        )
+
+        effective = PolicyEngine(registry).evaluate(task, ("git.best_practices",))
+
+        self.assertTrue(
+            any("create a commit plan" in str(rule.value) for rule in effective.soft)
+        )
+        self.assertTrue(
+            any("explicit path or hunk staging" in str(rule.value) for rule in effective.soft)
+        )
+
+    def test_git_commit_plan_rule_stays_off_for_small_working_tree(self) -> None:
+        registry = SkillRegistry.from_dirs("skills", "packs")
+        task = TaskContext(
+            domain="git",
+            task_type="prepare_commit",
+            capabilities=("git_workflow",),
+            tags=("git", "commit", "working-tree"),
+            context={
+                "language": "git",
+                "git_change_count": 1,
+            },
+        )
+
+        effective = PolicyEngine(registry).evaluate(task, ("git.best_practices",))
+
+        self.assertFalse(
+            any("create a commit plan" in str(rule.value) for rule in effective.soft)
+        )
+
     def test_semantic_git_commit_match_activates_commit_hygiene(self) -> None:
         registry = SkillRegistry.from_dirs("skills", "packs")
         task = TaskContext(
