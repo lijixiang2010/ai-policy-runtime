@@ -47,8 +47,7 @@ def main() -> int:
         additional_context = _resolve_effective_prompt(
             prompt,
             project_root,
-            config.policy_root(project_root),
-            config.packs,
+            config,
         )
         _write_turn_state(
             project_root,
@@ -125,6 +124,9 @@ class ProjectHookConfig:
     enabled: bool = True
     agents: tuple[str, ...] = (DEFAULT_AGENT,)
     packs: tuple[str, ...] = ()
+    extra_skills_dirs: tuple[str, ...] = ()
+    extra_packs_dirs: tuple[str, ...] = ()
+    on_duplicate: str = "error"
     policy_root_value: str | Path = PLUGIN_ROOT
     auto_install: bool | None = None
     embedding_provider: str | None = None
@@ -146,6 +148,9 @@ class ProjectHookConfig:
             enabled=_coerce_enabled(data.get("enabled", True)),
             agents=_configured_agents(data),
             packs=_configured_packs(data),
+            extra_skills_dirs=_configured_path_list(data.get("extraSkillsDirs")),
+            extra_packs_dirs=_configured_path_list(data.get("extraPacksDirs")),
+            on_duplicate=_optional_string(data.get("onDuplicate")) or "error",
             policy_root_value=os.environ.get("AI_POLICY_ROOT")
             or data.get("policyRoot")
             or PLUGIN_ROOT,
@@ -166,6 +171,21 @@ class ProjectHookConfig:
         if not path.is_absolute():
             path = project_root / path
         return path.resolve()
+
+    def runtime_config(self, project_root: Path):
+        """Return the runtime config used by agent hooks for this project."""
+
+        _prepare_imports()
+
+        from ai_policy_runtime import RuntimeConfig
+
+        return RuntimeConfig.from_values(
+            root=project_root,
+            policy_root=self.policy_root(project_root),
+            extra_skills_dirs=self.extra_skills_dirs,
+            extra_packs_dirs=self.extra_packs_dirs,
+            on_duplicate=self.on_duplicate,
+        )
 
     def enabled_for(self, agent: str) -> bool:
         return self.enabled and agent in self.agents
@@ -240,20 +260,14 @@ class ProjectHookConfig:
 def _resolve_effective_prompt(
     prompt: str,
     project_root: Path,
-    policy_root: Path,
-    packs: tuple[str, ...],
+    config: ProjectHookConfig,
 ) -> str:
     _prepare_imports()
 
-    from ai_policy_runtime import PolicyRuntime, RuntimeConfig
+    from ai_policy_runtime import PolicyRuntime
 
-    runtime = PolicyRuntime(
-        RuntimeConfig.from_values(
-            root=project_root,
-            policy_root=policy_root,
-        )
-    )
-    result = runtime.resolve_if_applicable(prompt, packs)
+    runtime = PolicyRuntime(config.runtime_config(project_root))
+    result = runtime.resolve_if_applicable(prompt, config.packs)
     if not result.applicable or result.resolve_result is None:
         return ""
     return (result.resolve_result.current / "effective-prompt.md").read_text(encoding="utf-8")
@@ -318,6 +332,15 @@ def _configured_packs(config: dict[str, Any]) -> tuple[str, ...]:
         return _split_csv(packs)
     if isinstance(packs, list):
         return tuple(str(item).strip() for item in packs if str(item).strip())
+    return ()
+
+
+def _configured_path_list(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        text = value.strip()
+        return (text,) if text else ()
+    if isinstance(value, list):
+        return tuple(str(item).strip() for item in value if str(item).strip())
     return ()
 
 

@@ -20,7 +20,7 @@ from hooks.user_prompt_submit import (
 
 _prepare_imports()
 
-from ai_policy_runtime import PolicyRuntime, RuntimeConfig
+from ai_policy_runtime import PolicyRuntime
 from ai_policy_runtime.adapters.agent import build_post_refinement_task, merge_pack_ids
 
 
@@ -90,12 +90,7 @@ def _resolve_refinement_effective_prompt(
     project_root: Path,
     config: ProjectHookConfig,
 ) -> str:
-    runtime = PolicyRuntime(
-        RuntimeConfig.from_values(
-            root=project_root,
-            policy_root=config.policy_root(project_root),
-        )
-    )
+    runtime = PolicyRuntime(config.runtime_config(project_root))
     pack_ids = merge_pack_ids(config.packs, config.post_refine_pack_ids)
     result = runtime.resolve(refinement_task, pack_ids)
     return (result.current / "effective-prompt.md").read_text(encoding="utf-8")

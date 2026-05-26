@@ -2652,7 +2652,15 @@ class PolicyRuntimeTests(unittest.TestCase):
             policy = root / ".policy"
             policy.mkdir()
             (policy / "config.json").write_text(
-                json.dumps({"enabled": True, "agents": ["codex"]}),
+                json.dumps(
+                    {
+                        "enabled": True,
+                        "agents": ["codex"],
+                        "extraSkillsDirs": ["team/skills"],
+                        "extraPacksDirs": ["team/packs"],
+                        "onDuplicate": "first_wins",
+                    }
+                ),
                 encoding="utf-8",
             )
 
@@ -2668,7 +2676,7 @@ class PolicyRuntimeTests(unittest.TestCase):
                     user_prompt_submit,
                     "_resolve_effective_prompt",
                     return_value=effective_prompt,
-                ):
+                ) as resolve:
                     with patch("sys.stdout", new=io.StringIO()) as stdout:
                         exit_code = user_prompt_submit.main()
 
@@ -2686,6 +2694,10 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(state["additional_context_chars"], len(effective_prompt))
         self.assertIsNone(state["hook_error"])
         self.assertEqual(response["hookSpecificOutput"]["additionalContext"], effective_prompt)
+        hook_config = resolve.call_args.args[2]
+        self.assertEqual(hook_config.extra_skills_dirs, ("team/skills",))
+        self.assertEqual(hook_config.extra_packs_dirs, ("team/packs",))
+        self.assertEqual(hook_config.on_duplicate, "first_wins")
 
     def test_user_prompt_hook_extracts_codex_ide_request(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -2764,6 +2776,30 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(config.post_refine_pack_ids, ("cpp.production_refinement",))
         self.assertEqual(config.verify_target, "src")
 
+    def test_hook_config_reads_custom_policy_directories(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy_root = root / "policy"
+            config = user_prompt_submit.ProjectHookConfig.from_mapping(
+                {
+                    "policyRoot": str(policy_root),
+                    "extraSkillsDirs": ["team/skills"],
+                    "extraPacksDirs": "team/packs",
+                    "onDuplicate": "last_wins",
+                }
+            )
+
+            runtime_config = config.runtime_config(root)
+
+        self.assertEqual(config.extra_skills_dirs, ("team/skills",))
+        self.assertEqual(config.extra_packs_dirs, ("team/packs",))
+        self.assertEqual(config.on_duplicate, "last_wins")
+        self.assertEqual(runtime_config.extra_skills_dirs, ("team/skills",))
+        self.assertEqual(runtime_config.extra_packs_dirs, ("team/packs",))
+        self.assertEqual(runtime_config.on_duplicate, "last_wins")
+        self.assertEqual(runtime_config.paths.extra_skills, (policy_root / "team" / "skills",))
+        self.assertEqual(runtime_config.paths.extra_packs, (policy_root / "team" / "packs",))
+
     def test_stop_hook_allows_second_stop_to_prevent_loop(self) -> None:
         response = stop_refinement.build_stop_response({"stop_hook_active": True})
 
@@ -2807,6 +2843,40 @@ class PolicyRuntimeTests(unittest.TestCase):
                 )
 
         self.assertEqual(response, {"decision": "block", "reason": "Refine once."})
+
+    def test_stop_refinement_uses_custom_policy_directories(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = root / ".policy" / "current"
+            current.mkdir(parents=True)
+            (current / "effective-prompt.md").write_text(
+                "# Effective Rules for Current Task\n",
+                encoding="utf-8",
+            )
+            config = user_prompt_submit.ProjectHookConfig.from_mapping(
+                {
+                    "policyRoot": str(root),
+                    "extraSkillsDirs": ["team/skills"],
+                    "extraPacksDirs": ["team/packs"],
+                    "onDuplicate": "first_wins",
+                }
+            )
+            result = type("ResolveResult", (), {"current": current})()
+
+            with patch("hooks.stop_refinement.PolicyRuntime") as runtime_class:
+                runtime_class.return_value.resolve.return_value = result
+                output = stop_refinement.build_refinement_continuation_prompt(
+                    "Refactor this C++20 code.",
+                    root,
+                    config,
+                )
+
+            runtime_config = runtime_class.call_args.args[0]
+
+        self.assertIn("# Effective Rules for Current Task", output)
+        self.assertEqual(runtime_config.extra_skills_dirs, ("team/skills",))
+        self.assertEqual(runtime_config.extra_packs_dirs, ("team/packs",))
+        self.assertEqual(runtime_config.on_duplicate, "first_wins")
 
     def test_stop_hook_main_outputs_ascii_safe_json(self) -> None:
         with patch.object(stop_refinement, "_read_payload", return_value={}):
