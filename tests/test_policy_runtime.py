@@ -37,6 +37,7 @@ from ai_policy_runtime.services.project_context import (
     ProjectContextAnalyzer,
     merge_project_analysis,
 )
+import ai_policy_runtime.services.analyzer as analyzer_service
 from ai_policy_runtime.services.analyzer import analyze
 from ai_policy_runtime.services.effective_rules import EffectiveRulesRenderer
 from ai_policy_runtime.services.engine import PolicyConflictError
@@ -171,11 +172,12 @@ def _git_prepare_commit_analysis() -> TaskAnalysis:
     )
 
 
-class KeywordConceptEmbeddingProvider:
-    """Small deterministic embedding provider for semantic-index tests."""
+class FakeEmbeddingProvider:
+    """Test-only deterministic embedding provider for semantic-index tests."""
+
+    model_name = "fake-embedding-provider-v3"
 
     _CONCEPTS = (
-        ("cpp", ("c++", "cpp", "native code")),
         ("write", ("写", "create", "generate", "implementation", "build")),
         ("latency", ("尾延迟", "latency", "延迟", "hot path", "critical path")),
         ("allocation", ("分配", "allocation", "blocking", "阻塞", "unbounded")),
@@ -242,6 +244,48 @@ class KeywordConceptEmbeddingProvider:
             ),
         ),
         (
+            "read_only_string",
+            (
+                "read-only string",
+                "string parameter",
+                "string-like input",
+                "std::string_view",
+                "string_view",
+            ),
+        ),
+        (
+            "contiguous_range",
+            (
+                "contiguous range",
+                "non-owning contiguous range",
+                "non-owning range",
+                "range of orders",
+                "std::span",
+                "span",
+                "连续范围",
+            ),
+        ),
+        (
+            "ownership",
+            (
+                "ownership",
+                "owned resource",
+            ),
+        ),
+        (
+            "takes_ownership",
+            (
+                "takes ownership",
+                "resource ownership",
+            ),
+        ),
+        (
+            "resource",
+            (
+                "resource",
+            ),
+        ),
+        (
             "grouping",
             (
                 "scattered helpers",
@@ -277,14 +321,6 @@ class KeywordConceptEmbeddingProvider:
                 "清晰直接",
                 "language-native",
                 "boilerplate",
-            ),
-        ),
-        (
-            "git",
-            (
-                "git",
-                "version control",
-                "source control",
             ),
         ),
         (
@@ -361,6 +397,16 @@ class KeywordConceptEmbeddingProvider:
             ),
         ),
         (
+            "git_branch_name",
+            (
+                "short branch names",
+                "branch names",
+                "review branch",
+                "git branch",
+                "pull request branch",
+            ),
+        ),
+        (
             "git_stash_clean",
             (
                 "stash",
@@ -390,18 +436,8 @@ class KeywordConceptEmbeddingProvider:
                 "不要修改",
                 "只解释",
                 "先不要修改代码",
-            ),
-        ),
-        (
-            "cmake",
-            (
-                "cmake",
-                "cmakelists",
-                "cmakelists.txt",
-                "build system",
-                "cmakepresets",
-                "ctest",
-                "构建系统",
+                "输出效果是正确的吗",
+                "is this output correct",
             ),
         ),
         (
@@ -478,6 +514,7 @@ class KeywordConceptEmbeddingProvider:
             "cmake_repro",
             (
                 "cmake preset",
+                "presets",
                 "cmakepresets",
                 "cmakepresets.json",
                 "configure preset",
@@ -502,14 +539,6 @@ class KeywordConceptEmbeddingProvider:
                 "clang-tidy",
                 "cppcheck",
                 "测试",
-            ),
-        ),
-        (
-            "python",
-            (
-                "pythonic",
-                "python best practices",
-                "python 最佳实践",
             ),
         ),
         (
@@ -683,7 +712,7 @@ def _concept_token_matches(text: str, token: str) -> bool:
     return normalized in text
 
 
-class CountingEmbeddingProvider(KeywordConceptEmbeddingProvider):
+class CountingEmbeddingProvider(FakeEmbeddingProvider):
     def __init__(self) -> None:
         self.calls = 0
 
@@ -745,6 +774,30 @@ class AlwaysViolationVerifier:
 
 
 class PolicyRuntimeTests(unittest.TestCase):
+    _REAL_EMBEDDING_PROVIDER_TESTS = {
+        "test_hashing_embedding_provider_is_not_supported",
+        "test_runtime_uses_openai_compatible_embedding_provider_when_configured",
+        "test_python_runtime_accepts_embedding_provider_config",
+        "test_runtime_requires_embedding_provider_when_no_local_model_exists",
+    }
+
+    def setUp(self) -> None:
+        analyzer_service._DEFAULT_ANALYZER = None
+        self.addCleanup(self._reset_default_analyzer)
+        if self._testMethodName in self._REAL_EMBEDDING_PROVIDER_TESTS:
+            return
+        for target in (
+            "ai_policy_runtime.task_analysis.analyzer.default_embedding_provider",
+            "ai_policy_runtime.application.runtime.default_embedding_provider",
+        ):
+            patcher = patch(target, return_value=FakeEmbeddingProvider())
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _reset_default_analyzer() -> None:
+        analyzer_service._DEFAULT_ANALYZER = None
+
     def test_task_analyzer_understands_cpp20_low_latency_queue(self) -> None:
         analysis = analyze("帮我写一个 C++20 低延迟队列")
         task = analysis.task
@@ -806,7 +859,7 @@ class PolicyRuntimeTests(unittest.TestCase):
     def test_task_analyzer_uses_embedding_semantics_for_rephrased_intent(self) -> None:
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
-            embeddings=KeywordConceptEmbeddingProvider(),
+            embeddings=FakeEmbeddingProvider(),
         )
 
         analysis = analyzer.analyze("写一个 C++20 数据通道，主循环里不能有分配和阻塞，尾延迟要稳")
@@ -825,7 +878,7 @@ class PolicyRuntimeTests(unittest.TestCase):
     def test_task_analyzer_bootstraps_generic_refinement_from_semantics(self) -> None:
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
-            embeddings=KeywordConceptEmbeddingProvider(),
+            embeddings=FakeEmbeddingProvider(),
         )
 
         analysis = analyzer.analyze(
@@ -858,7 +911,7 @@ class PolicyRuntimeTests(unittest.TestCase):
     def test_semantic_recall_quality_eval_set(self) -> None:
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
-            embeddings=KeywordConceptEmbeddingProvider(),
+            embeddings=FakeEmbeddingProvider(),
         )
         fixture = _load_fixture("semantic_recall_eval.yaml")
 
@@ -901,7 +954,7 @@ class PolicyRuntimeTests(unittest.TestCase):
     def test_python_semantic_recall_quality_eval_set(self) -> None:
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
-            embeddings=KeywordConceptEmbeddingProvider(),
+            embeddings=FakeEmbeddingProvider(),
         )
         fixture = _load_fixture("python_semantic_recall_eval.yaml")
 
@@ -940,7 +993,7 @@ class PolicyRuntimeTests(unittest.TestCase):
     def test_task_analyzer_understands_chinese_commit_request(self) -> None:
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
-            embeddings=KeywordConceptEmbeddingProvider(),
+            embeddings=FakeEmbeddingProvider(),
         )
         task = analyzer.analyze(
             "提交一次代码",
@@ -954,7 +1007,7 @@ class PolicyRuntimeTests(unittest.TestCase):
     def test_task_analyzer_understands_chinese_commit_request_with_suffix(self) -> None:
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
-            embeddings=KeywordConceptEmbeddingProvider(),
+            embeddings=FakeEmbeddingProvider(),
         )
         task = analyzer.analyze(
             "提交一次代码试试",
@@ -1248,7 +1301,9 @@ class PolicyRuntimeTests(unittest.TestCase):
 
         self.assertIn("Check that the branch contains only relevant commits", prompt)
         self.assertIn("Make the pull request title follow", prompt)
-        self.assertIn("Use short branch names", prompt)
+        self.assertTrue(
+            _has_statement_containing(result.structured["effective_rules"], "Use short branch names")
+        )
 
     def test_cmake_best_practices_pack_outputs_target_rules(self) -> None:
         runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
@@ -1349,7 +1404,7 @@ class PolicyRuntimeTests(unittest.TestCase):
                 ),
             )
         )
-        index = SemanticTaskIndex(lexicon, KeywordConceptEmbeddingProvider(), threshold=0.1)
+        index = SemanticTaskIndex(lexicon, FakeEmbeddingProvider(), threshold=0.1)
 
         matches = index.search_scoped(
             "尾延迟要稳定",
@@ -2373,10 +2428,13 @@ class PolicyRuntimeTests(unittest.TestCase):
         )
 
         with patch.dict(os.environ, {}, clear=True), patch(
-            "builtins.__import__",
-            side_effect=ModuleNotFoundError("sentence_transformers"),
-        ), patch("hooks.user_prompt_submit._bootstrap_package") as bootstrap:
-            config.ensure_semantic_dependencies(Path.cwd())
+            "hooks.user_prompt_submit._bootstrap_package"
+        ) as bootstrap:
+            with patch(
+                "builtins.__import__",
+                side_effect=ModuleNotFoundError("sentence_transformers"),
+            ):
+                config.ensure_semantic_dependencies(Path.cwd())
 
         bootstrap.assert_called_once_with(semantic=True)
 
@@ -2391,10 +2449,13 @@ class PolicyRuntimeTests(unittest.TestCase):
             )
 
             with patch.dict(os.environ, {}, clear=True), patch(
-                "builtins.__import__",
-                side_effect=ModuleNotFoundError("sentence_transformers"),
-            ), patch("hooks.user_prompt_submit._bootstrap_package") as bootstrap:
-                config.ensure_semantic_dependencies(root)
+                "hooks.user_prompt_submit._bootstrap_package"
+            ) as bootstrap:
+                with patch(
+                    "builtins.__import__",
+                    side_effect=ModuleNotFoundError("sentence_transformers"),
+                ):
+                    config.ensure_semantic_dependencies(root)
 
         bootstrap.assert_called_once_with(semantic=True)
 
@@ -2949,7 +3010,7 @@ class PolicyRuntimeTests(unittest.TestCase):
 
             with patch(
                 "ai_policy_runtime.application.runtime.default_embedding_provider",
-                return_value=KeywordConceptEmbeddingProvider(),
+                return_value=FakeEmbeddingProvider(),
             ):
                 result = runtime.resolve_if_applicable(
                     "请检查当前项目，并说明 AI Policy Runtime 是否通过 Claude Code plugin 启用了。",
@@ -4324,7 +4385,7 @@ class PolicyRuntimeTests(unittest.TestCase):
                 clear=True,
             ), patch(
                 "ai_policy_runtime.services.embedding_health.default_embedding_provider",
-                return_value=KeywordConceptEmbeddingProvider(),
+                return_value=FakeEmbeddingProvider(),
             ) as provider:
                 output, exit_code = CommandDispatcher().dispatch(args)
 
@@ -4467,6 +4528,9 @@ class PolicyRuntimeTests(unittest.TestCase):
         env = {
             **os.environ,
             "AI_POLICY_PYTHON": sys.executable,
+            "AI_POLICY_EMBEDDING_PROVIDER": "openai-compatible",
+            "AI_POLICY_EMBEDDING_API_KEY": "test-key",
+            "AI_POLICY_EMBEDDING_MODEL": "test-embedding-model",
         }
         completed = subprocess.run(
             ["node", "bin/ai-policy.js", "doctor"],
@@ -4691,7 +4755,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         fixture = _load_fixture("prompt_quality_eval.yaml")
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
-            embeddings=KeywordConceptEmbeddingProvider(),
+            embeddings=FakeEmbeddingProvider(),
         )
         registry = SkillRegistry.from_dirs("skills", "packs")
         renderer = EffectiveRulesRenderer()
@@ -4744,7 +4808,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         fixture = _load_fixture("python_prompt_quality_eval.yaml")
         analyzer = TaskAnalyzer.from_skills_dir(
             "skills",
-            embeddings=KeywordConceptEmbeddingProvider(),
+            embeddings=FakeEmbeddingProvider(),
         )
         registry = SkillRegistry.from_dirs("skills", "packs")
         renderer = EffectiveRulesRenderer()
