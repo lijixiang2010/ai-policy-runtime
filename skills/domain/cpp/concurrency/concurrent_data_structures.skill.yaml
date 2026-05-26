@@ -1,0 +1,179 @@
+# Skill: C++ Concurrent Data Structures
+# File: skills/domain/cpp/concurrency/concurrent_data_structures.skill.yaml
+
+skill:
+  id: cpp.concurrency.concurrent_data_structures
+  name: C++ Concurrent Data Structures
+  version: 1.0.0
+  status: stable
+  description: >-
+    Concurrency skill for thread-safe container interfaces, invariant
+    preservation, lock granularity, contention, and existing concurrent
+    data-structure libraries.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 90
+
+  tags:
+    - cpp
+    - concurrency
+    - containers
+    - data-structures
+    - api-design
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - api_design
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - design_api
+
+  dependencies:
+    - cpp.concurrency.synchronization_and_locks
+    - cpp.api_design.interface_intent
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_cpp_concurrent_data_structure
+      when_text_matches:
+        - thread-safe queue
+        - concurrent queue
+        - concurrent stack
+        - lock-free queue
+        - ring buffer
+        - producer consumer
+        - mpmc
+        - spsc
+        - thread-safe container
+      set:
+        designs_concurrent_data_structure: true
+        concurrent: true
+      tags:
+        - concurrency
+        - data-structures
+      confidence: 0.88
+
+sources:
+  - rainer_grimm_concurrency_modern_cpp:data_structures
+  - rainer_grimm_concurrency_modern_cpp:best_practices
+  - cpp_core_guidelines:CP.3
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.concurrent_container.no_check_then_act_interface
+      title: Avoid race-prone check-then-act interfaces
+      when: language == "cpp" and designs_concurrent_data_structure == true
+      must_not: >-
+        Do not expose thread-safe container APIs that require callers to compose
+        separate check-then-act calls, such as empty followed by pop, to preserve
+        correctness.
+      target: concurrent_interface
+      action: forbid
+      rationale: >-
+        State can change between calls, so the race belongs to the interface
+        rather than the caller.
+
+  soft:
+    - id: cpp.concurrent_container.preserve_invariants_inside_public_api
+      title: Preserve invariants inside public operations
+      when: language == "cpp" and designs_concurrent_data_structure == true
+      should: >-
+        Design public operations so each operation preserves the data
+        structure's invariants under concurrent use.
+      target: concurrent_interface
+      action: recommend
+      rationale: >-
+        Thread-safe classes should make correct usage the natural usage.
+
+    - id: cpp.concurrent_container.do_not_expose_internals
+      title: Do not expose unsynchronized internals
+      when: language == "cpp" and designs_concurrent_data_structure == true
+      should_not: >-
+        Avoid returning references, iterators, raw pointers, or internal handles
+        that let callers access mutable internals without the container's
+        synchronization protocol.
+      target: concurrent_interface
+      action: discourage
+      rationale: >-
+        Leaking internals bypasses the data structure's synchronization boundary.
+
+    - id: cpp.concurrent_container.choose_lock_granularity_by_usage
+      title: Choose lock granularity by usage pattern
+      when: language == "cpp" and designs_concurrent_data_structure == true
+      should: >-
+        Choose coarse-grained locking, fine-grained locking, lock-free
+        algorithms, or sharding based on measured contention, read/write mix,
+        complexity budget, and latency goals.
+      target: lock_granularity
+      action: recommend
+      rationale: >-
+        Simpler locking is often correct and maintainable, while finer
+        granularity only pays off for the right workload.
+
+    - id: cpp.concurrent_container.prefer_existing_library
+      title: Prefer existing concurrent data structures
+      when: language == "cpp" and designs_concurrent_data_structure == true
+      should: >-
+        Prefer a proven standard, platform, or project-approved concurrent data
+        structure before implementing custom lock-free or fine-grained
+        containers.
+      target: concurrent_data_structure
+      action: recommend
+      rationale: >-
+        Reused concurrent containers reduce algorithmic, memory-reclamation, and
+        ordering risk.
+
+  preference:
+    - id: cpp.concurrent_container.preference_atomic_operation_api
+      title: Prefer atomic operation APIs
+      when: language == "cpp" and designs_concurrent_data_structure == true
+      prefer: atomic_operation_api
+      over:
+        - check_then_act_api
+      target: concurrent_interface
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: cpp.concurrency.concurrent_data_structures.verify.container_review
+      type: llm_self_check
+      applies_to:
+        - concurrent_interface
+        - lock_granularity
+        - concurrent_data_structure
+      severity: advisory
+      prompt: >-
+        Review concurrent data structures for race-prone interfaces, invariant
+        preservation, exposed internals, lock granularity, contention, and
+        library alternatives.
+
+effective_rule_examples:
+  thread_safe_queue:
+    task_context:
+      language: cpp
+      concurrent: true
+      designs_concurrent_data_structure: true
+    effective_rules:
+      hard:
+        - Do not expose check-then-act container APIs such as empty followed by
+          pop as the required correctness path.
+
+authoring_notes:
+  - This skill owns container API shape. Synchronization primitives remain in
+    the lock, condition-variable, and atomic skills.

@@ -93,6 +93,63 @@ Verification tooling is split into two cross-cutting skills:
 Semantic skills may still name specific verification hooks, but they do not own
 the overall verification strategy or the agent's verification execution workflow.
 
+## Concurrency Skill Shape
+
+Concurrency guidance is grouped by decision level rather than copied from book
+or guideline chapter order. The goal is an expert-shaped hierarchy: core safety
+rules appear early; specialized mechanisms stay dormant until the task clearly
+needs them.
+
+Tier 1, core invariants:
+
+- `data_race_safety` owns shared mutable state, the hard no-data-race rule, and
+  the default preference for isolated state or message passing.
+- `thread_lifetime` owns `std::thread`, `std::jthread`, join, detach, shutdown,
+  and cancellation ownership.
+
+Tier 2, normal synchronization mechanisms:
+
+- `synchronization_and_locks` owns mutex discipline, RAII locks, critical-section
+  size, multi-mutex locking, and deadlock-prone calls while locked.
+- `condition_variables` owns predicated waits, guarded predicate state,
+  notification ordering, and one-shot notification alternatives.
+- `tasks_and_futures` owns task-based result delivery, `std::async`, futures,
+  promises, launch semantics, result consumption, and standalone async task
+  creation. Executor queue capacity belongs to `thread_pools_executors`.
+- `thread_pools_executors` owns production executor boundaries: bounded
+  submission, backpressure, shutdown, task outcome channels, cancellation,
+  worker liveness, and capacity sizing. It does not own generic future result
+  semantics or concurrent container interface design.
+
+Tier 3, specialized design surfaces:
+
+- `concurrent_data_structures` owns thread-safe container interface shape,
+  invariant preservation, exposed internals, lock granularity, and library reuse.
+- `atomics_memory_model` owns `std::atomic`, memory-order justification,
+  volatile misuse, mixed atomic/non-atomic access, and custom lock-free risk.
+- `lock_free_expert` owns post-core custom lock-free algorithms, including
+  reclamation, ABA, progress guarantees, memory-order protocols, and expert
+  verification. It should stay dormant unless those terms are explicit.
+
+Tier 4, post-core advanced execution:
+
+- `coroutines_and_execution` owns C++20 coroutine frame lifetime, await/resume
+  behavior, cancellation, custom awaiter/promise risk, and parallel algorithm
+  callback safety. It should activate only when coroutine or parallel execution
+  semantics are explicit.
+
+The common policy direction is: minimize shared mutable data, prefer immutable
+or local state when practical, use task/message abstractions before raw shared
+state, make ownership and shutdown explicit, keep synchronization reviewable,
+and reserve custom atomics or lock-free algorithms for measured, justified
+cases.
+
+Use `cpp.concurrency_expert` when the task is primarily concurrency design,
+implementation, or review. It extends the safe-generation baseline and includes
+the full concurrency hierarchy, while target-specific triggers keep coroutine,
+lock-free, executor, and condition-variable details from appearing unless the
+task asks for them.
+
 ## Effective Rules
 
 The agent should receive only the reduced Effective Rules for the current task.

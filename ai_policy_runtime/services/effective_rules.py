@@ -11,6 +11,73 @@ from ai_policy_runtime.domain.task import TaskContext
 
 SCHEMA_VERSION = 1
 
+CPP_TARGET_SCORE = {
+    "string_parameter": 120,
+    "contiguous_range_parameter": 115,
+    "parameter_passing": 100,
+    "interface_intent": 95,
+    "ownership": 95,
+    "ownership_transfer": 90,
+    "api_design": 85,
+    "template_constraints": 80,
+    "template_diagnostics": 75,
+    "template_abstraction": 65,
+    "condition_variable": 120,
+    "coroutine_lifetime": 120,
+    "parallel_algorithm_safety": 115,
+    "parallel_execution_policy": 110,
+    "executor_contract": 120,
+    "executor_task_outcome": 105,
+    "executor_liveness": 100,
+    "memory_model": 110,
+    "memory_ordering": 105,
+    "lock_free_contract": 125,
+    "memory_reclamation": 125,
+    "lock_free_design": 110,
+    "lock_free_verification": 105,
+    "concurrent_interface": 105,
+}
+
+CPP_API_TARGETS = {
+    "string_parameter",
+    "parameter_passing",
+    "interface_intent",
+    "ownership",
+    "ownership_transfer",
+}
+
+CPP_CONTEXT_TARGETS = {
+    "uses_condition_variable": {"condition_variable"},
+    "uses_thread_pool_or_executor": {
+        "executor_contract",
+        "executor_task_outcome",
+        "executor_liveness",
+        "concurrency_model",
+    },
+    "uses_coroutines": {
+        "coroutine_lifetime",
+        "coroutine_execution",
+        "coroutine_abstraction",
+    },
+    "uses_atomics": {"memory_model", "memory_ordering", "lock_free"},
+    "uses_lock_free_algorithm": {
+        "lock_free_contract",
+        "memory_reclamation",
+        "lock_free_design",
+        "lock_free_verification",
+        "concurrency_model",
+    },
+    "uses_parallel_algorithms": {
+        "parallel_algorithm_safety",
+        "parallel_execution_policy",
+    },
+    "designs_concurrent_data_structure": {
+        "concurrent_interface",
+        "lock_granularity",
+        "concurrent_data_structure",
+    },
+}
+
 
 class EffectiveRulesRenderer:
     """Render Effective Rules into the standardized machine and agent formats."""
@@ -406,6 +473,8 @@ class PromptRuleSelector:
             score += 90
         if self.refinement and target in {"ownership", "resource_lifetime", "undefined_behavior", "standard_availability"}:
             score += 20
+        if _is_cpp_context(self.context):
+            score += _cpp_context_score(self.context, target, source, text)
         return score
 
     def _soft_score(self, rule: dict[str, Any]) -> int:
@@ -653,6 +722,8 @@ class PromptRuleSelector:
             ):
                 if needle in text:
                     score += 30
+        if _is_cpp_context(self.context):
+            score += _cpp_context_score(self.context, target, source, text)
         if self.refinement:
             target_bonus = {
                 "complexity": 90,
@@ -981,6 +1052,34 @@ def _is_cpp_context(context: dict[str, Any]) -> bool:
         or context.get("language") == "cpp"
         or "standard" in context
     )
+
+
+def _cpp_context_score(
+    context: dict[str, Any],
+    target: str,
+    source: str,
+    text: str,
+) -> int:
+    score = CPP_TARGET_SCORE.get(target, 0)
+    if context.get("designing_api") or context.get("parameter_design"):
+        if source.startswith("cpp.api_design."):
+            score += 120
+        if source.startswith("cpp.standard.cpp17") and target == "string_parameter":
+            score += 120
+        if target in CPP_API_TARGETS:
+            score += 90
+        if "ownership explicit" in text or "ownership transfer explicit" in text:
+            score += 160
+    if context.get("parameter_kind") == "read_only_string":
+        if target == "string_parameter" or "std::string_view" in text:
+            score += 220
+    if context.get("parameter_kind") == "contiguous_range":
+        if target == "contiguous_range_parameter" or "std::span" in text:
+            score += 200
+    for context_key, targets in CPP_CONTEXT_TARGETS.items():
+        if context.get(context_key) and target in targets:
+            score += 220
+    return score
 
 
 def _rule_text(rule: dict[str, Any]) -> str:

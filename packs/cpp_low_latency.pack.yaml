@@ -11,6 +11,15 @@ includes:
 - cpp.performance.hot_path
 - cpp.performance.allocation_control
 - cpp.concurrency.data_race_safety
+- cpp.concurrency.thread_lifetime
+- cpp.concurrency.synchronization_and_locks
+- cpp.concurrency.condition_variables
+- cpp.concurrency.tasks_and_futures
+- cpp.concurrency.thread_pools_executors
+- cpp.concurrency.atomics_memory_model
+- cpp.concurrency.lock_free_expert
+- cpp.concurrency.concurrent_data_structures
+- cpp.concurrency.coroutines_and_execution
 excludes: []
 overrides:
 - id: cpp.low_latency.preference.performance_when_safe

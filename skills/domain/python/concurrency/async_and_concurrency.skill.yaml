@@ -58,16 +58,16 @@ task_analysis:
         - asyncio
         - async python
         - async def
-        - thread
+        - python thread
         - threadpoolexecutor
         - processpoolexecutor
         - multiprocessing
-        - subprocess
-        - queue
-        - concurrency
-        - parallelism
-        - cancellation
-        - timeout
+        - python subprocess
+        - python queue
+        - python concurrency
+        - python parallelism
+        - asyncio cancellation
+        - asyncio timeout
       set:
         python_concurrency_requested: true
       tags:

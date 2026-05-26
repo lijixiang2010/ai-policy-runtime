@@ -1,0 +1,171 @@
+# Skill: C++ Tasks And Futures
+# File: skills/domain/cpp/concurrency/tasks_and_futures.skill.yaml
+
+skill:
+  id: cpp.concurrency.tasks_and_futures
+  name: C++ Tasks And Futures
+  version: 1.0.0
+  status: stable
+  description: >-
+    Concurrency skill for task-based concurrency, std::async, futures,
+    promises, result delivery, exception propagation, and launch semantics.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 89
+
+  tags:
+    - cpp
+    - concurrency
+    - async
+    - future
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - modernize_code
+    - api_design
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+      - design_api
+
+  dependencies:
+    - cpp.concurrency.thread_lifetime
+    - cpp.error_handling.error_model
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_cpp_tasks_and_futures
+      when_text_matches:
+        - std::async
+        - std::future
+        - std::promise
+        - packaged_task
+        - async task
+        - task-based
+        - launch::async
+      set:
+        uses_tasks_or_futures: true
+        concurrent: true
+      tags:
+        - concurrency
+        - async
+      confidence: 0.86
+
+sources:
+  - cpp_core_guidelines:CP.4
+  - cpp_core_guidelines:CP.31
+  - rainer_grimm_concurrency_modern_cpp:best_practices
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  soft:
+    - id: cpp.task.prefer_task_for_result_work
+      title: Prefer task abstractions for result-producing work
+      when: language == "cpp" and uses_tasks_or_futures == true
+      should: >-
+        Prefer task abstractions such as std::async, std::future,
+        std::promise, or packaged_task when concurrent work needs to return a
+        value, signal completion, or propagate exceptions.
+      target: concurrency_model
+      action: recommend
+      rationale: >-
+        Task abstractions provide structured result and error channels that
+        avoid ad-hoc shared variables.
+
+    - id: cpp.task.make_launch_semantics_explicit
+      title: Make std::async launch semantics explicit when timing matters
+      when: language == "cpp" and uses_tasks_or_futures == true
+      should: >-
+        Specify std::launch::async, std::launch::deferred, or a project executor
+        abstraction when execution timing, thread usage, or latency matters.
+      target: async_execution
+      action: recommend
+      rationale: >-
+        The default std::async policy can be implementation-dependent and may
+        not match latency or scheduling expectations.
+
+    - id: cpp.task.consume_future_result
+      title: Consume future results and exceptions deliberately
+      when: language == "cpp" and uses_tasks_or_futures == true
+      should: >-
+        Consume future results with get or otherwise document the ownership,
+        cancellation, waiting, and exception-observation path.
+      target: async_error_handling
+      action: recommend
+      rationale: >-
+        Unobserved asynchronous failures and forgotten waits make shutdown and
+        diagnostics unreliable.
+
+    - id: cpp.task.bound_task_creation
+      title: Bound task creation
+      when: language == "cpp" and uses_tasks_or_futures == true and uses_thread_pool_or_executor != true
+      should: >-
+        Bound standalone async task creation according to CPU, I/O, memory, and
+        latency constraints.
+      target: concurrency_bounds
+      action: recommend
+      rationale: >-
+        Ad-hoc unbounded task creation can exhaust resources or destabilize latency.
+
+  preference:
+    - id: cpp.task.preference_tasks_over_threads
+      title: Prefer tasks over raw threads when appropriate
+      when: language == "cpp" and uses_tasks_or_futures == true
+      prefer: task_based_concurrency
+      over:
+        - raw_thread_for_result_delivery
+      target: concurrency_model
+      action: prefer
+
+exceptions:
+  - id: cpp.task.exception_dedicated_thread_required
+    when: dedicated_thread_required == true
+    allow:
+      - raw_thread
+    require:
+      - Explain why the work requires a dedicated thread rather than a task,
+        executor, or thread-pool abstraction.
+      - Keep thread lifetime and shutdown ownership explicit.
+
+verification:
+  llm_self_check:
+    - id: cpp.concurrency.tasks_and_futures.verify.task_review
+      type: llm_self_check
+      applies_to:
+        - concurrency_model
+        - async_execution
+        - async_error_handling
+        - concurrency_bounds
+      severity: advisory
+      prompt: >-
+        Review task and future use for launch semantics, result consumption,
+        exception propagation, bounded work creation, and shutdown behavior.
+
+effective_rule_examples:
+  async_result:
+    task_context:
+      language: cpp
+      concurrent: true
+      uses_tasks_or_futures: true
+    effective_rules:
+      soft:
+        - Prefer task abstractions for result-producing work.
+
+authoring_notes:
+  - This skill complements thread lifetime guidance; it should not weaken
+    ownership or cancellation requirements for dedicated threads.

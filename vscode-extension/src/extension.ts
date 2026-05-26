@@ -140,6 +140,12 @@ const KNOWN_PACKS: PackItem[] = [
     tags: ['C++', 'Performance']
   },
   {
+    label: 'cpp.concurrency_expert',
+    description: 'C++ synchronization, executors, atomics, coroutines, and lock-free review',
+    category: 'Development',
+    tags: ['C++', 'Concurrency', 'Review']
+  },
+  {
     label: 'cpp.code_review',
     description: 'C++ review with safety checks',
     category: 'Review',

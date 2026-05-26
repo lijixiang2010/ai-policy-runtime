@@ -1,0 +1,224 @@
+# Skill: C++ Coroutines And Advanced Execution
+# File: skills/domain/cpp/concurrency/coroutines_and_execution.skill.yaml
+
+skill:
+  id: cpp.concurrency.coroutines_and_execution
+  name: C++ Coroutines And Advanced Execution
+  version: 1.0.0
+  status: stable
+  description: >-
+    Advanced concurrency skill for C++20 coroutines, async workflows, parallel
+    algorithms, and coordination primitives that should stay dormant unless the
+    task explicitly needs them.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 84
+
+  tags:
+    - cpp
+    - concurrency
+    - coroutine
+    - cpp20
+    - advanced
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - modernize_code
+    - api_design
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+      - design_api
+
+  dependencies:
+    - cpp.concurrency.data_race_safety
+    - cpp.concurrency.thread_lifetime
+    - cpp.standard.standard_availability
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_cpp_coroutines
+      when_text_matches:
+        - coroutine
+        - coroutines
+        - co_await
+        - co_yield
+        - co_return
+        - awaitable
+        - generator coroutine
+      set:
+        uses_coroutines: true
+        concurrent: true
+      tags:
+        - concurrency
+        - coroutine
+        - cpp20
+      confidence: 0.88
+
+    - id: detect_cpp_parallel_algorithms
+      when_text_matches:
+        - parallel STL
+        - execution policy
+        - std::execution
+        - par_unseq
+        - std::reduce
+        - parallel algorithm
+      set:
+        uses_parallel_algorithms: true
+        concurrent: true
+      tags:
+        - concurrency
+        - parallel-algorithms
+      confidence: 0.84
+
+sources:
+  - rainer_grimm_concurrency_modern_cpp:coroutines
+  - rainer_grimm_concurrency_modern_cpp:parallel_algorithms
+  - rainer_grimm_concurrency_modern_cpp:best_practices
+
+source_notes:
+  - Source references are traceability anchors only; rules are reconstructed into
+    concise project-owned guidance.
+
+rules:
+  hard:
+    - id: cpp.coroutine.require_lifetime_execution_contract
+      title: Require coroutine lifetime and execution contract
+      when: language == "cpp" and uses_coroutines == true
+      must: >-
+        Ensure coroutine frames, awaiters, promises, and continuations cannot
+        reference expired state; define where work resumes, how cancellation or
+        stop requests are observed, and who owns unfinished coroutine work.
+      target: coroutine_lifetime
+      action: require
+      rationale: >-
+        Suspension separates lexical scope from execution lifetime, making
+        dangling captures, resume-context bugs, and shutdown leaks easy to miss.
+
+    - id: cpp.parallel.no_unsafe_side_effects
+      title: Avoid unsafe side effects in parallel algorithm callbacks
+      when: language == "cpp" and uses_parallel_algorithms == true
+      must_not: >-
+        Do not use parallel algorithm callbacks that mutate shared state without
+        a safe reduction, partitioning, synchronization, or ownership strategy.
+      target: parallel_algorithm_safety
+      action: forbid
+      rationale: >-
+        Parallel execution policies can run callbacks concurrently and expose
+        data races or ordering assumptions.
+
+  soft:
+    - id: cpp.coroutine.prefer_library_abstractions
+      title: Prefer proven coroutine abstractions
+      when: language == "cpp" and uses_coroutines == true
+      should: >-
+        Prefer project-approved coroutine/task/generator abstractions over
+        custom promise types and awaiters unless the low-level behavior is
+        required and reviewed.
+      target: coroutine_abstraction
+      action: recommend
+      rationale: >-
+        Correct promise, awaiter, allocation, exception, and destruction
+        behavior is subtle and easy to get wrong.
+
+    - id: cpp.coroutine.define_failure_allocation_destruction
+      title: Define coroutine failure, allocation, and destruction behavior
+      when: language == "cpp" and uses_coroutines == true
+      should: >-
+        Define exception propagation, cancellation cleanup, coroutine-frame
+        allocation, and destruction behavior for suspended and completed
+        coroutines.
+      target: coroutine_execution
+      action: recommend
+      rationale: >-
+        Coroutine frames can outlive the call site and fail or deallocate on a
+        different execution path than ordinary stack code.
+
+    - id: cpp.parallel_prefer_pure_or_reduction_callbacks
+      title: Prefer pure callbacks or explicit reductions
+      when: language == "cpp" and uses_parallel_algorithms == true
+      should: >-
+        Prefer pure callbacks, thread-local accumulation, standard reductions,
+        or independent output ranges for parallel algorithms.
+      target: parallel_algorithm_safety
+      action: recommend
+      rationale: >-
+        Parallel algorithms are most reliable when callback effects are local or
+        expressed as reductions.
+
+    - id: cpp.parallel.choose_policy_by_semantics
+      title: Choose execution policy by semantics
+      when: language == "cpp" and uses_parallel_algorithms == true
+      should: >-
+        Choose sequenced, parallel, or vectorized execution policies based on
+        callback side effects, ordering assumptions, exception behavior,
+        iterator validity, and measured workload size.
+      target: parallel_execution_policy
+      action: recommend
+      rationale: >-
+        More parallelism is not automatically safer or faster; par_unseq imposes
+        stricter assumptions than ordinary parallel execution.
+
+  preference:
+    - id: cpp.coroutine.preference_high_level_async
+      title: Prefer high-level async abstractions
+      when: language == "cpp" and uses_coroutines == true
+      prefer: project_async_abstraction
+      over:
+        - custom_coroutine_protocol
+      target: coroutine_abstraction
+      action: prefer
+
+exceptions:
+  - id: cpp.coroutine.exception_custom_awaiter
+    when: custom_coroutine_protocol_required == true
+    allow:
+      - custom_awaiter_or_promise_type
+    require:
+      - Explain ownership of the coroutine frame and suspended work.
+      - Define exception, cancellation, and destruction behavior.
+      - Review allocation and resume-thread assumptions.
+
+verification:
+  llm_self_check:
+    - id: cpp.concurrency.coroutines_and_execution.verify.coroutine_review
+      type: llm_self_check
+      applies_to:
+        - coroutine_lifetime
+        - coroutine_execution
+        - coroutine_abstraction
+        - parallel_algorithm_safety
+        - parallel_execution_policy
+      severity: advisory
+      prompt: >-
+        Review coroutine and parallel execution code for frame lifetime,
+        captures, scheduler/resume context, cancellation, exception paths,
+        allocation behavior, and shared-state side effects.
+
+effective_rule_examples:
+  coroutine_task:
+    task_context:
+      language: cpp
+      standard: 20
+      uses_coroutines: true
+    effective_rules:
+      hard:
+        - Require a coroutine lifetime, resume, cancellation, and unfinished-work
+          ownership contract.
+
+authoring_notes:
+  - This is a post-core concurrency skill. Keep it dormant for ordinary mutex,
+    thread, queue, and atomic tasks unless coroutine or parallel algorithm
+    semantics are explicit.

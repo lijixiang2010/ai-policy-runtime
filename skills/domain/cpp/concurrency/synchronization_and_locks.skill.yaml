@@ -1,0 +1,193 @@
+# Skill: C++ Synchronization And Locks
+# File: skills/domain/cpp/concurrency/synchronization_and_locks.skill.yaml
+
+skill:
+  id: cpp.concurrency.synchronization_and_locks
+  name: C++ Synchronization And Locks
+  version: 1.0.0
+  status: stable
+  description: >-
+    Concurrency skill for mutex ownership, scoped locking, deadlock avoidance,
+    and keeping critical sections small.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 92
+
+  tags:
+    - cpp
+    - concurrency
+    - synchronization
+    - locks
+    - core-guidelines
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - modernize_code
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+
+  dependencies:
+    - cpp.concurrency.data_race_safety
+    - cpp.resource_management.raii
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_cpp_locking
+      when_text_matches:
+        - mutex
+        - lock_guard
+        - unique_lock
+        - scoped_lock
+        - shared_mutex
+        - deadlock
+        - critical section
+      set:
+        uses_locks: true
+        concurrent: true
+      tags:
+        - concurrency
+        - synchronization
+      confidence: 0.86
+
+sources:
+  - cpp_core_guidelines:CP.20
+  - cpp_core_guidelines:CP.21
+  - cpp_core_guidelines:CP.22
+  - rainer_grimm_concurrency_modern_cpp:best_practices
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.lock.use_raii_lock
+      title: Use RAII lock objects for mutex ownership
+      when: language == "cpp" and uses_locks == true
+      must: >-
+        Use RAII lock objects such as std::lock_guard, std::unique_lock, or
+        std::scoped_lock to acquire and release mutexes.
+      target: synchronization
+      action: require
+      rationale: >-
+        Manual lock and unlock calls are fragile under exceptions, early returns,
+        and later edits.
+
+    - id: cpp.lock.no_temporary_unnamed_lock
+      title: Do not create unnamed temporary locks
+      when: language == "cpp" and uses_locks == true
+      must_not: >-
+        Do not create unnamed temporary lock objects for a critical section.
+      target: synchronization
+      action: forbid
+      rationale: >-
+        An unnamed lock temporary can be destroyed immediately, leaving the
+        intended critical section unsynchronized.
+
+  soft:
+    - id: cpp.lock.minimize_critical_section
+      title: Minimize time holding locks
+      when: language == "cpp" and uses_locks == true
+      should: >-
+        Keep critical sections small; do work that does not require shared-state
+        protection before acquiring the lock or after releasing it.
+      target: lock_contention
+      action: recommend
+      rationale: >-
+        Shorter lock ownership reduces contention, latency, and deadlock surface.
+
+    - id: cpp.lock.avoid_unknown_code_while_locked
+      title: Avoid calling unknown code while holding a lock
+      when: language == "cpp" and uses_locks == true
+      should_not: >-
+        Avoid invoking callbacks, virtual dispatch, user-provided functions, I/O,
+        allocation-heavy work, or other unknown code while holding a lock.
+      target: deadlock
+      action: discourage
+      rationale: >-
+        Unknown code can re-enter the same lock, take other locks, block for an
+        unbounded time, or change later in ways that break lock ordering.
+
+    - id: cpp.lock.prefer_single_mutex_at_a_time
+      title: Prefer holding at most one mutex
+      when: language == "cpp" and uses_locks == true
+      should: >-
+        Prefer designs that hold at most one mutex at a time.
+      target: deadlock
+      action: recommend
+      rationale: >-
+        Multiple simultaneous locks require a global ordering strategy and are
+        much easier to deadlock.
+
+    - id: cpp.lock.use_atomic_multi_mutex_locking
+      title: Use std::lock or std::scoped_lock for multiple mutexes
+      when: language == "cpp" and uses_locks == true and locks_multiple_mutexes == true
+      should: >-
+        Use std::lock with deferred std::unique_lock objects or std::scoped_lock
+        when a scope must acquire multiple mutexes.
+      target: deadlock
+      action: recommend
+      rationale: >-
+        Standard multi-mutex locking utilities avoid order-dependent deadlocks
+        that arise from hand-written lock sequences.
+
+  preference:
+    - id: cpp.lock.preference_scoped_locking
+      title: Prefer scoped locking over manual lock management
+      when: language == "cpp" and uses_locks == true
+      prefer: scoped_locking
+      over:
+        - manual_lock_unlock
+      target: synchronization
+      action: prefer
+
+exceptions:
+  - id: cpp.lock.exception_manual_lock_low_level_adapter
+    when: low_level_synchronization_adapter == true
+    allow:
+      - manual_lock_unlock
+    require:
+      - Explain why an RAII lock object cannot express the required behavior.
+      - Preserve exception-safe unlock behavior.
+
+verification:
+  llm_self_check:
+    - id: cpp.concurrency.synchronization_and_locks.verify.lock_review
+      type: llm_self_check
+      applies_to:
+        - synchronization
+        - lock_contention
+        - deadlock
+      severity: advisory
+      prompt: >-
+        Review mutex ownership, named RAII locks, critical-section length,
+        multi-mutex acquisition, and calls made while locks are held.
+
+effective_rule_examples:
+  locked_shared_state:
+    task_context:
+      language: cpp
+      concurrent: true
+      uses_locks: true
+    effective_rules:
+      hard:
+        - Use RAII lock objects for mutex ownership.
+      soft:
+        - Keep critical sections small.
+
+authoring_notes:
+  - This skill owns mutex and lock discipline. Data-race policy stays in
+    cpp.concurrency.data_race_safety.

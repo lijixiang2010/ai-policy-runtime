@@ -1,0 +1,169 @@
+# Skill: C++ Condition Variables
+# File: skills/domain/cpp/concurrency/condition_variables.skill.yaml
+
+skill:
+  id: cpp.concurrency.condition_variables
+  name: C++ Condition Variables
+  version: 1.0.0
+  status: stable
+  description: >-
+    Concurrency skill for condition variables, predicates, notifications,
+    lost wakeups, spurious wakeups, and one-shot notification alternatives.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 91
+
+  tags:
+    - cpp
+    - concurrency
+    - synchronization
+    - condition-variable
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - modernize_code
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+
+  dependencies:
+    - cpp.concurrency.synchronization_and_locks
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_cpp_condition_variable
+      when_text_matches:
+        - condition_variable
+        - condition variable
+        - notify_one
+        - notify_all
+        - wait_for
+        - wait_until
+        - spurious wakeup
+        - lost wakeup
+      set:
+        uses_condition_variable: true
+        concurrent: true
+      tags:
+        - concurrency
+        - synchronization
+      confidence: 0.87
+
+sources:
+  - cpp_core_guidelines:CP.42
+  - rainer_grimm_concurrency_modern_cpp:best_practices
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.condvar.wait_with_predicate
+      title: Wait with a predicate
+      when: language == "cpp" and uses_condition_variable == true
+      must: >-
+        Wait on condition variables with an explicit predicate or equivalent
+        condition loop that is protected by the same synchronization strategy.
+      target: condition_variable
+      action: require
+      rationale: >-
+        Predicates protect against lost wakeups and spurious wakeups.
+
+    - id: cpp.condvar.guard_predicate_state
+      title: Guard predicate state consistently
+      when: language == "cpp" and uses_condition_variable == true
+      must: >-
+        Guard the state tested by the wait predicate with the condition
+        variable's mutex, or document an equivalent atomic protocol with the
+        required memory-ordering contract.
+      target: condition_variable
+      action: require
+      rationale: >-
+        Notifications have no durable state; correctness belongs to the guarded
+        predicate state.
+
+  soft:
+    - id: cpp.condvar.protect_condition_state
+      title: Protect condition state consistently
+      when: language == "cpp" and uses_condition_variable == true
+      should: >-
+        Protect the state tested by the wait predicate with the mutex associated
+        with the condition variable, unless the state is deliberately atomic and
+        the memory-ordering contract is documented.
+      target: condition_variable
+      action: recommend
+      rationale: >-
+        The notification mechanism has no durable state; correctness belongs to
+        the guarded predicate state.
+
+    - id: cpp.condvar.notify_after_state_change
+      title: Notify after making the predicate true
+      when: language == "cpp" and uses_condition_variable == true
+      should: >-
+        Change the predicate state before notifying waiters, and keep lock
+        ownership during notification only when the invariant requires it.
+      target: condition_variable
+      action: recommend
+      rationale: >-
+        Waiters need an observable state transition, not only a notification.
+
+    - id: cpp.condvar.prefer_future_for_one_shot
+      title: Prefer futures for one-shot notification
+      when: language == "cpp" and uses_condition_variable == true and one_shot_notification == true
+      should: >-
+        Prefer std::promise and std::future for one-shot notification or result
+        delivery when a reusable wait queue is not needed.
+      target: notification
+      action: recommend
+      rationale: >-
+        Futures carry state, values, and exceptions, avoiding condition-variable
+        wakeup hazards for one-shot workflows.
+
+  preference:
+    - id: cpp.condvar.preference_predicated_wait
+      title: Prefer predicated wait overloads
+      when: language == "cpp" and uses_condition_variable == true
+      prefer: predicated_wait_overload
+      over:
+        - bare_wait
+      target: condition_variable
+      action: prefer
+
+verification:
+  llm_self_check:
+    - id: cpp.concurrency.condition_variables.verify.condvar_review
+      type: llm_self_check
+      applies_to:
+        - condition_variable
+        - notification
+      severity: advisory
+      prompt: >-
+        Review condition-variable waits for predicates, guarded state,
+        notification ordering, timeout handling, and one-shot alternatives.
+
+effective_rule_examples:
+  producer_consumer_queue:
+    task_context:
+      language: cpp
+      concurrent: true
+      uses_condition_variable: true
+    effective_rules:
+      hard:
+        - Wait on condition variables with an explicit predicate.
+
+authoring_notes:
+  - Keep reusable wait queues here; one-shot task/result workflows are also
+    covered by cpp.concurrency.tasks_and_futures.

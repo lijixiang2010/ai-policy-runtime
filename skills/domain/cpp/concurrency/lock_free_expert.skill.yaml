@@ -1,0 +1,184 @@
+# Skill: C++ Lock-Free Expert
+# File: skills/domain/cpp/concurrency/lock_free_expert.skill.yaml
+
+skill:
+  id: cpp.concurrency.lock_free_expert
+  name: C++ Lock-Free Expert
+  version: 1.0.0
+  status: stable
+  description: >-
+    Post-core concurrency skill for custom lock-free algorithms, ABA risk,
+    memory reclamation, progress guarantees, and expert review boundaries.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 82
+
+  tags:
+    - cpp
+    - concurrency
+    - lock-free
+    - atomics
+    - advanced
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - modernize_code
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+
+  dependencies:
+    - cpp.concurrency.atomics_memory_model
+    - cpp.concurrency.data_race_safety
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_cpp_lock_free_expert
+      when_text_matches:
+        - lock-free
+        - lockfree
+        - wait-free
+        - waitfree
+        - obstruction-free
+        - aba problem
+        - hazard pointer
+        - hazard pointers
+        - epoch reclamation
+        - memory reclamation
+        - rcu
+        - progress guarantee
+        - progress guarantees
+      set:
+        uses_lock_free_algorithm: true
+        uses_atomics: true
+        concurrent: true
+      tags:
+        - concurrency
+        - lock-free
+        - atomics
+      confidence: 0.89
+
+sources:
+  - rainer_grimm_concurrency_modern_cpp:lock_free_data_structures
+  - rainer_grimm_concurrency_modern_cpp:memory_model
+  - rainer_grimm_concurrency_modern_cpp:best_practices
+
+source_notes:
+  - Source references are traceability anchors only; rules are reconstructed into
+    concise project-owned guidance.
+
+rules:
+  hard:
+    - id: cpp.lock_free.require_reclamation_aba_progress_contract
+      title: Require reclamation, ABA, and progress contract
+      when: language == "cpp" and uses_lock_free_algorithm == true
+      must: >-
+        Define the memory reclamation strategy, ABA mitigation, ownership model,
+        memory-order protocol, and progress guarantee for custom lock-free or
+        wait-free algorithms.
+      target: lock_free_contract
+      action: require
+      rationale: >-
+        Correctness depends on object lifetime, reclamation, ordering, and
+        progress semantics, not only on atomic operations.
+
+    - id: cpp.lock_free.no_unsafe_reclamation
+      title: Do not reclaim nodes without a safe protocol
+      when: language == "cpp" and uses_lock_free_algorithm == true
+      must_not: >-
+        Do not delete, reuse, or recycle nodes that another thread could still
+        observe unless hazard pointers, epochs, RCU, reference counting, or an
+        equivalent proven reclamation protocol protects the access.
+      target: memory_reclamation
+      action: forbid
+      rationale: >-
+        Most lock-free container failures are lifetime and reclamation failures.
+
+  soft:
+    - id: cpp.lock_free.prefer_proven_library
+      title: Prefer proven lock-free libraries
+      when: language == "cpp" and uses_lock_free_algorithm == true
+      should: >-
+        Prefer a proven standard, platform, or project-approved lock-free
+        library before implementing a custom lock-free data structure.
+      target: lock_free_design
+      action: recommend
+      rationale: >-
+        Reused implementations reduce memory-ordering, ABA, reclamation, and
+        progress-risk surface.
+
+    - id: cpp.lock_free.test_beyond_tsan
+      title: Test lock-free code beyond ordinary sanitizer checks
+      when: language == "cpp" and uses_lock_free_algorithm == true
+      should: >-
+        Validate lock-free code with stress tests, randomized scheduling,
+        invariant checks, sanitizer builds where useful, and architecture-aware
+        review; do not treat ThreadSanitizer alone as proof of correctness.
+      target: lock_free_verification
+      action: recommend
+      rationale: >-
+        Lock-free failures can be rare, architecture-specific, and invisible to
+        a single dynamic checker.
+
+  preference:
+    - id: cpp.lock_free.preference_library_or_lock
+      title: Prefer proven library or lock-based design
+      when: language == "cpp" and uses_lock_free_algorithm == true
+      prefer: proven_library_or_lock_based_design
+      over:
+        - custom_lock_free_algorithm
+      target: concurrency_model
+      action: prefer
+
+exceptions:
+  - id: cpp.lock_free.exception_custom_algorithm
+    when: custom_lock_free_algorithm_required == true
+    allow:
+      - custom_lock_free_algorithm
+    require:
+      - Explain the measured requirement that rules out lock-based or library
+        alternatives.
+      - Document memory ordering, reclamation, ABA, and progress guarantees.
+      - Include stress, sanitizer, and architecture-sensitive review coverage.
+
+verification:
+  llm_self_check:
+    - id: cpp.concurrency.lock_free_expert.verify.lock_free_review
+      type: llm_self_check
+      applies_to:
+        - lock_free_contract
+        - memory_reclamation
+        - lock_free_design
+        - lock_free_verification
+      severity: advisory
+      prompt: >-
+        Review lock-free code for memory reclamation, ABA, ownership, memory
+        ordering, progress guarantees, false sharing, stress coverage, and
+        safer lock-based or library alternatives.
+
+effective_rule_examples:
+  lock_free_queue:
+    task_context:
+      language: cpp
+      uses_lock_free_algorithm: true
+    effective_rules:
+      hard:
+        - Define reclamation, ABA mitigation, memory ordering, ownership, and
+          progress guarantees.
+
+authoring_notes:
+  - This is an expert post-core skill. Keep it dormant unless the task
+    explicitly asks for lock-free, wait-free, ABA, reclamation, RCU, or progress
+    guarantees.

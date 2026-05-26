@@ -1,0 +1,16 @@
+task: Review a C++20 thread pool executor with bounded queue, backpressure, shutdown, cancellation, and failure propagation.
+packs:
+  - cpp.concurrency_expert
+expected:
+  activates:
+    - cpp.safe_generation
+    - cpp.concurrency.data_race_safety
+    - cpp.concurrency.thread_pools_executors
+  avoids:
+    - cpp.concurrency.coroutines_and_execution
+  statements:
+    - Bound queued work
+    - shutdown behavior
+    - reports completion
+    - propagates failure
+    - cooperative cancellation

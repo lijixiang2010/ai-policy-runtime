@@ -5092,6 +5092,141 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("cpp.safety.undefined_behavior", sources)
         self.assertTrue(effective["verification"]["required"])
 
+    def test_cpp_concurrency_expert_fixture_resolves_executor_rules(self) -> None:
+        fixture = _load_fixture("cpp_concurrency_expert_task.yaml")
+        effective = _resolve_fixture(fixture)
+        sources = _sources(effective)
+        context = effective["task"]["context"]
+
+        self.assertIn("cpp.safety.undefined_behavior", sources)
+        self.assertIn("cpp.concurrency.data_race_safety", sources)
+        self.assertIn("cpp.concurrency.thread_pools_executors", sources)
+        self.assertTrue(context.get("uses_thread_pool_or_executor"))
+        self.assertTrue(context.get("concurrent"))
+        self.assertTrue(effective["verification"]["required"])
+        self.assertTrue(_has_statement_containing(effective, "Bound queued work"))
+        self.assertTrue(_has_statement_containing(effective, "shutdown behavior"))
+        self.assertTrue(_has_statement_containing(effective, "reports completion"))
+        self.assertTrue(_has_statement_containing(effective, "propagates failure"))
+        self.assertTrue(_has_statement_containing(effective, "cooperative cancellation"))
+        self.assertFalse(_has_statement_containing(effective, "coroutine frames"))
+
+    def test_cpp_condition_variable_queue_avoids_advanced_concurrency_noise(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "C++20 condition_variable notify_one wait predicate thread-safe queue",
+            ("cpp.low_latency",),
+        )
+        effective = result.structured["effective_rules"]
+        context = effective["task"]["context"]
+
+        self.assertTrue(context.get("uses_condition_variable"))
+        self.assertTrue(context.get("designs_concurrent_data_structure"))
+        self.assertTrue(context.get("concurrent"))
+        self.assertNotIn("uses_coroutines", context)
+        self.assertNotIn("uses_parallel_algorithms", context)
+        self.assertNotIn("uses_atomics", context)
+        self.assertNotIn("uses_lock_free_algorithm", context)
+        self.assertNotIn("uses_tasks_or_futures", context)
+        self.assertNotIn("uses_thread_pool_or_executor", context)
+        self.assertNotIn("python_concurrency_requested", context)
+        self.assertTrue(_has_statement_containing(effective, "Wait on condition variables"))
+        self.assertTrue(_has_statement_containing(effective, "Guard the state tested by the wait predicate"))
+        self.assertFalse(_has_statement_containing(effective, "coroutine frames"))
+        self.assertFalse(_has_statement_containing(effective, "volatile as a substitute"))
+
+    def test_cpp_coroutine_contract_activates_without_queue_noise(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Review a C++20 coroutine task using co_await and cancellation",
+            ("cpp.code_review",),
+        )
+        effective = result.structured["effective_rules"]
+        context = effective["task"]["context"]
+
+        self.assertTrue(context.get("uses_coroutines"))
+        self.assertTrue(context.get("concurrent"))
+        self.assertNotIn("uses_condition_variable", context)
+        self.assertNotIn("designs_concurrent_data_structure", context)
+        self.assertNotIn("uses_parallel_algorithms", context)
+        self.assertNotIn("uses_thread_pool_or_executor", context)
+        self.assertNotIn("uses_lock_free_algorithm", context)
+        self.assertTrue(_has_statement_containing(effective, "coroutine frames"))
+        self.assertTrue(_has_statement_containing(effective, "who owns unfinished coroutine work"))
+        self.assertTrue(_has_statement_containing(effective, "exception propagation"))
+        self.assertTrue(_has_statement_containing(effective, "coroutine-frame allocation"))
+        self.assertFalse(_has_statement_containing(effective, "Wait on condition variables"))
+        self.assertFalse(_has_statement_containing(effective, "check-then-act"))
+
+    def test_cpp_atomics_memory_order_activates_atomic_guidance(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Review a C++20 std::atomic counter using memory_order_relaxed.",
+            ("cpp.code_review",),
+        )
+        effective = result.structured["effective_rules"]
+        context = effective["task"]["context"]
+
+        self.assertTrue(context.get("uses_atomics"))
+        self.assertTrue(context.get("concurrent"))
+        self.assertNotIn("uses_lock_free_algorithm", context)
+        self.assertTrue(_has_statement_containing(effective, "volatile as a substitute"))
+        self.assertTrue(_has_statement_containing(effective, "sequentially consistent atomic operations"))
+        self.assertFalse(_has_statement_containing(effective, "coroutine frames"))
+
+    def test_cpp_parallel_algorithm_activates_parallel_callback_safety(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Review a C++20 parallel STL std::execution::par algorithm callback.",
+            ("cpp.code_review",),
+        )
+        effective = result.structured["effective_rules"]
+        context = effective["task"]["context"]
+
+        self.assertTrue(context.get("uses_parallel_algorithms"))
+        self.assertTrue(context.get("concurrent"))
+        self.assertTrue(_has_statement_containing(effective, "parallel algorithm callbacks"))
+        self.assertTrue(_has_statement_containing(effective, "standard reductions"))
+        self.assertTrue(_has_statement_containing(effective, "Choose sequenced, parallel, or vectorized execution policies"))
+        self.assertNotIn("uses_coroutines", context)
+
+    def test_cpp_lock_free_expert_activates_only_for_explicit_lock_free_terms(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Review a C++20 lock-free queue for ABA problem, hazard pointers, memory reclamation, and progress guarantees.",
+            ("cpp.code_review",),
+        )
+        effective = result.structured["effective_rules"]
+        context = effective["task"]["context"]
+
+        self.assertTrue(context.get("uses_lock_free_algorithm"))
+        self.assertTrue(context.get("uses_atomics"))
+        self.assertTrue(context.get("concurrent"))
+        self.assertTrue(_has_statement_containing(effective, "memory reclamation strategy"))
+        self.assertTrue(_has_statement_containing(effective, "ABA mitigation"))
+        self.assertTrue(_has_statement_containing(effective, "progress guarantee"))
+        self.assertTrue(_has_statement_containing(effective, "hazard pointers"))
+        self.assertFalse(_has_statement_containing(effective, "coroutine frames"))
+        self.assertFalse(_has_statement_containing(effective, "shutdown behavior"))
+
+    def test_cpp_thread_pool_executor_activates_production_boundaries(self) -> None:
+        runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
+        result = runtime.resolve(
+            "Review a C++20 thread pool executor with bounded queue, backpressure, shutdown, and cancellation.",
+            ("cpp.code_review",),
+        )
+        effective = result.structured["effective_rules"]
+        context = effective["task"]["context"]
+
+        self.assertTrue(context.get("uses_thread_pool_or_executor"))
+        self.assertTrue(context.get("concurrent"))
+        self.assertTrue(_has_statement_containing(effective, "Bound queued work"))
+        self.assertTrue(_has_statement_containing(effective, "shutdown behavior"))
+        self.assertTrue(_has_statement_containing(effective, "reports completion"))
+        self.assertTrue(_has_statement_containing(effective, "propagates failure"))
+        self.assertTrue(_has_statement_containing(effective, "cooperative cancellation"))
+        self.assertFalse(_has_statement_containing(effective, "coroutine frames"))
+
     def test_cpp20_template_constraints_prefer_concepts(self) -> None:
         runtime = PolicyRuntime(RuntimeConfig.from_values(root=".", policy_root="."))
         result = runtime.resolve(

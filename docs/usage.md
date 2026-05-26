@@ -209,6 +209,7 @@ ai-policy cache clear
 ```powershell
 ai-policy resolve "帮我写一个 C++20 低延迟队列"
 ai-policy resolve --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+ai-policy resolve --pack cpp.concurrency_expert "Review a C++20 thread pool executor with bounded queue and shutdown."
 ai-policy resolve --pack git.best_practices "Prepare a git commit message for the staged diff."
 ai-policy resolve --pack cmake.best_practices "Modernize this CMakeLists.txt to use target-based CMake."
 ```
@@ -219,6 +220,7 @@ test scripts, you can also pass `--format prompt`:
 ```powershell
 ai-policy resolve --format prompt "帮我写一个 C++20 低延迟队列"
 ai-policy resolve --format prompt --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
+ai-policy resolve --format prompt --pack cpp.concurrency_expert "Review a C++20 coroutine task with cancellation."
 ```
 
 Use `--format json` only when a tool needs structured command output:

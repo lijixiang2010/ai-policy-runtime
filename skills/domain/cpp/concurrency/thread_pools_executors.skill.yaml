@@ -1,0 +1,173 @@
+# Skill: C++ Thread Pools And Executors
+# File: skills/domain/cpp/concurrency/thread_pools_executors.skill.yaml
+
+skill:
+  id: cpp.concurrency.thread_pools_executors
+  name: C++ Thread Pools And Executors
+  version: 1.0.0
+  status: stable
+  description: >-
+    Concurrency skill for thread pools, executor abstractions, work queues,
+    backpressure, shutdown, cancellation, and worker error propagation.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 87
+
+  tags:
+    - cpp
+    - concurrency
+    - thread-pool
+    - executor
+    - production
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - modernize_code
+    - api_design
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+      - design_api
+
+  dependencies:
+    - cpp.concurrency.thread_lifetime
+    - cpp.concurrency.tasks_and_futures
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_cpp_thread_pool_or_executor
+      when_text_matches:
+        - thread pool
+        - threadpool
+        - executor
+        - executors
+        - work queue
+        - task queue
+        - worker queue
+        - worker thread
+        - worker threads
+        - backpressure
+        - bounded queue
+      set:
+        uses_thread_pool_or_executor: true
+        concurrent: true
+      tags:
+        - concurrency
+        - thread-pool
+        - executor
+      confidence: 0.87
+
+sources:
+  - rainer_grimm_concurrency_modern_cpp:various_job_workflows
+  - rainer_grimm_concurrency_modern_cpp:best_practices
+  - cpp_core_guidelines:CP.4
+  - cpp_core_guidelines:CP.23
+
+source_notes:
+  - Source references are traceability anchors only; rules are reconstructed into
+    concise project-owned guidance.
+
+rules:
+  hard:
+    - id: cpp.executor.require_capacity_and_shutdown_contract
+      title: Require executor capacity and shutdown contract
+      when: language == "cpp" and uses_thread_pool_or_executor == true
+      must: >-
+        Bound queued work or define explicit backpressure, and define shutdown
+        behavior: whether queued work is drained or discarded, how workers are
+        stopped and joined, and which API calls are valid after shutdown begins.
+      target: executor_contract
+      action: require
+      rationale: >-
+        Thread pools fail in production when overload, pending work, shutdown
+        order, and worker lifetime are implicit.
+
+  soft:
+    - id: cpp.executor.define_completion_failure_cancellation
+      title: Define task completion, failure, and cancellation channels
+      when: language == "cpp" and uses_thread_pool_or_executor == true
+      should: >-
+        Define how submitted work reports completion, propagates failure, and
+        observes cooperative cancellation or stop requests.
+      target: executor_task_outcome
+      action: recommend
+      rationale: >-
+        Background work needs observable success, failure, and stop behavior for
+        callers and operations teams.
+
+    - id: cpp.executor.preserve_worker_liveness
+      title: Preserve worker liveness and capacity
+      when: language == "cpp" and uses_thread_pool_or_executor == true
+      should: >-
+        Size worker count and queue depth by workload, and avoid unbounded
+        blocking, nested waits on the same executor, or blocking I/O unless
+        capacity, timeout, and deadlock behavior are explicitly handled.
+      target: executor_liveness
+      action: recommend
+      rationale: >-
+        A useful executor is a capacity control boundary, not only a thread
+        factory; worker starvation and nested waits can deadlock the pool.
+
+  preference:
+    - id: cpp.executor.preference_explicit_executor_boundary
+      title: Prefer explicit executor boundaries
+      when: language == "cpp" and uses_thread_pool_or_executor == true
+      prefer: explicit_executor_boundary
+      over:
+        - ad_hoc_background_threads
+      target: concurrency_model
+      action: prefer
+
+exceptions:
+  - id: cpp.executor.exception_unbounded_internal_queue
+    when: bounded_queue_impractical == true
+    allow:
+      - unbounded_internal_queue
+    require:
+      - Explain why bounding is impractical.
+      - Add monitoring, admission control, or upstream throttling.
+      - State memory and shutdown behavior under overload.
+
+verification:
+  llm_self_check:
+    - id: cpp.concurrency.thread_pools_executors.verify.executor_review
+      type: llm_self_check
+      applies_to:
+        - executor_contract
+        - executor_task_outcome
+        - executor_liveness
+      severity: advisory
+      prompt: >-
+        Review thread pool and executor code for bounded submission,
+        backpressure, shutdown, task completion/failure/cancellation channels,
+        worker blocking, nested waits, and capacity sizing.
+
+effective_rule_examples:
+  thread_pool:
+    task_context:
+      language: cpp
+      uses_thread_pool_or_executor: true
+    effective_rules:
+      hard:
+        - Bound queued work or define explicit backpressure, and define drain,
+          discard, stop, join, and post-shutdown API behavior.
+
+authoring_notes:
+  - This skill owns production executor boundaries. Result values remain owned
+    by tasks_and_futures; container API shape remains owned by
+    concurrent_data_structures.
+  - Keep this skill dormant for ordinary std::async, condition_variable queue,
+    coroutine, or raw std::thread tasks unless thread pool or executor semantics
+    are explicit.

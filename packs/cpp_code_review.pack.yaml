@@ -19,6 +19,14 @@ includes:
   - cpp.error_handling.error_model
   - cpp.concurrency.data_race_safety
   - cpp.concurrency.thread_lifetime
+  - cpp.concurrency.synchronization_and_locks
+  - cpp.concurrency.condition_variables
+  - cpp.concurrency.tasks_and_futures
+  - cpp.concurrency.thread_pools_executors
+  - cpp.concurrency.atomics_memory_model
+  - cpp.concurrency.lock_free_expert
+  - cpp.concurrency.concurrent_data_structures
+  - cpp.concurrency.coroutines_and_execution
   - cpp.source_structure.source_file_organization
   - cpp.standard.standard_availability
   - cpp.standard.cpp23.best_practices

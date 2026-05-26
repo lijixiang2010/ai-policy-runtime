@@ -1,0 +1,23 @@
+kind: pack
+api_version: policy.skill/v1
+pack:
+  id: cpp.concurrency_expert
+  name: C++ Concurrency Expert
+  version: 1.0.0
+  description: Production C++ concurrency pack for synchronization, executors, atomics, lock-free code, coroutines, and verification.
+extends:
+- cpp.safe_generation
+includes:
+- cpp.error_handling.error_model
+- cpp.concurrency.data_race_safety
+- cpp.concurrency.thread_lifetime
+- cpp.concurrency.synchronization_and_locks
+- cpp.concurrency.condition_variables
+- cpp.concurrency.tasks_and_futures
+- cpp.concurrency.thread_pools_executors
+- cpp.concurrency.atomics_memory_model
+- cpp.concurrency.lock_free_expert
+- cpp.concurrency.concurrent_data_structures
+- cpp.concurrency.coroutines_and_execution
+excludes: []
+overrides: []

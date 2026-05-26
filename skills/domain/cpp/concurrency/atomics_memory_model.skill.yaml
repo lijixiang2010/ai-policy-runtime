@@ -1,0 +1,215 @@
+# Skill: C++ Atomics And Memory Model
+# File: skills/domain/cpp/concurrency/atomics_memory_model.skill.yaml
+
+skill:
+  id: cpp.concurrency.atomics_memory_model
+  name: C++ Atomics And Memory Model
+  version: 1.0.0
+  status: stable
+  description: >-
+    Concurrency skill for std::atomic, memory ordering, volatile misuse,
+    lock-free code, and memory-model review discipline.
+
+  level: domain
+  domain: cpp
+  category: concurrency
+  priority: 93
+
+  tags:
+    - cpp
+    - concurrency
+    - atomics
+    - memory-model
+    - safety
+
+  capabilities:
+    - code_generation
+    - code_review
+    - refactor_code
+    - modernize_code
+
+  activation:
+    when:
+      language: cpp
+    triggers:
+      - write_code
+      - review_code
+      - refactor_code
+      - modernize_code
+
+  dependencies:
+    - cpp.concurrency.data_race_safety
+    - cpp.standard.standard_availability
+
+  incompatibilities: []
+
+task_analysis:
+  context_rules:
+    - id: detect_cpp_atomics
+      when_text_matches:
+        - std::atomic
+        - memory_order
+        - std::memory_order
+        - memory_order_relaxed
+        - memory_order_acquire
+        - memory_order_release
+        - memory_order_seq_cst
+        - lock-free
+        - lockfree
+        - volatile synchronization
+      set:
+        uses_atomics: true
+        concurrent: true
+      tags:
+        - concurrency
+        - atomics
+        - memory-model
+      confidence: 0.88
+
+sources:
+  - cpp_core_guidelines:CP.8
+  - cpp_core_guidelines:CP.50
+  - rainer_grimm_concurrency_modern_cpp:memory_model
+  - rainer_grimm_concurrency_modern_cpp:best_practices
+
+source_notes:
+  - Source references are for traceability only; rules are reconstructed into
+    project-owned C++ Skill guidance.
+
+rules:
+  hard:
+    - id: cpp.atomic.no_volatile_synchronization
+      title: Do not use volatile for thread synchronization
+      when: language == "cpp" and uses_atomics == true
+      must_not: >-
+        Do not use volatile as a substitute for std::atomic, mutexes, condition
+        variables, or other synchronization primitives.
+      target: memory_model
+      action: forbid
+      rationale: >-
+        C++ volatile does not provide inter-thread synchronization semantics.
+
+    - id: cpp.atomic.no_atomic_nonatomic_mixed_access
+      title: Do not mix atomic and non-atomic access to shared state
+      when: language == "cpp" and uses_atomics == true
+      must_not: >-
+        Do not access the same shared object through both atomic and non-atomic
+        operations unless all non-atomic access is proven to happen outside any
+        concurrent lifetime.
+      target: data_race
+      action: forbid
+      rationale: >-
+        Mixed unsynchronized access can reintroduce data races and invalidate
+        the intended atomic protocol.
+
+  soft:
+    - id: cpp.atomic.prefer_higher_level_synchronization
+      title: Prefer higher-level synchronization first
+      when: language == "cpp" and uses_atomics == true
+      should: >-
+        Prefer immutable data, thread-local state, message passing, mutexes,
+        condition variables, tasks, or existing concurrent containers before
+        writing custom atomic protocols.
+      target: concurrency_model
+      action: recommend
+      rationale: >-
+        Custom memory-order protocols are difficult to implement, maintain, and
+        review correctly.
+
+    - id: cpp.atomic.default_to_seq_cst_unless_justified
+      title: Default to sequential consistency unless weaker ordering is justified
+      when: language == "cpp" and uses_atomics == true
+      should: >-
+        Default to sequentially consistent atomic operations unless a weaker
+        memory order is measured, documented, and reviewed against the invariant
+        it must preserve.
+      target: memory_ordering
+      action: recommend
+      rationale: >-
+        Weaker memory ordering trades readability and reviewability for
+        performance only when the protocol is correct.
+
+    - id: cpp.atomic.document_invariant_and_ordering
+      title: Document atomic invariants and ordering
+      when: language == "cpp" and uses_atomics == true
+      should: >-
+        Document the shared invariant, happens-before edges, ownership model,
+        and required memory ordering for non-trivial atomic protocols.
+      target: memory_model
+      action: recommend
+      rationale: >-
+        Atomic code is only reviewable when the synchronization contract is
+        explicit.
+
+    - id: cpp.atomic.avoid_custom_lock_free_structures
+      title: Avoid custom lock-free data structures by default
+      when: language == "cpp" and uses_atomics == true and uses_lock_free_algorithm != true
+      should_not: >-
+        Avoid custom lock-free data structures unless the need is measured, the
+        algorithm is well understood, and reclamation, ABA, ordering, and
+        progress guarantees are addressed.
+      target: lock_free
+      action: discourage
+      rationale: >-
+        Lock-free data structures are expert-level code and often fail in memory
+        reclamation or ordering details.
+
+  preference:
+    - id: cpp.atomic.preference_simple_protocols
+      title: Prefer simple synchronization protocols
+      when: language == "cpp" and uses_atomics == true
+      prefer: simple_reviewable_synchronization
+      over:
+        - custom_relaxed_atomic_protocol
+      target: memory_model
+      action: prefer
+
+exceptions:
+  - id: cpp.atomic.exception_relaxed_hot_path_counter
+    when: hot_path == true and atomic_counter_only == true
+    allow:
+      - relaxed_atomic_counter
+    require:
+      - Explain why ordering is not required beyond atomicity.
+      - Keep the relaxed atomic isolated from object lifetime and ownership
+        protocols.
+
+verification:
+  sanitizers:
+    - id: cpp.concurrency.atomics_memory_model.verify.thread_sanitizer
+      type: sanitizer
+      applies_to:
+        - data_race
+        - memory_model
+      severity: error
+      tool: thread_sanitizer
+
+  llm_self_check:
+    - id: cpp.concurrency.atomics_memory_model.verify.atomic_review
+      type: llm_self_check
+      applies_to:
+        - memory_model
+        - memory_ordering
+        - lock_free
+      severity: advisory
+      prompt: >-
+        Review atomic code for volatile misuse, mixed atomic/non-atomic access,
+        memory-order justification, invariants, and whether any custom
+        lock-free algorithm requires the dedicated lock-free expert checks.
+
+effective_rule_examples:
+  atomic_flag:
+    task_context:
+      language: cpp
+      uses_atomics: true
+    effective_rules:
+      hard:
+        - Do not use volatile as a substitute for synchronization.
+      soft:
+        - Default to sequentially consistent atomic operations unless weaker
+          ordering is justified.
+
+authoring_notes:
+  - Keep ordinary data-race guidance in cpp.concurrency.data_race_safety.
+  - Prefer reviewable protocols over clever memory-order tricks unless the task
+    explicitly requires low-level concurrency.
