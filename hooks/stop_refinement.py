@@ -12,6 +12,7 @@ if str(PLUGIN_ROOT) not in sys.path:
 
 from hooks.user_prompt_submit import (
     HOOK_STATE_PATH,
+    LAST_EFFECTIVE_STATE_PATH,
     ProjectHookConfig,
     _current_agent,
     _prepare_imports,
@@ -98,11 +99,25 @@ def _resolve_refinement_effective_prompt(
 
 def _original_prompt(project_root: Path, payload: dict[str, object]) -> str | None:
     state = _load_turn_state(project_root)
-    return _state_prompt_for_turn(state, payload)
+    prompt = _state_prompt_for_turn(state, payload)
+    if prompt is not None:
+        return prompt
+    effective_state = _load_turn_state(project_root, LAST_EFFECTIVE_STATE_PATH)
+    if not _same_session(effective_state, state, payload):
+        return None
+    return _state_prompt_for_turn(
+        effective_state,
+        payload,
+        require_turn_match=False,
+        require_session_match=False,
+    )
 
 
-def _load_turn_state(project_root: Path) -> dict[str, Any]:
-    path = project_root / HOOK_STATE_PATH
+def _load_turn_state(
+    project_root: Path,
+    relative_path: Path = HOOK_STATE_PATH,
+) -> dict[str, Any]:
+    path = project_root / relative_path
     if not path.exists():
         return {}
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -112,15 +127,35 @@ def _load_turn_state(project_root: Path) -> dict[str, Any]:
 def _state_prompt_for_turn(
     state: dict[str, Any],
     payload: dict[str, object],
+    *,
+    require_turn_match: bool = True,
+    require_session_match: bool = True,
 ) -> str | None:
     if state.get("effective_rules_generated") is not True:
         return None
-    if not _same_optional_id(state.get("turn_id"), payload.get("turn_id")):
+    if require_turn_match and not _same_optional_id(state.get("turn_id"), payload.get("turn_id")):
         return None
-    if not _same_optional_id(state.get("session_id"), payload.get("session_id")):
+    if require_session_match and not _same_optional_id(
+        state.get("session_id"), payload.get("session_id")
+    ):
         return None
     prompt = state.get("prompt")
     return str(prompt).strip() if prompt else None
+
+
+def _same_session(
+    effective_state: dict[str, Any],
+    current_state: dict[str, Any],
+    payload: dict[str, object],
+) -> bool:
+    effective_session = effective_state.get("session_id")
+    if effective_session is None:
+        return True
+    payload_session = payload.get("session_id")
+    if payload_session is not None:
+        return effective_session == payload_session
+    current_session = current_state.get("session_id")
+    return current_session is not None and effective_session == current_session
 
 
 def _same_optional_id(state_value: object, payload_value: object) -> bool:

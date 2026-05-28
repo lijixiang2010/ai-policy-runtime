@@ -14,6 +14,7 @@ if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
 CONFIG_PATH = Path(".policy") / "config.json"
 HOOK_STATE_PATH = Path(".policy") / "current" / "agent-hook-state.json"
+LAST_EFFECTIVE_STATE_PATH = Path(".policy") / "current" / "agent-last-effective-state.json"
 FALSE_VALUES = {"0", "false", "no", "off"}
 POST_REFINE_PACK_ID = "generic.production_refinement"
 POST_REFINE_MODES = {"off", "light", "standard", "strict"}
@@ -397,6 +398,12 @@ def _write_turn_state(
         "hook_error": hook_error,
     }
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    if effective_rules_generated:
+        effective_state_path = project_root / LAST_EFFECTIVE_STATE_PATH
+        effective_state_path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
 
 def _coerce_enabled(value: Any) -> bool:

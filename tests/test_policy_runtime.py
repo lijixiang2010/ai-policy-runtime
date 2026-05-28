@@ -2687,6 +2687,11 @@ class PolicyRuntimeTests(unittest.TestCase):
             state = json.loads(
                 (root / user_prompt_submit.HOOK_STATE_PATH).read_text(encoding="utf-8")
             )
+            effective_state = json.loads(
+                (root / user_prompt_submit.LAST_EFFECTIVE_STATE_PATH).read_text(
+                    encoding="utf-8"
+                )
+            )
             response = json.loads(stdout.getvalue())
 
         self.assertEqual(exit_code, 0)
@@ -2702,6 +2707,8 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(hook_config.extra_skills_dirs, ("team/skills",))
         self.assertEqual(hook_config.extra_packs_dirs, ("team/packs",))
         self.assertEqual(hook_config.on_duplicate, "first_wins")
+        self.assertEqual(effective_state["prompt"], "帮我设计一个 C++20 低延迟队列 API")
+        self.assertTrue(effective_state["effective_rules_generated"])
 
     def test_user_prompt_hook_extracts_codex_ide_request(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -3007,6 +3014,54 @@ class PolicyRuntimeTests(unittest.TestCase):
             )
 
         self.assertEqual(response, {"continue": True})
+
+    def test_stop_hook_uses_last_effective_turn_after_non_applicable_followup(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / ".policy"
+            policy.mkdir()
+            (policy / "config.json").write_text(
+                json.dumps({"postRefine": "standard"}),
+                encoding="utf-8",
+            )
+            current = root / ".policy" / "current"
+            current.mkdir(parents=True)
+            (current / "agent-hook-state.json").write_text(
+                json.dumps(
+                    {
+                        "turn_id": "turn-followup",
+                        "session_id": "session-1",
+                        "prompt": "还在思考吗？",
+                        "effective_rules_generated": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (current / "agent-last-effective-state.json").write_text(
+                json.dumps(
+                    {
+                        "turn_id": "turn-cpp",
+                        "session_id": "session-1",
+                        "prompt": "Write a C++20 thread pool.",
+                        "effective_rules_generated": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                stop_refinement,
+                "build_refinement_continuation_prompt",
+                return_value="Refine original task.",
+            ):
+                response = stop_refinement.build_stop_response(
+                    {"cwd": str(root), "stop_hook_active": False}
+                )
+
+        self.assertEqual(
+            response,
+            {"decision": "block", "reason": "Refine original task."},
+        )
 
     def test_stop_hook_respects_agent_filter(self) -> None:
         with TemporaryDirectory() as tmp:
