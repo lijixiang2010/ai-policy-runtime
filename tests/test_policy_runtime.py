@@ -3927,6 +3927,8 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn('"chat.message"', plugin)
         self.assertIn("hookEnvironment", plugin)
         self.assertIn("parseHookOutput", plugin)
+        self.assertIn("const NODE =", plugin)
+        self.assertNotIn("__AI_POLICY_NODE__", plugin)
         self.assertIn("opencode-plugin-state.json", plugin)
         self.assertIn("opencode-post-refine-prompt.md", plugin)
         self.assertIn(str(plugin_root).replace("\\", "\\\\"), plugin)
@@ -3984,6 +3986,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertFalse(current["project_plugin_state_present"])
         self.assertFalse(current["project_post_refine_prompt_present"])
         self.assertTrue(current["project_plugin_runtime_root_matches_expected"])
+        self.assertTrue(current["project_plugin_node_available"])
         self.assertTrue(current["policy_root_matches_expected"])
         self.assertEqual(current["git_commit_style"], "auto")
 

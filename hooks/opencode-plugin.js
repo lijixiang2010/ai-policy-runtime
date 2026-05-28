@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const PACKAGE_ROOT = "__AI_POLICY_RUNTIME_ROOT__";
+const NODE = "__AI_POLICY_NODE__";
 const HOOK = path.join(PACKAGE_ROOT, "bin", "ai-policy-hook.js");
 const SERVICE = "ai-policy-runtime";
 const OPENCODE_STATE = path.join(".policy", "current", "opencode-plugin-state.json");
@@ -13,7 +14,7 @@ const OPENCODE_POST_REFINE_PROMPT = path.join(
 );
 
 function runHook(name, payload) {
-  const result = spawnSync(process.execPath, [HOOK, name], {
+  const result = spawnSync(NODE, [HOOK, name], {
     input: JSON.stringify(payload),
     encoding: "utf8",
     env: hookEnvironment(),

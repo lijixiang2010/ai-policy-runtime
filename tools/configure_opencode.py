@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
+import shutil
 import sys
 import textwrap
 from typing import Any
@@ -28,6 +30,7 @@ OPENCODE_POST_REFINE_PROMPT_FILE = Path(".policy") / "current" / "opencode-post-
 OPENCODE_INSTRUCTION = "AGENTS.md"
 PLUGIN_TEMPLATE = Path("hooks") / "opencode-plugin.js"
 PLUGIN_ROOT_PLACEHOLDER = "__AI_POLICY_RUNTIME_ROOT__"
+NODE_PLACEHOLDER = "__AI_POLICY_NODE__"
 PLUGIN_OWNERSHIP_MARKERS = ("ai-policy-runtime", "opencode-user-prompt-submit")
 
 
@@ -136,6 +139,7 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
     policy_root = policy.get("policyRoot")
     instructions = string_list(opencode_config.get("instructions"))
     plugin_root_value = _plugin_runtime_root(opencode_plugin_path)
+    plugin_node_value = _plugin_node(opencode_plugin_path)
     return {
         "policy_config": str(policy_path),
         "opencode_config": str(opencode_config_path),
@@ -157,6 +161,8 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
         "project_post_refine_prompt_present": opencode_post_refine_path.exists(),
         "project_plugin_runtime_root": plugin_root_value,
         "project_plugin_runtime_root_matches_expected": same_path(plugin_root_value, plugin_root),
+        "project_plugin_node": plugin_node_value,
+        "project_plugin_node_available": _command_available(plugin_node_value),
         "expected_plugin_root": str(plugin_root),
     }
 
@@ -181,10 +187,18 @@ def _is_ai_policy_opencode_plugin(path: Path) -> bool:
 
 
 def _plugin_runtime_root(path: Path) -> str | None:
+    return _plugin_string_constant(path, "PACKAGE_ROOT")
+
+
+def _plugin_node(path: Path) -> str | None:
+    return _plugin_string_constant(path, "NODE")
+
+
+def _plugin_string_constant(path: Path, name: str) -> str | None:
     text = _read_text_or_none(path)
     if text is None:
         return None
-    marker = 'const PACKAGE_ROOT = "'
+    marker = f'const {name} = "'
     start = text.find(marker)
     if start < 0:
         return None
@@ -200,6 +214,22 @@ def _plugin_runtime_root(path: Path) -> str | None:
 
 def _js_string(path: Path) -> str:
     return str(path).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _node_command() -> str:
+    configured = os.environ.get("AI_POLICY_NODE", "").strip()
+    if configured:
+        return configured
+    return shutil.which("node") or "node"
+
+
+def _command_available(command: str | None) -> bool:
+    if not command:
+        return False
+    path = Path(command)
+    if path.is_absolute():
+        return path.exists()
+    return shutil.which(command) is not None
 
 
 def _read_text_or_none(path: Path) -> str | None:
@@ -218,7 +248,10 @@ def _remove_instruction(config: dict[str, Any], instruction: str) -> None:
 
 def _render_plugin_template(plugin_root: Path) -> str:
     template = (plugin_root / PLUGIN_TEMPLATE).read_text(encoding="utf-8")
-    return template.replace(PLUGIN_ROOT_PLACEHOLDER, _js_string(plugin_root))
+    return (
+        template.replace(PLUGIN_ROOT_PLACEHOLDER, _js_string(plugin_root))
+        .replace(NODE_PLACEHOLDER, _js_string(Path(_node_command())))
+    )
 
 
 if __name__ == "__main__":

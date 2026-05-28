@@ -194,6 +194,7 @@ function runPython(args, options = {}) {
   }
   const env = {
     ...process.env,
+    AI_POLICY_NODE: process.execPath,
     PYTHONPATH: prependPath(PACKAGE_ROOT, process.env.PYTHONPATH),
   };
   const result = spawnSync(python, args, { stdio: "inherit", env, windowsHide: true });
