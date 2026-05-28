@@ -16,10 +16,7 @@ function runHook(name, payload) {
   const result = spawnSync(process.execPath, [HOOK, name], {
     input: JSON.stringify(payload),
     encoding: "utf8",
-    env: {
-      ...process.env,
-      AI_POLICY_AGENT: "opencode",
-    },
+    env: hookEnvironment(),
   });
   if (result.error) {
     return { ok: false, error: result.error.message };
@@ -29,28 +26,117 @@ function runHook(name, payload) {
     return { ok: result.status === 0, response: {} };
   }
   try {
-    return { ok: result.status === 0, response: JSON.parse(output), stderr: result.stderr };
+    return { ok: result.status === 0, response: parseHookOutput(output), stderr: result.stderr };
   } catch (error) {
     return { ok: false, error: error.message, stdout: output, stderr: result.stderr };
   }
 }
 
+function hookEnvironment() {
+  const env = {
+    ...process.env,
+    AI_POLICY_AGENT: "opencode",
+    AI_POLICY_ROOT: PACKAGE_ROOT,
+  };
+  if (
+    !env.AI_POLICY_EMBEDDING_PROVIDER &&
+    !env.AI_POLICY_EMBEDDING_BASE_URL &&
+    !env.AI_POLICY_EMBEDDING_API_KEY
+  ) {
+    delete env.OPENAI_API_KEY;
+  }
+  return env;
+}
+
+function parseHookOutput(output) {
+  try {
+    return JSON.parse(output);
+  } catch (originalError) {
+    const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    for (const line of lines.reverse()) {
+      if (!line.startsWith("{") && !line.startsWith("[")) {
+        continue;
+      }
+      try {
+        return JSON.parse(line);
+      } catch {
+        // Try earlier candidates below.
+      }
+    }
+    for (let index = output.length - 1; index >= 0; index -= 1) {
+      const char = output[index];
+      if (char !== "{" && char !== "[") {
+        continue;
+      }
+      try {
+        return JSON.parse(output.slice(index).trim());
+      } catch {
+        // Keep the original parse error if no candidate is valid.
+      }
+    }
+    throw originalError;
+  }
+}
+
 function promptFrom(input, output) {
+  const direct =
+    stringOrNull(input?.prompt) ??
+    stringOrNull(input?.text) ??
+    stringOrNull(input?.message) ??
+    stringOrNull(output?.prompt) ??
+    stringOrNull(output?.text);
+  if (direct) {
+    return direct;
+  }
   return (
-    input?.prompt ??
-    input?.text ??
-    input?.message ??
-    output?.prompt ??
-    output?.text ??
+    promptFromParts(output?.parts) ||
+    promptFromParts(input?.parts) ||
+    promptFromParts(output?.message?.parts) ||
+    promptFromParts(input?.message?.parts) ||
     ""
   );
 }
 
+function stringOrNull(value) {
+  return typeof value === "string" ? value : null;
+}
+
+function promptFromParts(parts) {
+  if (!Array.isArray(parts)) {
+    return "";
+  }
+  return parts
+    .map((part) => stringOrNull(part?.text) ?? stringOrNull(part?.content) ?? "")
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
 function idsFrom(source) {
   const properties = source?.properties ?? source ?? {};
+  const message = properties.message ?? {};
+  const session = properties.session ?? {};
   return {
-    session_id: properties.sessionID ?? properties.session_id ?? properties.session?.id ?? null,
-    turn_id: properties.messageID ?? properties.message_id ?? properties.message?.id ?? null,
+    session_id:
+      properties.sessionID ??
+      properties.sessionId ??
+      properties.session_id ??
+      session.id ??
+      null,
+    turn_id:
+      properties.messageID ??
+      properties.messageId ??
+      properties.message_id ??
+      message.id ??
+      properties.id ??
+      null,
+  };
+}
+
+function mergeIds(primary, fallback) {
+  return {
+    session_id: primary.session_id ?? fallback.session_id ?? null,
+    turn_id: primary.turn_id ?? fallback.turn_id ?? null,
   };
 }
 
@@ -68,7 +154,19 @@ function appendContext(output, context) {
   }
   if (Array.isArray(output.context)) {
     output.context.push(context);
+    return;
   }
+  if (Array.isArray(output.parts)) {
+    output.parts.push({ type: "text", text: context });
+  }
+}
+
+function runUserPromptHook(cwd, prompt, ids) {
+  return runHook("opencode-user-prompt-submit", {
+    cwd,
+    prompt,
+    ...ids,
+  });
 }
 
 async function log(client, level, message, extra) {
@@ -109,15 +207,31 @@ async function AiPolicyRuntime({ client, directory, worktree }) {
       if (!prompt || typeof prompt !== "string") {
         return;
       }
-      const result = runHook("opencode-user-prompt-submit", {
-        cwd,
-        prompt,
-        ...idsFrom(input),
-      });
+      const result = runUserPromptHook(cwd, prompt, idsFrom(input));
       const context = result.response?.hookSpecificOutput?.additionalContext;
       appendContext(output, context);
       if (!result.ok) {
         await log(client, "warn", "User prompt hook failed", result);
+      }
+    },
+
+    "chat.message": async (input, output) => {
+      const prompt = promptFrom(input, output);
+      if (!prompt || typeof prompt !== "string") {
+        return;
+      }
+      const result = runUserPromptHook(cwd, prompt, mergeIds(idsFrom(output), idsFrom(input)));
+      const context = result.response?.hookSpecificOutput?.additionalContext;
+      appendContext(output, context);
+      writeState(cwd, {
+        event: "chat.message",
+        hookOk: result.ok,
+        promptChars: prompt.length,
+        contextChars: String(context || "").length,
+        error: result.error ?? null,
+      });
+      if (!result.ok) {
+        await log(client, "warn", "User chat message hook failed", result);
       }
     },
 
