@@ -153,4 +153,4 @@ async function AiPolicyRuntime({ client, directory, worktree }) {
   };
 }
 
-module.exports = { AiPolicyRuntime };
+module.exports = AiPolicyRuntime;

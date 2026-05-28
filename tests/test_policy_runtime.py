@@ -3927,6 +3927,8 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertIn("opencode-plugin-state.json", plugin)
         self.assertIn("opencode-post-refine-prompt.md", plugin)
         self.assertIn(str(plugin_root).replace("\\", "\\\\"), plugin)
+        self.assertIn("module.exports = AiPolicyRuntime", plugin)
+        self.assertNotIn("module.exports = { AiPolicyRuntime }", plugin)
 
     def test_configure_opencode_preserves_existing_instructions(self) -> None:
         with TemporaryDirectory() as tmp:
