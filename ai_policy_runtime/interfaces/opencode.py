@@ -3,7 +3,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ai_policy_runtime.adapters.opencode import OpenCodeWrapperOptions, run_opencode_policy_wrapper
+from ai_policy_runtime.adapters.opencode import (
+    OpenCodeWrapperOptions,
+    default_opencode_command,
+    run_opencode_policy_wrapper,
+)
 from ai_policy_runtime.interfaces.agent_cli import (
     AgentCliSpec,
     optional_path,
@@ -17,7 +21,7 @@ SPEC = AgentCliSpec(
     prog="policy-opencode",
     description="Resolve Effective Rules, inject AGENTS.md, then invoke OpenCode.",
     command_option="--opencode-command",
-    command_default="opencode",
+    command_default=default_opencode_command(),
     command_help="OpenCode executable path. Use quotes when the path contains spaces.",
     arg_option="--opencode-arg",
     arg_help="Extra argument passed to `opencode run` before the task. Repeat for multiple args.",

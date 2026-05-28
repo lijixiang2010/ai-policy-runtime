@@ -31,7 +31,11 @@ from ai_policy_runtime.task_analysis.semantic_index import SemanticTaskIndex
 from ai_policy_runtime.adapters.agent import build_post_refinement_task, merge_pack_ids
 from ai_policy_runtime.adapters.codex.wrapper import _build_codex_command
 from ai_policy_runtime.adapters.claude.wrapper import _build_claude_command
-from ai_policy_runtime.adapters.opencode.wrapper import _build_opencode_command
+from ai_policy_runtime.adapters.opencode.wrapper import (
+    OpenCodeWrapperOptions,
+    _build_opencode_command,
+    default_opencode_command,
+)
 from ai_policy_runtime.interfaces.cli import CommandDispatcher, _runtime_from_args
 from ai_policy_runtime.services.project_context import (
     ProjectContextAnalyzer,
@@ -3396,6 +3400,12 @@ class PolicyRuntimeTests(unittest.TestCase):
                 "帮我写一个 C++20 低延迟队列",
             ),
         )
+
+    def test_opencode_wrapper_uses_subprocess_launchable_default_command(self) -> None:
+        expected = "opencode.cmd" if os.name == "nt" else "opencode"
+
+        self.assertEqual(default_opencode_command(), expected)
+        self.assertEqual(OpenCodeWrapperOptions(task="test").opencode_command, (expected,))
 
     def test_configure_claude_desktop_writes_policy_and_settings(self) -> None:
         with TemporaryDirectory() as tmp:

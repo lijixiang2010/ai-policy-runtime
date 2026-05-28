@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -13,6 +14,12 @@ from ai_policy_runtime.adapters.agent import (
 )
 
 
+def default_opencode_command() -> str:
+    """Return the executable name that Python subprocess can launch directly."""
+
+    return "opencode.cmd" if os.name == "nt" else "opencode"
+
+
 @dataclass(frozen=True)
 class OpenCodeWrapperOptions:
     """Options for the OpenCode policy wrapper."""
@@ -23,7 +30,7 @@ class OpenCodeWrapperOptions:
     skills_dir: str = "skills"
     packs_dir: str = "packs"
     pack_ids: tuple[str, ...] = ()
-    opencode_command: tuple[str, ...] = ("opencode",)
+    opencode_command: tuple[str, ...] = (default_opencode_command(),)
     opencode_args: tuple[str, ...] = ()
     execute: bool = True
     verify_target: str | Path | None = None
