@@ -187,6 +187,8 @@ records the installed NPM package as `policyRoot`, adds `AGENTS.md` to OpenCode
 instructions, and installs a project-local OpenCode plugin. Re-run the command
 after updating `ai-policy-runtime` so the plugin points at the current installed
 package.
+The generated `.opencode` plugin contains local runtime paths and should be
+regenerated per workspace rather than committed.
 
 For post-refinement smoke tests, enable `postRefine` in `.policy/config.json`,
 run an OpenCode task, then inspect:

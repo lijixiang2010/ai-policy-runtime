@@ -23,7 +23,7 @@ type PolicyConfig = {
   verifyTarget?: string;
 };
 
-type AgentTarget = 'codex' | 'claude';
+type AgentTarget = 'codex' | 'claude' | 'opencode';
 type GitCommitStyle = 'auto' | 'conventional' | 'imperative';
 
 type PolicyPaths = {
@@ -33,6 +33,10 @@ type PolicyPaths = {
   codexHooks: string;
   codexConfig: string;
   claudeSettings: string;
+  opencodeConfig: string;
+  opencodePlugin: string;
+  opencodePluginState: string;
+  opencodePostRefinePrompt: string;
   effectivePrompt: string;
   hookState: string;
 };
@@ -69,6 +73,15 @@ const POLICY_CURRENT_DIR = path.join('.policy', 'current');
 const CODEX_HOOKS_FILE = path.join('.codex', 'hooks.json');
 const CODEX_CONFIG_FILE = path.join('.codex', 'config.toml');
 const CLAUDE_SETTINGS_FILE = path.join('.claude', 'settings.local.json');
+const OPENCODE_CONFIG_FILE = 'opencode.json';
+const OPENCODE_PLUGIN_FILE = path.join('.opencode', 'plugins', 'ai-policy-runtime.js');
+const OPENCODE_PLUGIN_CONFIG_ENTRY = '.opencode/plugins/ai-policy-runtime.js';
+const OPENCODE_PLUGIN_STATE_FILE = path.join('.policy', 'current', 'opencode-plugin-state.json');
+const OPENCODE_POST_REFINE_PROMPT_FILE = path.join('.policy', 'current', 'opencode-post-refine-prompt.md');
+const OPENCODE_INSTRUCTION = 'AGENTS.md';
+const OPENCODE_CONFIG_SCHEMA = 'https://opencode.ai/config.json';
+const OPENCODE_PLUGIN_TEMPLATE = path.join('hooks', 'opencode-plugin.js');
+const OPENCODE_PLUGIN_OWNERSHIP_MARKERS = ['ai-policy-runtime', 'opencode-user-prompt-submit'];
 const EFFECTIVE_PROMPT_FILE = path.join('.policy', 'current', 'effective-prompt.md');
 const HOOK_STATE_FILE = path.join('.policy', 'current', 'agent-hook-state.json');
 const CLAUDE_MARKETPLACE_NAME = 'ai-policy-runtime';
@@ -83,6 +96,10 @@ const REQUIRED_RUNTIME_PATHS = [
   path.join('hooks', 'codex-hooks.json'),
   path.join('hooks', 'user_prompt_submit.py'),
   path.join('hooks', 'stop_refinement.py'),
+  path.join('hooks', 'opencode-plugin.js'),
+  path.join('hooks', 'opencode_user_prompt_submit.py'),
+  path.join('hooks', 'opencode_stop_refinement.py'),
+  path.join('tools', 'configure_opencode.py'),
   path.join('.claude-plugin', 'plugin.json'),
   path.join('.claude-plugin', 'marketplace.json'),
   path.join('.codex-plugin', 'plugin.json'),
@@ -271,7 +288,8 @@ class PolicyWorkspace {
     await fs.writeFile(paths.config, `${JSON.stringify(projectConfig(config), null, 2)}\n`, 'utf8');
     await Promise.all([
       syncCodexAgentHooks(paths, config),
-      syncClaudeAgentHooks(paths, config)
+      syncClaudeAgentHooks(paths, config),
+      syncOpenCodeAgentHooks(paths, config)
     ]);
   }
 
@@ -343,6 +361,10 @@ class PolicyWorkspace {
       codexHooks: path.join(root, CODEX_HOOKS_FILE),
       codexConfig: path.join(root, CODEX_CONFIG_FILE),
       claudeSettings: path.join(root, CLAUDE_SETTINGS_FILE),
+      opencodeConfig: path.join(root, OPENCODE_CONFIG_FILE),
+      opencodePlugin: path.join(root, OPENCODE_PLUGIN_FILE),
+      opencodePluginState: path.join(root, OPENCODE_PLUGIN_STATE_FILE),
+      opencodePostRefinePrompt: path.join(root, OPENCODE_POST_REFINE_PROMPT_FILE),
       effectivePrompt: path.join(root, EFFECTIVE_PROMPT_FILE),
       hookState: path.join(root, HOOK_STATE_FILE)
     };
@@ -403,6 +425,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       await this.view?.webview.postMessage({ type: 'saved' });
       maybeShowCodexTrustHint(this.workspace, before, next);
       maybeShowClaudeRestartHint(before, next);
+      maybeShowOpenCodeRestartHint(before, next);
       return;
     }
     if (message.type === 'showEffectiveRules') {
@@ -645,6 +668,10 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       <input id="agentClaude" type="checkbox" value="claude">
       <span>Claude Code</span>
     </label>
+    <label class="check-row" for="agentOpenCode">
+      <input id="agentOpenCode" type="checkbox" value="opencode">
+      <span>OpenCode</span>
+    </label>
   </div>
 
   <div class="section">
@@ -748,6 +775,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
     byId('autoInstall').checked = Boolean(state.config.autoInstall);
     byId('agentCodex').checked = agents.has('codex');
     byId('agentClaude').checked = agents.has('claude');
+    byId('agentOpenCode').checked = agents.has('opencode');
     byId('gitCommitStyle').value = state.config.gitCommitStyle || 'auto';
     byId('postRefineEnabled').checked = (state.config.postRefine || 'off') !== 'off';
     byId('postRefine').value = state.config.postRefine && state.config.postRefine !== 'off'
@@ -887,6 +915,7 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       'autoInstall',
       'agentCodex',
       'agentClaude',
+      'agentOpenCode',
       'gitCommitStyle',
       'postRefine',
       'verifyTarget',
@@ -974,7 +1003,12 @@ class PolicyConfigViewProvider implements vscode.WebviewViewProvider {
       const provider = byId('embeddingProvider').value;
       return {
         enabled: byId('enabled').checked,
-        agents: ['codex', 'claude'].filter((agent) => byId('agent' + agent.charAt(0).toUpperCase() + agent.slice(1)).checked),
+        agents: ['codex', 'claude', 'opencode'].filter((agent) => {
+          const id = agent === 'opencode'
+            ? 'agentOpenCode'
+            : 'agent' + agent.charAt(0).toUpperCase() + agent.slice(1);
+          return byId(id).checked;
+        }),
         packs: Array.from(selected),
         policyRoot: byId('policyRoot').value.trim() || undefined,
         autoInstall: byId('autoInstall').checked,
@@ -1061,6 +1095,7 @@ async function setEnabled(
   const after = workspace.readConfig();
   maybeShowCodexTrustHint(workspace, before, after);
   maybeShowClaudeRestartHint(before, after);
+  maybeShowOpenCodeRestartHint(before, after);
 }
 
 async function cleanupWorkspaceConfiguration(
@@ -1073,7 +1108,7 @@ async function cleanupWorkspaceConfiguration(
     return;
   }
   const choice = await vscode.window.showWarningMessage(
-    'Clean AI Policy Runtime configuration for this workspace? This removes AI Policy Codex/Claude integration entries, .policy/config.json, generated .policy/current state, and aiPolicy workspace settings. Caches and local models are kept.',
+    'Clean AI Policy Runtime configuration for this workspace? This removes AI Policy Codex/Claude/OpenCode integration entries, .policy/config.json, generated .policy/current state, and aiPolicy workspace settings. Caches and local models are kept.',
     { modal: true },
     'Clean Workspace'
   );
@@ -1108,6 +1143,10 @@ async function cleanWorkspaceLocally(paths: PolicyPaths): Promise<{
   const codexHooksRemain = await cleanCodexHooksFile(paths.codexHooks, cleanup);
   await cleanCodexConfigFile(paths.codexConfig, cleanup, !codexHooksRemain);
   await cleanClaudeSettingsFile(paths.claudeSettings, cleanup);
+  await cleanOpenCodeConfigFile(paths.opencodeConfig, cleanup);
+  await cleanOpenCodePluginFile(paths.opencodePlugin, cleanup);
+  await removeFileIfExists(paths.opencodePluginState, cleanup);
+  await removeFileIfExists(paths.opencodePostRefinePrompt, cleanup);
   await removeFileIfExists(paths.config, cleanup);
   await removeDirectoryIfExists(path.join(paths.root, POLICY_CURRENT_DIR), cleanup);
   return { ok: true, output: { cleanup } };
@@ -1193,6 +1232,40 @@ async function cleanClaudeSettingsFile(
   }
 }
 
+async function cleanOpenCodeConfigFile(
+  filePath: string,
+  cleanup: { updated: string[]; skipped: string[] }
+): Promise<void> {
+  if (!(await exists(filePath))) {
+    cleanup.skipped.push(filePath);
+    return;
+  }
+  const config = await readJsonObject(filePath);
+  const changed = removeOpenCodeConfigEntries(config);
+  if (changed) {
+    await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+    cleanup.updated.push(filePath);
+  } else {
+    cleanup.skipped.push(filePath);
+  }
+}
+
+async function cleanOpenCodePluginFile(
+  filePath: string,
+  cleanup: { removed: string[]; skipped: string[] }
+): Promise<void> {
+  if (!(await exists(filePath))) {
+    cleanup.skipped.push(filePath);
+    return;
+  }
+  if (!(await isAiPolicyOpenCodePlugin(filePath))) {
+    cleanup.skipped.push(filePath);
+    return;
+  }
+  await fs.rm(filePath, { force: true });
+  cleanup.removed.push(filePath);
+}
+
 async function removeFileIfExists(
   filePath: string,
   cleanup: { removed: string[]; skipped: string[] }
@@ -1264,6 +1337,7 @@ async function enablePostRefine(
   const after = workspace.readConfig();
   maybeShowCodexTrustHint(workspace, before, after);
   maybeShowClaudeRestartHint(before, after);
+  maybeShowOpenCodeRestartHint(before, after);
 }
 
 function maybeShowCodexTrustHint(
@@ -1297,6 +1371,17 @@ function maybeShowClaudeRestartHint(before: PolicyConfig, after: PolicyConfig): 
   }
   vscode.window.showInformationMessage(
     'AI Policy Runtime configured Claude Code plugin settings for this workspace. Restart or reload the Claude Code session if it was already open.'
+  );
+}
+
+function maybeShowOpenCodeRestartHint(before: PolicyConfig, after: PolicyConfig): void {
+  const openCodeWasActive = before.enabled && before.agents.includes('opencode');
+  const openCodeIsActive = after.enabled && after.agents.includes('opencode');
+  if (!openCodeIsActive || openCodeWasActive) {
+    return;
+  }
+  vscode.window.showInformationMessage(
+    'AI Policy Runtime configured OpenCode plugin settings for this workspace. Restart or reload the OpenCode session if it was already open.'
   );
 }
 
@@ -1348,6 +1433,8 @@ async function showStatus(workspace: PolicyWorkspace): Promise<void> {
       `Post-refinement packs: ${config.postRefinePacks.join(', ') || '(none)'}`,
       `Verify target: ${config.verifyTarget || '(not configured)'}`,
       `Project config: ${paths.config}`,
+      `OpenCode config: ${paths.opencodeConfig}`,
+      `OpenCode plugin: ${paths.opencodePlugin}`,
       `Latest Effective Rules: ${promptExists ? paths.effectivePrompt : '(not generated yet)'}`
     ].join('\n')
   });
@@ -1805,6 +1892,60 @@ async function syncClaudeAgentHooks(paths: PolicyPaths, config: PolicyConfig): P
   await fs.writeFile(paths.claudeSettings, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 }
 
+async function syncOpenCodeAgentHooks(paths: PolicyPaths, config: PolicyConfig): Promise<void> {
+  const enabled = config.enabled && config.agents.includes('opencode');
+  if (!enabled && !(await exists(paths.opencodeConfig)) && !(await exists(paths.opencodePlugin))) {
+    return;
+  }
+  await Promise.all([
+    configureOpenCodeConfig(paths.opencodeConfig, enabled),
+    configureOpenCodePlugin(paths, enabled)
+  ]);
+}
+
+async function configureOpenCodeConfig(filePath: string, enabled: boolean): Promise<void> {
+  if (!enabled && !(await exists(filePath))) {
+    return;
+  }
+  const config = await readJsonObject(filePath);
+  if (enabled) {
+    if (!config.$schema) {
+      config.$schema = OPENCODE_CONFIG_SCHEMA;
+    }
+    config.instructions = appendUniqueString(config.instructions, OPENCODE_INSTRUCTION);
+    config.plugin = appendUniqueString(config.plugin, OPENCODE_PLUGIN_CONFIG_ENTRY);
+  } else {
+    if (!removeOpenCodeConfigEntries(config)) {
+      return;
+    }
+  }
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+}
+
+async function configureOpenCodePlugin(paths: PolicyPaths, enabled: boolean): Promise<void> {
+  if (!enabled) {
+    if ((await exists(paths.opencodePlugin)) && await isAiPolicyOpenCodePlugin(paths.opencodePlugin)) {
+      await fs.rm(paths.opencodePlugin, { force: true });
+    }
+    return;
+  }
+  const content = await renderOpenCodePlugin(paths.policyRoot);
+  await fs.mkdir(path.dirname(paths.opencodePlugin), { recursive: true });
+  await fs.writeFile(paths.opencodePlugin, content, 'utf8');
+}
+
+async function renderOpenCodePlugin(policyRoot: string): Promise<string> {
+  const template = await fs.readFile(path.join(policyRoot, OPENCODE_PLUGIN_TEMPLATE), 'utf8');
+  return template
+    .replace(/__AI_POLICY_RUNTIME_ROOT__/g, jsString(policyRoot))
+    .replace(/__AI_POLICY_NODE__/g, jsString(openCodeNodeCommand()));
+}
+
+function openCodeNodeCommand(): string {
+  return process.env.AI_POLICY_NODE?.trim() || 'node';
+}
+
 async function missingRuntimePaths(policyRoot: string): Promise<string[]> {
   const missing = [];
   for (const relativePath of REQUIRED_RUNTIME_PATHS) {
@@ -1941,6 +2082,34 @@ function arrayOfStrings(value: unknown): string[] {
     : [];
 }
 
+function appendUniqueString(value: unknown, item: string): string[] {
+  const items = arrayOfStrings(value);
+  return items.includes(item) ? items : [...items, item];
+}
+
+function removeJsonListItem(record: Record<string, unknown>, key: string, item: string): boolean {
+  const value = record[key];
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  const kept = value.filter((current) => String(current).trim() !== item);
+  if (kept.length === value.length) {
+    return false;
+  }
+  if (kept.length) {
+    record[key] = kept;
+  } else {
+    delete record[key];
+  }
+  return true;
+}
+
+function removeOpenCodeConfigEntries(config: Record<string, unknown>): boolean {
+  let changed = removeJsonListItem(config, 'instructions', OPENCODE_INSTRUCTION);
+  changed = removeJsonListItem(config, 'plugin', OPENCODE_PLUGIN_CONFIG_ENTRY) || changed;
+  return changed;
+}
+
 function listOrNone(items: string[]): string[] {
   return items.length ? items.map((item) => `- ${item}`) : ['- (none)'];
 }
@@ -1991,6 +2160,15 @@ async function probeHookPython(): Promise<{
 
 function shellCommand(...parts: string[]): string {
   return parts.map(quoteShell).join(' ');
+}
+
+async function isAiPolicyOpenCodePlugin(filePath: string): Promise<boolean> {
+  const text = await fs.readFile(filePath, 'utf8');
+  return OPENCODE_PLUGIN_OWNERSHIP_MARKERS.every((marker) => text.includes(marker));
+}
+
+function jsString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function quoteShell(value: string): string {
@@ -2220,7 +2398,9 @@ function normalizeAgents(value: unknown): AgentTarget[] {
   if (!Array.isArray(value)) {
     return DEFAULT_AGENTS;
   }
-  const agents = value.filter((item): item is AgentTarget => item === 'codex' || item === 'claude');
+  const agents = value.filter(
+    (item): item is AgentTarget => item === 'codex' || item === 'claude' || item === 'opencode'
+  );
   return agents.length ? Array.from(new Set(agents)) : DEFAULT_AGENTS;
 }
 

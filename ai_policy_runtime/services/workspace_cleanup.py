@@ -11,6 +11,7 @@ CODEX_CONFIG_FILE = Path(".codex") / "config.toml"
 CLAUDE_SETTINGS_FILE = Path(".claude") / "settings.local.json"
 OPENCODE_CONFIG_FILE = Path("opencode.json")
 OPENCODE_PLUGIN_FILE = Path(".opencode") / "plugins" / "ai-policy-runtime.js"
+OPENCODE_PLUGIN_CONFIG_ENTRY = ".opencode/plugins/ai-policy-runtime.js"
 OPENCODE_PLUGIN_STATE_FILE = Path(".policy") / "current" / "opencode-plugin-state.json"
 OPENCODE_POST_REFINE_PROMPT_FILE = Path(".policy") / "current" / "opencode-post-refine-prompt.md"
 OPENCODE_INSTRUCTION = "AGENTS.md"
@@ -131,7 +132,9 @@ def _clean_opencode_config(path: Path, result: dict[str, Any]) -> None:
         result["skipped"].append(str(path))
         return
     config = _read_json_object(path)
-    if not _remove_json_list_item(config, "instructions", OPENCODE_INSTRUCTION):
+    changed = _remove_json_list_item(config, "instructions", OPENCODE_INSTRUCTION)
+    changed = _remove_json_list_item(config, "plugin", OPENCODE_PLUGIN_CONFIG_ENTRY) or changed
+    if not changed:
         result["skipped"].append(str(path))
         return
     _write_json(path, config)

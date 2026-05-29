@@ -12,6 +12,8 @@ venv/
 .policy/
 .codex/
 .claude/
+.opencode/
+opencode.json
 .vscode/
 AGENTS.md
 CLAUDE.md

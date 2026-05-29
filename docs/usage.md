@@ -367,7 +367,9 @@ policy-codex --pack cpp.low_latency --codex-arg "--approval-mode" --codex-arg "n
 
 ## Run OpenCode with Effective Rules
 
-Use `policy-opencode` when installed as a package:
+Use `ai-policy configure opencode` for normal NPM or VS Code extension usage.
+Use `policy-opencode` only when installed from the Python package and you want a
+one-shot wrapper that launches OpenCode for a single task:
 
 ```powershell
 policy-opencode --pack cpp.low_latency "帮我写一个 C++20 低延迟队列"
@@ -397,6 +399,8 @@ installed package as `policyRoot`, adds `AGENTS.md` to `opencode.json`
 instructions, and installs `.opencode/plugins/ai-policy-runtime.js`. OpenCode's
 plugin API is event-based; the plugin dynamically injects Effective Rules when a
 prompt event exposes prompt text and otherwise falls back to `AGENTS.md`.
+The generated `.opencode` plugin contains local runtime paths and should be
+regenerated per workspace rather than committed.
 
 When `postRefine` is enabled, the OpenCode plugin prepares a continuation prompt
 on `session.idle` and writes release-testable state under:

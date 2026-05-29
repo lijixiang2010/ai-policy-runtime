@@ -3978,6 +3978,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(policy["git"], {"commitStyle": "auto"})
         self.assertEqual(config["$schema"], "https://opencode.ai/config.json")
         self.assertEqual(config["instructions"], ["AGENTS.md"])
+        self.assertEqual(config["plugin"], [".opencode/plugins/ai-policy-runtime.js"])
         self.assertIn("opencode-user-prompt-submit", plugin)
         self.assertIn('"chat.message"', plugin)
         self.assertIn("hookEnvironment", plugin)
@@ -4004,6 +4005,7 @@ class PolicyRuntimeTests(unittest.TestCase):
             current = json.loads(config_path.read_text(encoding="utf-8"))
 
         self.assertEqual(current["instructions"], ["README.md", "AGENTS.md"])
+        self.assertEqual(current["plugin"], [".opencode/plugins/ai-policy-runtime.js"])
         self.assertEqual(current["model"], "anthropic/claude")
 
     def test_configure_opencode_disable_preserves_other_agents(self) -> None:
@@ -4036,6 +4038,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(current["opencode_agent_enabled"])
         self.assertTrue(current["opencode_config_present"])
         self.assertTrue(current["agents_instruction_configured"])
+        self.assertTrue(current["project_plugin_declared"])
         self.assertTrue(current["project_plugin_present"])
         self.assertTrue(current["project_plugin_configured"])
         self.assertFalse(current["project_plugin_state_present"])
@@ -4044,6 +4047,88 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertTrue(current["project_plugin_node_available"])
         self.assertTrue(current["policy_root_matches_expected"])
         self.assertEqual(current["git_commit_style"], "auto")
+
+    def test_generated_opencode_plugin_exposes_shell_environment(self) -> None:
+        if shutil.which("node") is None:
+            self.skipTest("node is not available")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+            plugin_path = configure_opencode_plugin(root, plugin_root)
+            script = (
+                "const plugin=require(process.argv[1]);"
+                "plugin({directory:process.argv[2],client:{app:{log:async()=>{}}}})"
+                ".then(async hooks=>{const out={env:{}};"
+                "await hooks['shell.env']({}, out);"
+                "console.log(JSON.stringify(out));});"
+            )
+            completed = subprocess.run(
+                ["node", "-e", script, str(plugin_path), str(root)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            output = json.loads(completed.stdout)
+
+        self.assertEqual(output["env"]["AI_POLICY_AGENT"], "opencode")
+        self.assertEqual(output["env"]["AI_POLICY_ROOT"], str(plugin_root))
+
+    def test_generated_opencode_plugin_writes_chat_and_idle_state(self) -> None:
+        if shutil.which("node") is None:
+            self.skipTest("node is not available")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            plugin_root = Path.cwd()
+            plugin_path = configure_opencode_plugin(root, plugin_root)
+            script = """
+const fs = require('node:fs');
+const path = require('node:path');
+const plugin = require(process.argv[1]);
+
+plugin({ directory: process.argv[2], client: { app: { log: async () => {} } } })
+  .then(async (hooks) => {
+    const output = { prompt: 'Review this Python function.' };
+    await hooks['chat.message'](
+      { message: { id: 'message-1' }, session: { id: 'session-1' } },
+      output,
+    );
+    const statePath = path.join(
+      process.argv[2],
+      '.policy',
+      'current',
+      'opencode-plugin-state.json',
+    );
+    const chatState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    await hooks.event({ event: { type: 'session.idle', session: { id: 'session-1' } } });
+    const idleState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    const promptPath = path.join(
+      process.argv[2],
+      '.policy',
+      'current',
+      'opencode-post-refine-prompt.md',
+    );
+    console.log(JSON.stringify({
+      chatState,
+      idleState,
+      postRefinePromptExists: fs.existsSync(promptPath),
+    }));
+  });
+"""
+            completed = subprocess.run(
+                ["node", "-e", script, str(plugin_path), str(root)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            output = json.loads(completed.stdout)
+
+        self.assertEqual(output["chatState"]["event"], "chat.message")
+        self.assertEqual(output["chatState"]["promptChars"], len("Review this Python function."))
+        self.assertEqual(output["idleState"]["event"], "session.idle")
+        self.assertFalse(output["idleState"]["postRefinePrepared"])
+        self.assertFalse(output["postRefinePromptExists"])
 
     def test_configure_opencode_cli_updates_policy_and_config(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -4062,6 +4147,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(policy["agents"], ["opencode"])
         self.assertEqual(config["instructions"], ["AGENTS.md"])
+        self.assertEqual(config["plugin"], [".opencode/plugins/ai-policy-runtime.js"])
         self.assertTrue(plugin_exists)
 
     def test_clean_workspace_removes_only_ai_policy_entries(self) -> None:
@@ -4106,6 +4192,7 @@ class PolicyRuntimeTests(unittest.TestCase):
         )
         self.assertIn("hooks = true", cleaned_codex_config)
         self.assertNotIn("instructions", cleaned_opencode)
+        self.assertNotIn("plugin", cleaned_opencode)
         self.assertNotIn(PLUGIN_ID, cleaned_claude.get("enabledPlugins", {}))
         self.assertNotIn("ai-policy-runtime", cleaned_claude.get("extraKnownMarketplaces", {}))
 

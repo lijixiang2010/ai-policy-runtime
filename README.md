@@ -119,6 +119,9 @@ Configure a project for OpenCode:
 ai-policy configure opencode --root D:\work\project
 ```
 
+In the VS Code extension, select `OpenCode` under Agents to generate the same
+project-local OpenCode configuration from the bundled runtime.
+
 After updating the npm package, rerun `ai-policy configure codex` or
 `ai-policy configure claude` or `ai-policy configure opencode` for each
 workspace that should use the new runtime. The command refreshes
@@ -243,7 +246,8 @@ AI Policy Runtime stores transparent project state in workspace files:
 - `opencode.json` and `.opencode/plugins/ai-policy-runtime.js` when OpenCode is enabled
 
 These files make the active policy visible and reproducible. Review them before
-committing workspace-specific settings.
+committing workspace-specific settings; generated OpenCode plugin files include
+local runtime paths and are best kept out of source control.
 
 ## Notes
 

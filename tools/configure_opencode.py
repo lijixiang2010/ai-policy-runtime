@@ -9,6 +9,9 @@ import sys
 import textwrap
 from typing import Any
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from tools.configure_common import (
     append_unique,
     configure_agent_policy,
@@ -25,6 +28,7 @@ AGENT = "opencode"
 CONFIG_SCHEMA = "https://opencode.ai/config.json"
 OPENCODE_CONFIG_FILE = Path("opencode.json")
 OPENCODE_PLUGIN_FILE = Path(".opencode") / "plugins" / "ai-policy-runtime.js"
+OPENCODE_PLUGIN_CONFIG_ENTRY = ".opencode/plugins/ai-policy-runtime.js"
 OPENCODE_PLUGIN_STATE_FILE = Path(".policy") / "current" / "opencode-plugin-state.json"
 OPENCODE_POST_REFINE_PROMPT_FILE = Path(".policy") / "current" / "opencode-post-refine-prompt.md"
 OPENCODE_INSTRUCTION = "AGENTS.md"
@@ -105,8 +109,10 @@ def configure_opencode_config(root: Path, *, enabled: bool = True) -> Path:
     if enabled:
         config.setdefault("$schema", CONFIG_SCHEMA)
         config["instructions"] = append_unique(config.get("instructions"), OPENCODE_INSTRUCTION)
+        config["plugin"] = append_unique(config.get("plugin"), OPENCODE_PLUGIN_CONFIG_ENTRY)
     else:
         _remove_instruction(config, OPENCODE_INSTRUCTION)
+        _remove_plugin_entry(config, OPENCODE_PLUGIN_CONFIG_ENTRY)
     write_json(path, config)
     return path
 
@@ -138,6 +144,7 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
     opencode_config = read_json_object(opencode_config_path)
     policy_root = policy.get("policyRoot")
     instructions = string_list(opencode_config.get("instructions"))
+    plugins = string_list(opencode_config.get("plugin"))
     plugin_root_value = _plugin_runtime_root(opencode_plugin_path)
     plugin_node_value = _plugin_node(opencode_plugin_path)
     return {
@@ -155,6 +162,8 @@ def status(root: Path, plugin_root: Path) -> dict[str, Any]:
         "opencode_config_present": opencode_config_path.exists(),
         "instructions": instructions,
         "agents_instruction_configured": OPENCODE_INSTRUCTION in instructions,
+        "plugins": plugins,
+        "project_plugin_declared": OPENCODE_PLUGIN_CONFIG_ENTRY in plugins,
         "project_plugin_present": opencode_plugin_path.exists(),
         "project_plugin_configured": _is_ai_policy_opencode_plugin(opencode_plugin_path),
         "project_plugin_state_present": opencode_state_path.exists(),
@@ -244,6 +253,14 @@ def _remove_instruction(config: dict[str, Any], instruction: str) -> None:
         config["instructions"] = instructions
     else:
         config.pop("instructions", None)
+
+
+def _remove_plugin_entry(config: dict[str, Any], entry: str) -> None:
+    plugins = remove_item(config.get("plugin"), entry)
+    if plugins:
+        config["plugin"] = plugins
+    else:
+        config.pop("plugin", None)
 
 
 def _render_plugin_template(plugin_root: Path) -> str:
