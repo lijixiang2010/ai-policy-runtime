@@ -44,6 +44,23 @@ CONVENTIONAL_SUBJECT_RE = re.compile(
 )
 
 
+def _hidden_subprocess_options() -> dict[str, Any]:
+    """Prevent short-lived command windows when collectors run on Windows."""
+
+    create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", None)
+    startup_info_type = getattr(subprocess, "STARTUPINFO", None)
+    if create_no_window is None or startup_info_type is None:
+        return {}
+
+    startup_info = startup_info_type()
+    startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup_info.wShowWindow = subprocess.SW_HIDE
+    return {
+        "creationflags": create_no_window,
+        "startupinfo": startup_info,
+    }
+
+
 @dataclass(frozen=True)
 class ManifestProbe:
     """A simple manifest-file probe for project language and build-system facts."""
@@ -218,6 +235,7 @@ class ProjectContextAnalyzer:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                **_hidden_subprocess_options(),
             )
         except OSError:
             return []
@@ -723,6 +741,7 @@ def _git_subjects(root: Path, limit: int = 20) -> list[str]:
             text=True,
             encoding="utf-8",
             errors="replace",
+            **_hidden_subprocess_options(),
         )
     except OSError:
         return []
